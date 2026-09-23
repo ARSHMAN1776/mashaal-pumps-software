@@ -1,0 +1,24 @@
+{
+  "name": "mashaal-software",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fluentui/react-components": "^9.74.7",
+    "@fluentui/react-icons": "^2.0.341",
+    "@supabase/supabase-js": "^2.116.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}
