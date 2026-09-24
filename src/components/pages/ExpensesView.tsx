@@ -11,7 +11,7 @@ import { Modal, FormError } from '../common/Modal'
 import { useConfirm } from '../common/Confirm'
 import { useToast } from '../common/Toast'
 import { useSubmit } from '../common/useSubmit'
-import { CalcStrip, EmptyRow, Field, FilterBar, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
+import { CalcStrip, EmptyRow, Field, FilterBar, Grid3, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
 
 const ExpenseModal: React.FC<{ expense?: ExpenseRecord; onClose: () => void }> = ({ expense, onClose }) => {
   const [version] = useState(expense?.updatedAt) // the record's version when this window was opened
@@ -41,35 +41,34 @@ const ExpenseModal: React.FC<{ expense?: ExpenseRecord; onClose: () => void }> =
   return (
     <Modal title={expense ? `Edit Voucher ${expense.voucherNo}` : 'Create Station Expense Voucher'} subtitle="Deducted from the safe (cash) or a bank account" onClose={onClose} busy={busy} width={660}>
       <form className="modal-form-compact" onSubmit={submit}>
-        <Grid2>
-          <Field label="Expense category">
+        <Grid3>
+          <Field label="Category">
             <select className="form-input" value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)}>
               {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Field>
-          <Field label="Voucher number" hint={expense ? undefined : 'Leave empty to number automatically'}>
-            <input className="form-input" value={voucher} onChange={(e) => setVoucher(e.target.value)} placeholder="Automatic" />
-          </Field>
-        </Grid2>
-        <Grid2>
-          <Field label="Paid to (payee / vendor)"><input className="form-input" value={payee} onChange={(e) => setPayee(e.target.value)} placeholder="e.g. Al-Madina Hotel" required autoFocus /></Field>
-          <Field label="Payment mode">
+          <Field label="Amount (Rs)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
+          <Field label="Date" hint={isCashier ? 'Today only' : undefined}><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={isCashier} required /></Field>
+        </Grid3>
+        <Grid3>
+          <Field label="Paid to"><input className="form-input" value={payee} onChange={(e) => setPayee(e.target.value)} placeholder="e.g. Al-Madina Hotel" required /></Field>
+          <Field label="Paid from">
             <select className="form-input" value={mode} onChange={(e) => setMode(e.target.value as 'Cash' | 'Bank')}>
-              <option value="Cash">Physical cash from the station safe</option>
-              {!isCashier && <option value="Bank">Bank transfer / cheque</option>}
+              <option value="Cash">Cash in the safe</option>
+              {!isCashier && <option value="Bank">Bank account</option>}
             </select>
           </Field>
-        </Grid2>
-        {mode === 'Bank' && (
-          <Field label="Paid from bank account" hint={bank ? `Balance ${rs(bank.currentBalance)}` : 'Add a bank account in the Bank Sheet first'}>
-            <select className="form-input" value={bankId} onChange={(e) => setBankId(e.target.value)} required>{banks.map((b) => <option key={b.id} value={b.id}>{b.bankName} ({b.accountNumber})</option>)}</select>
-          </Field>
-        )}
-        <Field label="Description / detail"><input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. 50 L generator diesel during load-shedding" required /></Field>
-        <Grid2>
-          <Field label="Amount (PKR)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required /></Field>
-          <Field label="Date" hint={isCashier ? 'Cashiers record today only' : undefined}><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={isCashier} required /></Field>
-        </Grid2>
+          {mode === 'Bank' ? (
+            <Field label="Which bank" hint={bank ? `Balance ${rs(bank.currentBalance)}` : 'Add a bank account first'}>
+              <select className="form-input" value={bankId} onChange={(e) => setBankId(e.target.value)} required>{banks.map((b) => <option key={b.id} value={b.id}>{b.bankName}</option>)}</select>
+            </Field>
+          ) : (
+            <Field label="Voucher number" hint={expense ? undefined : 'Empty = automatic'}>
+              <input className="form-input" value={voucher} onChange={(e) => setVoucher(e.target.value)} placeholder="Automatic" />
+            </Field>
+          )}
+        </Grid3>
+        <Field label="What was it for?"><input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. 50 L generator diesel during load-shedding" required /></Field>
         <CalcStrip items={[{ label: 'Category', value: category }, { label: 'Funding source', value: mode === 'Cash' ? 'Cash safe (daybook)' : bank?.bankName ?? 'Bank account', tone: 'gold' }, { label: 'Total expense', value: rs(amt), tone: 'red' }]} />
         <FormError message={error} />
         <div className="modal-actions-footer">

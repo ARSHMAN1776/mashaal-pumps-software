@@ -61,12 +61,13 @@ const OgraModal: React.FC<{ onClose: () => void; onApplied?: () => void }> = ({ 
   }
 
   return (
-    <Modal title="OGRA Fortnightly Price Revision Wizard" subtitle="Applies new official tariffs to every nozzle and calculates the stock gain / loss" onClose={onClose} busy={busy} width={700}>
+    <Modal title="OGRA Fortnightly Price Revision Wizard" subtitle="Applies new official tariffs to every nozzle and calculates the stock gain / loss" onClose={onClose} busy={busy} width={780}>
       <form className="modal-form-compact" onSubmit={submit}>
-        <Grid2>
-          <Field label="Effective date (new prices start at midnight)" hint="Readings dated before this day keep the old price."><input type="date" className="form-input" value={effective} max={todayISO()} onChange={(e) => setEffective(e.target.value)} required /></Field>
-          <Field label="OGRA notification reference"><input className="form-input" value={notif} onChange={(e) => setNotif(e.target.value)} required /></Field>
-        </Grid2>
+        <Grid3>
+          <Field label="New prices start on" hint="Earlier readings keep the old price"><input type="date" className="form-input" value={effective} max={todayISO()} onChange={(e) => setEffective(e.target.value)} required /></Field>
+          <Field label="OGRA notification no."><input className="form-input" value={notif} onChange={(e) => setNotif(e.target.value)} required /></Field>
+          <Field label="Remarks" hint="Optional"><input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        </Grid3>
         <Grid3>
           {FUEL_TYPES.map((f) => (
             <Field key={f} label={FUEL_LABEL[f]} hint={`Current: Rs. ${settings.rates[f]}`}>
@@ -90,11 +91,10 @@ const OgraModal: React.FC<{ onClose: () => void; onApplied?: () => void }> = ({ 
             <strong style={{ color: net >= 0 ? '#15803d' : '#b91c1c' }}>{net >= 0 ? '+' : ''}Rs. {net.toLocaleString()}</strong>
           </div>
         </div>
-        <Field label="Audit remarks"><input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         <FormError message={error} />
         <div className="modal-actions-footer">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Applying…' : 'Apply OGRA revision & update nozzles'}</span></button>
+          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Applying…' : 'Apply new prices'}</span></button>
         </div>
       </form>
     </Modal>

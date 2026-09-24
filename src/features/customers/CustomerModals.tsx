@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext'
 import type { CreditSaleSlip, Customer, CustomerAdjustment, CustomerRecovery, FuelType, RecoveryMethod } from '../../types'
 import { FUEL_TYPES } from '../../types'
 import { todayISO } from '../../lib/dates'
-import { rateOnDate } from '../../data/derive'
+import { creditLeft, rateOnDate } from '../../data/derive'
 import { round2 } from '../../lib/money'
 import { CheckCircleIcon, WhatsAppIcon } from '../../components/common/Icons'
 import { Modal, FormError } from '../../components/common/Modal'
@@ -46,32 +46,32 @@ export const CustomerFormModal: React.FC<{ customer?: Customer; onClose: () => v
   }
 
   return (
-    <Modal title={customer ? 'Edit Customer' : 'Register New Fleet Customer'} subtitle={customer ? customer.businessName : 'Create an authorized credit account with an approved limit and vehicles'} onClose={onClose} busy={busy} width={640}>
+    <Modal title={customer ? 'Edit Customer' : 'Register New Fleet Customer'} subtitle={customer ? customer.businessName : 'A credit account with a limit for a transporter'} onClose={onClose} busy={busy} width={720}>
       <form className="modal-form-compact" onSubmit={submit}>
         {archived && <div className="ui-notice ui-notice-warning">This customer is archived. Save with status Active to bring it back.</div>}
         <Grid2>
           <Field label="Business / transporter name"><input className="form-input" value={business} onChange={(e) => setBusiness(e.target.value)} placeholder="e.g. Al-Madina Goods Transport" required autoFocus /></Field>
-          <Field label="Proprietor / contact person"><input className="form-input" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="e.g. Haji Munir Ahmed" /></Field>
+          <Field label="Owner / contact person"><input className="form-input" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="e.g. Haji Munir Ahmed" /></Field>
         </Grid2>
-        <Grid2>
-          <Field label="Phone (for WhatsApp slips & statements)"><input className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0300-1234567" required /></Field>
-          <Field label="Approved credit limit (PKR)"><input type="number" min={0} step="1000" className="form-input" value={limit} onChange={(e) => setLimit(e.target.value)} required /></Field>
-        </Grid2>
-        <Grid2>
-          <Field label="Authorized vehicle numbers" hint="Separate with commas. Leave empty to accept any vehicle. Cashiers can only issue slips to these plates.">
-            <textarea className="form-input" rows={2} style={{ height: 'auto' }} value={vehicles} onChange={(e) => setVehicles(e.target.value)} placeholder="TKA-992, LWO-4481, RYK-1290" />
+        <Grid3>
+          <Field label="Phone (WhatsApp)"><input className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0300-1234567" required /></Field>
+          <Field label="Credit limit (Rs)" hint="The most they can owe you"><input type="number" min={0} step="1000" className="form-input" value={limit} onChange={(e) => setLimit(e.target.value)} required /></Field>
+          <Field label="Status" hint="On hold = no new slips">
+            <select className="form-input" value={status} onChange={(e) => setStatus(e.target.value as 'Active' | 'Hold')}>
+              <option value="Active">Active</option>
+              <option value="Hold">On hold</option>
+            </select>
           </Field>
-          <Field label="Opening balance due (PKR)" hint={customer ? 'Old credit carried in from before the software. Changing it changes the customer\'s balance.' : 'Existing credit carried over, if any.'}>
+        </Grid3>
+        <Grid2>
+          <Field label="Vehicle numbers" hint="Separate with commas. Empty = any vehicle">
+            <input className="form-input" value={vehicles} onChange={(e) => setVehicles(e.target.value)} placeholder="TKA-992, LWO-4481" />
+          </Field>
+          <Field label="Amount already owed (Rs)" hint={customer ? 'Changing this changes the balance' : 'Old credit from before, if any'}>
             <input type="number" step="any" className="form-input" value={opening} onChange={(e) => setOpening(e.target.value)} />
           </Field>
         </Grid2>
-        <Field label="Account status" hint="Hold blocks new credit slips until you set it back to Active.">
-          <select className="form-input" value={status} onChange={(e) => setStatus(e.target.value as 'Active' | 'Hold')}>
-            <option value="Active">Active — can take fuel on credit</option>
-            <option value="Hold">Hold — no new credit slips</option>
-          </select>
-        </Field>
-        {customer && <CalcStrip items={[{ label: 'Current balance due', value: rsn(customer.currentBalance), tone: 'gold' }, { label: 'Limit', value: rsn(Number(limit) || 0) }]} />}
+        {customer && <CalcStrip items={[{ label: 'Owes now', value: rsn(customer.currentBalance), tone: 'gold' }, { label: 'New limit', value: rsn(Number(limit) || 0) }, { label: 'Credit left', value: rsn(creditLeft({ creditLimit: Number(limit) || 0, currentBalance: customer.currentBalance })), tone: 'green' }]} />}
         <FormError message={error} />
         <div className="modal-actions-footer">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
@@ -111,6 +111,7 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
   const before = customer ? customer.currentBalance - (slip ? slip.totalAmount : 0) : 0
   const after = before + total
   const over = customer ? after > customer.creditLimit + 0.005 : false
+  const left = customer ? creditLeft({ creditLimit: customer.creditLimit, currentBalance: after }) : 0
 
   const changeCustomer = (id: string) => {
     setCustId(id)
@@ -179,11 +180,10 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
         </Grid2>
 
         <CalcStrip items={[
-          { label: 'Rate / L', value: `Rs ${Number.isFinite(rate) ? rate : 0}` },
-          { label: 'Slip value', value: rsn(total), tone: 'red' },
-          { label: 'Balance before', value: rsn(before) },
-          { label: 'Balance after', value: rsn(after), tone: over ? 'red' : 'gold' },
-          { label: 'Credit limit', value: customer ? rsn(customer.creditLimit) : '—' },
+          { label: 'This slip', value: rsn(total), tone: 'red' },
+          { label: 'Owes now', value: rsn(before) },
+          { label: 'Owes after', value: rsn(after), tone: over ? 'red' : 'gold' },
+          { label: 'Credit left after', value: customer ? (left < 0 ? `Over by ${rsn(-left)}` : rsn(left)) : '—', tone: customer && left < 0 ? 'red' : 'green' },
         ]} />
         {over && <div className="ui-notice ui-notice-warning">This slip takes the customer above the approved credit limit.{isManager ? ' You will be asked to authorize it.' : ' A manager must authorize it.'}</div>}
 

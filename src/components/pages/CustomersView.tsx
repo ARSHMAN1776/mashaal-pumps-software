@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { Customer } from '../../types'
 import { formatDate, todayISO } from '../../lib/dates'
+import { creditLeft } from '../../data/derive'
 import { rs } from '../../lib/money'
 import { PlusIcon, PrinterIcon, SearchIcon, CashIcon, WhatsAppIcon, EditIcon, TrashIcon, BookOpenIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
@@ -87,7 +88,7 @@ export const CustomersView: React.FC = () => {
         <div className="table-responsive">
           <table className="clean-table">
             <thead>
-              <tr><th>Customer & contact</th><th>Registered vehicles</th><th>Credit limit</th><th>Balance due</th><th>Utilization</th><th>Status</th><th className="col-actions">Actions</th></tr>
+              <tr><th>Customer & contact</th><th>Registered vehicles</th><th>Credit limit</th><th>Owes now</th><th>Credit left</th><th>Status</th><th className="col-actions">Actions</th></tr>
             </thead>
             <tbody>
               {shown.length === 0 ? (
@@ -95,6 +96,7 @@ export const CustomersView: React.FC = () => {
               ) : shown.map((c) => {
                 const pct = c.creditLimit > 0 ? Math.round((c.currentBalance / c.creditLimit) * 100) : 0
                 const over = c.currentBalance >= c.creditLimit && c.creditLimit > 0
+                const left = creditLeft(c)
                 const archived = c.status === 'Archived'
                 return (
                   <tr key={c.id} style={archived ? { opacity: 0.6 } : undefined}>
@@ -112,7 +114,8 @@ export const CustomersView: React.FC = () => {
                     <td>{rs(c.creditLimit)}</td>
                     <td className={`font-bold ${c.currentBalance < 0 ? 'text-green' : 'text-gold'}`}>{c.currentBalance < 0 ? `${rs(-c.currentBalance)} adv.` : rs(c.currentBalance)}</td>
                     <td>
-                      <div className="util-bar-wrap" style={{ width: 60 }}>
+                      <strong className={left <= 0 ? 'text-red' : 'text-green'}>{left < 0 ? `Over by ${rs(-left)}` : rs(left)}</strong>
+                      <div className="util-bar-wrap" style={{ width: 70, marginTop: 4 }}>
                         <div className={`util-bar-fill ${over ? 'fill-danger' : 'fill-gold'}`} style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
                         <span className="util-text">{pct}%</span>
                       </div>

@@ -11,7 +11,7 @@ import { Modal, FormError } from '../common/Modal'
 import { useConfirm } from '../common/Confirm'
 import { useToast } from '../common/Toast'
 import { useSubmit } from '../common/useSubmit'
-import { CalcStrip, EmptyRow, Field, FilterBar, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
+import { CalcStrip, EmptyRow, Field, FilterBar, Grid3, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
 
 const EntryModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { activeSiteData, act, currentUser } = useApp()
@@ -37,32 +37,30 @@ const EntryModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }
 
   return (
-    <Modal title="Add Daybook Cash Transaction" subtitle="Record physical cash moving into or out of the station safe" onClose={onClose} busy={busy} width={640}>
+    <Modal title="Add Daybook Cash Transaction" subtitle="Record physical cash moving into or out of the station safe" onClose={onClose} busy={busy} width={740}>
       <form className="modal-form-compact" onSubmit={submit}>
-        <Grid2>
-          <Field label="Transaction flow">
-            <div className="role-pills-row" style={{ marginTop: 2 }}>
+        <Grid3>
+          <Field label="Money">
+            <div className="role-pills-row" style={{ marginTop: 0 }}>
               <button type="button" className={`role-pill-btn ${direction === 'IN' ? 'active' : ''}`} onClick={() => setDirection('IN')} style={direction === 'IN' ? { backgroundColor: '#15803d', color: '#fff' } : {}}>Cash IN (+)</button>
               <button type="button" className={`role-pill-btn ${direction === 'OUT' ? 'active' : ''}`} onClick={() => setDirection('OUT')} style={direction === 'OUT' ? { backgroundColor: '#b91c1c', color: '#fff' } : {}}>Cash OUT (−)</button>
             </div>
           </Field>
-          <Field label="Voucher date" hint={isCashier ? '🔒 Cashiers record today only' : undefined}>
+          <Field label="Amount (Rs)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
+          <Field label="Date" hint={isCashier ? 'Today only' : undefined}>
             <input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={isCashier} required />
           </Field>
-        </Grid2>
-        <Grid2>
+        </Grid3>
+        <Grid3>
           <Field label="Category">
             <select className="form-input" value={category} onChange={(e) => setCategory(e.target.value as DaybookCategory)}>
               {DAYBOOK_CATEGORIES.filter((c) => c !== 'Owner Withdrawal').map((c) => <option key={c} value={c}>{c === 'Shift Fuel' ? 'Shift fuel sales handover' : c}</option>)}
             </select>
           </Field>
-          <Field label="Cash amount (PKR)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
-        </Grid2>
-        <Field label="Description / particulars"><input className="form-input" value={particulars} onChange={(e) => setParticulars(e.target.value)} placeholder="e.g. Morning shift handover by Zahid Khan" required /></Field>
-        <Grid2>
-          <Field label="Reference / slip #"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="e.g. SH-01, RCP-102" /></Field>
+          <Field label="Slip / reference #" hint="Optional"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="e.g. SH-01" /></Field>
           <Field label="Handled by"><input className="form-input" value={handledBy} onChange={(e) => setHandledBy(e.target.value)} required /></Field>
-        </Grid2>
+        </Grid3>
+        <Field label="What is it for?"><input className="form-input" value={particulars} onChange={(e) => setParticulars(e.target.value)} placeholder="e.g. Morning shift handover by Zahid Khan" required /></Field>
         <CalcStrip items={[
           { label: 'Current safe cash', value: rs(balance) },
           { label: direction === 'IN' ? 'Cash coming in' : 'Cash going out', value: `${direction === 'IN' ? '+' : '−'} ${rs(amt)}`, tone: direction === 'IN' ? 'green' : 'red' },

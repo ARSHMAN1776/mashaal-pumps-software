@@ -12,7 +12,7 @@ import { Modal, FormError } from '../common/Modal'
 import { useConfirm } from '../common/Confirm'
 import { useToast } from '../common/Toast'
 import { useSubmit } from '../common/useSubmit'
-import { CalcStrip, EmptyRow, Field, Grid2, Grid3, IconButton, PageHeader, RowActions, SectionCard } from '../common/kit'
+import { CalcStrip, EmptyRow, Field, Grid2, Grid3, Grid4, IconButton, PageHeader, RowActions, SectionCard } from '../common/kit'
 
 const num = (n: number) => Math.round(n).toLocaleString('en-US')
 
@@ -72,29 +72,27 @@ const DipModal: React.FC<{ tankId: string; onClose: () => void }> = ({ tankId, o
   }
 
   return (
-    <Modal title="Record Tank Physical Dip" subtitle="Morning reading, deliveries, sales and the measured closing stock" onClose={onClose} busy={busy} width={700}>
+    <Modal title="Record Tank Physical Dip" subtitle="Morning reading, deliveries, sales and the measured closing stock" onClose={onClose} busy={busy} width={780}>
       <form className="modal-form-compact" onSubmit={submit}>
-        <Grid2>
+        <Grid3>
           <Field label="Underground tank">
             <select className="form-input" value={id} onChange={(e) => { const t = tanks.find((x) => x.id === e.target.value); if (t) pick(t) }}>
-              {tanks.map((t) => <option key={t.id} value={t.id}>Tank #{t.tankNo} — {t.fuelType} (capacity {num(t.capacityLiters)} L)</option>)}
+              {tanks.map((t) => <option key={t.id} value={t.id}>Tank #{t.tankNo} — {t.fuelType}</option>)}
             </select>
           </Field>
-          <Field label="Inspecting officer"><input className="form-input" value={inspector} onChange={(e) => setInspector(e.target.value)} required /></Field>
-        </Grid2>
-        <Grid3>
           <Field label="Date" hint={isCashier ? 'Today only' : undefined}><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={isCashier} required /></Field>
-          <Field label="Morning dip (mm)" hint="Last recorded level"><input type="number" min={0} step="any" className="form-input" value={morningMm} onChange={(e) => setMorningMm(e.target.value)} required /></Field>
-          <Field label="Morning volume (L)"><input type="number" min={0} step="any" className="form-input" value={morningL} onChange={(e) => setMorningL(e.target.value)} required /></Field>
+          <Field label="Inspecting officer"><input className="form-input" value={inspector} onChange={(e) => setInspector(e.target.value)} required /></Field>
         </Grid3>
-        <Grid2>
-          <Field label="Decanted from OMC (+ L)" hint="Filled from recorded tanker deliveries to this tank"><input type="number" min={0} step="any" className="form-input" value={decanted} onChange={(e) => setDecanted(e.target.value)} /></Field>
-          <Field label="Dispensed via nozzles (− L)" hint="Filled from meter readings since the last dip"><input type="number" min={0} step="any" className="form-input" value={dispensed} onChange={(e) => setDispensed(e.target.value)} required /></Field>
-        </Grid2>
+        <Grid4>
+          <Field label="Morning dip (mm)"><input type="number" min={0} step="any" className="form-input" value={morningMm} onChange={(e) => setMorningMm(e.target.value)} required /></Field>
+          <Field label="Morning stock (L)"><input type="number" min={0} step="any" className="form-input" value={morningL} onChange={(e) => setMorningL(e.target.value)} required /></Field>
+          <Field label="Delivered (+ L)" hint="From tanker deliveries"><input type="number" min={0} step="any" className="form-input" value={decanted} onChange={(e) => setDecanted(e.target.value)} /></Field>
+          <Field label="Sold (− L)" hint="From meter readings"><input type="number" min={0} step="any" className="form-input" value={dispensed} onChange={(e) => setDispensed(e.target.value)} required /></Field>
+        </Grid4>
         <Grid3>
           <Field label="Closing dip (mm)" strong><input type="number" min={0} step="any" className="form-input" value={closingMm} onChange={(e) => setClosingMm(e.target.value)} required autoFocus /></Field>
-          <Field label="Physical volume (L)" strong><input type="number" min={0} step="any" className="form-input" value={closingL} onChange={(e) => setClosingL(e.target.value)} required /></Field>
-          <Field label="Water paste (mm)" hint="0 mm = clear"><input type="number" min={0} step="any" className="form-input" value={water} onChange={(e) => setWater(e.target.value)} /></Field>
+          <Field label="Measured stock (L)" strong><input type="number" min={0} step="any" className="form-input" value={closingL} onChange={(e) => setClosingL(e.target.value)} required /></Field>
+          <Field label="Water (mm)" hint="0 = clear"><input type="number" min={0} step="any" className="form-input" value={water} onChange={(e) => setWater(e.target.value)} /></Field>
         </Grid3>
         <CalcStrip items={[
           { label: 'Book stock', value: `${num(book)} L` },

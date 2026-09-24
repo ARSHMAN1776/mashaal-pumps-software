@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { CreditSaleSlip, CustomerAdjustment, CustomerRecovery } from '../../types'
 import { buildStatement, type StatementRow } from '../../data/statements'
+import { creditLeft } from '../../data/derive'
 import { formatDate, todayISO } from '../../lib/dates'
 import { rs } from '../../lib/money'
 import { EditIcon, PlusIcon, PrinterIcon, TrashIcon, WhatsAppIcon } from '../../components/common/Icons'
@@ -85,6 +86,7 @@ export const CustomerLedgerPanel: React.FC<{ customerId: string; onRemoved?: () 
   )
   if (!customer || !statement) return <div className="ui-empty">Select a customer.</div>
 
+  const left = creditLeft(customer)
   const utilPct = customer.creditLimit > 0 ? Math.round((customer.currentBalance / customer.creditLimit) * 100) : 0
   const primaryBank = bankAccounts.find((b) => b.isActive)
   const archived = customer.status === 'Archived'
@@ -132,7 +134,7 @@ export const CustomerLedgerPanel: React.FC<{ customerId: string; onRemoved?: () 
 
       <KpiStrip>
         <Kpi label="Client" value={<span style={{ fontSize: 16 }}>{customer.businessName}</span>} sub={`Prop: ${customer.name} • ${customer.phone}`} />
-        <Kpi label="Credit limit" value={rs(customer.creditLimit)} sub={`${utilPct}% used${customer.status === 'Hold' ? ' • ON HOLD' : ''}`} tone={utilPct >= 100 ? 'red' : 'plain'} />
+        <Kpi label="Credit left" value={left < 0 ? `Over by ${rs(-left)}` : rs(left)} sub={`of ${rs(customer.creditLimit)} limit • ${utilPct}% used${customer.status === 'Hold' ? ' • ON HOLD' : ''}`} tone={left <= 0 ? 'red' : 'green'} />
         <Kpi label="Total debit (fuel & debit notes)" value={rs(statement.totalDebit)} tone="red" sub={from || to ? 'in the selected period' : 'whole ledger'} />
         <Kpi label="Total credit (payments & credit notes)" value={rs(statement.totalCredit)} tone="green" />
         <Kpi label="Net balance due" value={customer.currentBalance < 0 ? `${rs(-customer.currentBalance)} advance` : rs(customer.currentBalance)} tone="gold" sub="Payable to the station" />

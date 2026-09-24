@@ -39,6 +39,7 @@ export const Field: FC<{ label: ReactNode; hint?: ReactNode; children: ReactNode
 
 export const Grid2: FC<{ children: ReactNode }> = ({ children }) => <div className="form-grid-2">{children}</div>
 export const Grid3: FC<{ children: ReactNode }> = ({ children }) => <div className="form-grid-3">{children}</div>
+export const Grid4: FC<{ children: ReactNode }> = ({ children }) => <div className="form-grid-4">{children}</div>
 
 /** A strip of "label: value" pills previewing a calculation inside a form. */
 export const CalcStrip: FC<{ items: { label: string; value: ReactNode; tone?: 'green' | 'red' | 'gold' }[] }> = ({ items }) => (

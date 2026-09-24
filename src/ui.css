@@ -791,3 +791,116 @@
   min-width: 0;
   flex: 1 1 220px;
 }
+
+/* =========================================================================================================
+   DIALOGS: compact, fit the screen, and only the form area scrolls when it must (title + buttons stay visible)
+   ========================================================================================================= */
+.modal-backdrop {
+  padding: 12px;
+}
+.modal-container.ui-modal {
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+}
+.modal-container.ui-modal:has(> form) {
+  overflow: hidden;
+}
+.ui-modal .modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  flex: 0 0 auto;
+  padding: 12px 18px;
+  background: #fff;
+}
+.ui-modal.ui-modal-danger .modal-header {
+  background: #fdf6f5;
+}
+.ui-modal .modal-heading {
+  font-size: 17px;
+  line-height: 1.25;
+  margin: 0;
+}
+.ui-modal .modal-sub {
+  display: block;
+  margin-top: 1px;
+  line-height: 1.3;
+}
+.ui-modal > form {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ui-modal .modal-form-compact {
+  padding: 12px 18px 0 !important;
+  gap: 9px !important;
+}
+.ui-modal .modal-form-compact .form-input,
+.ui-modal .modal-form-compact .form-select {
+  height: 34px !important;
+  padding: 4px 10px !important;
+}
+.ui-modal .modal-form-compact .form-label {
+  margin-bottom: 2px !important;
+}
+.ui-modal .modal-form-compact .form-help {
+  margin-top: 1px !important;
+  line-height: 1.25;
+}
+.ui-modal .modal-form-compact .read-only-box {
+  height: 34px;
+  padding: 4px 10px;
+}
+.ui-modal .modal-form-compact .form-grid-2,
+.ui-modal .modal-form-compact .form-grid-3 {
+  gap: 9px 12px !important;
+}
+/* the buttons stay at the bottom of the window even when the form has to scroll */
+.ui-modal .modal-form-compact > .modal-actions-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: #fff;
+  margin: 2px -18px 0;
+  padding: 10px 18px 12px;
+  box-shadow: 0 -6px 8px -8px rgba(0, 0, 0, 0.18);
+}
+.ui-modal .calc-preview-inline-strip {
+  padding: 7px 12px !important;
+  gap: 4px 18px !important;
+}
+
+/* four short fields in one row (tank dip figures ...); two per row on a phone */
+.form-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px 12px;
+}
+@media (max-width: 860px) {
+  .form-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* phone: three short fields per row become two per row (the dialog stays short); one per row only on tiny screens */
+@media (max-width: 860px) {
+  .ui-modal .form-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 340px) {
+  .ui-modal .form-grid-3,
+  .ui-modal .form-grid-4 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* dialog buttons wrap and never run outside a narrow dialog */
+.ui-modal .modal-actions-footer {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.ui-modal .modal-actions-footer .btn {
+  max-width: 100%;
+}

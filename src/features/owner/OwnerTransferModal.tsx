@@ -7,7 +7,7 @@ import { CheckCircleIcon } from '../../components/common/Icons'
 import { Modal, FormError } from '../../components/common/Modal'
 import { useToast } from '../../components/common/Toast'
 import { useSubmit } from '../../components/common/useSubmit'
-import { CalcStrip, Field, Grid2 } from '../../components/common/kit'
+import { CalcStrip, Field, Grid2, Grid3 } from '../../components/common/kit'
 
 /** Owner withdrawal: money leaves the station either from a bank account or as cash from the safe. */
 export const OwnerTransferModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -57,14 +57,12 @@ export const OwnerTransferModal: React.FC<{ onClose: () => void }> = ({ onClose 
   )
 
   return (
-    <Modal title="Owner Withdrawal" subtitle="Record money you take out of the station" onClose={onClose} busy={busy} width={620}>
+    <Modal title="Owner Withdrawal" subtitle="Record money you take out of the station" onClose={onClose} busy={busy} width={740}>
       <form className="modal-form-compact" onSubmit={submit}>
-        <Field label="Where does the money come from?">
-          <div style={{ display: 'flex', gap: 8 }}>
-            {choice('bank', 'From a bank account')}
-            {choice('cash', 'Cash from the safe')}
-          </div>
-        </Field>
+        <div style={{ display: 'flex', gap: 8 }} role="group" aria-label="Where does the money come from?">
+          {choice('bank', 'From a bank account')}
+          {choice('cash', 'Cash from the safe')}
+        </div>
 
         {source === 'bank' ? (
           <>
@@ -80,19 +78,20 @@ export const OwnerTransferModal: React.FC<{ onClose: () => void }> = ({ onClose 
               <Field label="Sent to (account name)"><input className="form-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Owner's name" required /></Field>
               <Field label="Account number / IBAN"><input className="form-input" value={number} onChange={(e) => setNumber(e.target.value)} required /></Field>
             </Grid2>
-            <Grid2>
+            <Grid3>
               <Field label="Date"><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} required /></Field>
-              <Field label="Bank reference / cheque #" hint="Optional. Left empty, one is made for you"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="e.g. IBFT-98124" /></Field>
-            </Grid2>
+              <Field label="Bank reference / cheque #" hint="Optional"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="e.g. IBFT-98124" /></Field>
+              <Field label="Note" hint="Optional"><input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+            </Grid3>
           </>
         ) : (
-          <Grid2>
+          <Grid3>
             <Field label="Amount (Rs)" hint={`Cash in the safe now: ${rs(safe)}`} strong><input type="number" min={1} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
             <Field label="Date"><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} required /></Field>
-          </Grid2>
+            <Field label="Note" hint="Optional"><input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+          </Grid3>
         )}
 
-        <Field label="Note" hint="Optional"><input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         <CalcStrip items={[
           { label: source === 'bank' ? 'Bank now' : 'Cash in safe now', value: rs(before) },
           { label: 'You take', value: `− ${rs(amt)}`, tone: 'red' },

@@ -102,36 +102,40 @@ const MoveModal: React.FC<{ mode: MoveMode; productId?: string; onClose: () => v
   const sub = mode === 'sale' ? 'Deducts stock and posts the cash to the daybook' : mode === 'restock' ? 'Adds cans to stock. Choose the supplier and the bill is added to their account.' : 'Correct stock for damage, counting differences or samples'
 
   return (
-    <Modal title={title} subtitle={sub} onClose={onClose} busy={busy} width={600}>
+    <Modal title={title} subtitle={sub} onClose={onClose} busy={busy} width={740}>
       <form className="modal-form-compact" onSubmit={submit}>
-        <Grid2>
+        <Grid3>
           <Field label="Product">
             <select className="form-input" value={id} onChange={(e) => { setId(e.target.value); const n = products.find((x) => x.id === e.target.value); if (n) { setPrice(String(n.salePrice)); setCost(String(n.costPrice)) } }} required>
               {products.map((x) => <option key={x.id} value={x.id}>{x.name} ({x.packSize}) — stock {x.stockCans}</option>)}
             </select>
           </Field>
           <Field label={mode === 'adjust' ? 'Cans' : 'Number of cans'}><input type="number" min={1} step={1} className="form-input" value={qty} onChange={(e) => setQty(e.target.value)} required autoFocus /></Field>
-        </Grid2>
+          <Field label="Date" hint={!isManager ? 'Today only' : undefined}><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={!isManager} required /></Field>
+        </Grid3>
         {mode === 'sale' && (
           <Grid2>
             <Field label="Customer / vehicle #"><input className="form-input" value={who} onChange={(e) => setWho(e.target.value)} /></Field>
-            <Field label="Price per can (PKR)" hint={isManager ? undefined : 'Fixed list price'}><input type="number" min={0} step="any" className="form-input" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!isManager} /></Field>
+            <Field label="Price per can (Rs)" hint={isManager ? undefined : 'Fixed list price'}><input type="number" min={0} step="any" className="form-input" value={price} onChange={(e) => setPrice(e.target.value)} disabled={!isManager} /></Field>
           </Grid2>
         )}
         {mode === 'restock' && (
           <>
-            <Grid2>
+            <Grid3>
               <Field label="Bought from">
                 <select className="form-input" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  <option value="">Someone else (not in my supplier list)</option>
+                  <option value="">Someone else</option>
                 </select>
               </Field>
-              <Field label="Cost per can (PKR)"><input type="number" min={0} step="any" className="form-input" value={cost} onChange={(e) => setCost(e.target.value)} required /></Field>
-            </Grid2>
-            {supplierId === '' && <Field label="Shop / person name"><input className="form-input" value={who} onChange={(e) => setWho(e.target.value)} /></Field>}
-            <Field label="Invoice / bill number" hint="Optional"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
-            {supplierId !== '' && q > 0 && <p className="ui-muted" style={{ margin: 0, fontSize: 12.5 }}>{rs(q * (Number(cost) || 0))} will be added to this supplier's account as an unpaid bill.</p>}
+              <Field label="Cost per can (Rs)"><input type="number" min={0} step="any" className="form-input" value={cost} onChange={(e) => setCost(e.target.value)} required /></Field>
+              {supplierId === '' ? (
+                <Field label="Shop / person name"><input className="form-input" value={who} onChange={(e) => setWho(e.target.value)} /></Field>
+              ) : (
+                <Field label="Bill number" hint="Optional"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
+              )}
+            </Grid3>
+            {supplierId !== '' && q > 0 && <p className="ui-muted" style={{ margin: 0, fontSize: 12.5 }}>{rs(q * (Number(cost) || 0))} will be added to this supplier&apos;s account as an unpaid bill.</p>}
           </>
         )}
         {mode === 'adjust' && (
@@ -140,7 +144,6 @@ const MoveModal: React.FC<{ mode: MoveMode; productId?: string; onClose: () => v
             <Field label="Reason"><input className="form-input" value={reason} onChange={(e) => setReason(e.target.value)} required /></Field>
           </Grid2>
         )}
-        <Field label="Date" hint={!isManager ? 'Cashiers record today only' : undefined}><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={!isManager} required /></Field>
         {p && (
           <CalcStrip items={mode === 'sale'
             ? [{ label: 'In stock', value: `${p.stockCans} cans` }, { label: 'After sale', value: `${p.stockCans - q} cans` }, { label: 'Cash collected', value: rs(q * (isManager ? Number(price) || 0 : p.salePrice)), tone: 'green' }]

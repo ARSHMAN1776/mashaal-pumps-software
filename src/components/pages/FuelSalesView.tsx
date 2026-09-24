@@ -12,7 +12,7 @@ import { Modal, FormError } from '../common/Modal'
 import { useConfirm } from '../common/Confirm'
 import { useToast } from '../common/Toast'
 import { useSubmit } from '../common/useSubmit'
-import { CalcStrip, EmptyRow, Field, FilterBar, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
+import { CalcStrip, EmptyRow, Field, FilterBar, Grid3, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
 
 // ===========================================================================
 // Meter reading dialog
@@ -69,7 +69,7 @@ const ReadingModal: React.FC<{ nozzleId: string; onClose: () => void; onSaved: (
   }
 
   return (
-    <Modal title="Enter Nozzle Meter Reading" subtitle={`Dispenser #${nozzle.dispenserNo} • Nozzle #${nozzle.nozzleNo} (${nozzle.fuelType})`} onClose={onClose} busy={busy}>
+    <Modal title="Enter Nozzle Meter Reading" subtitle={`Dispenser #${nozzle.dispenserNo} • Nozzle #${nozzle.nozzleNo} (${nozzle.fuelType})`} onClose={onClose} busy={busy} width={760}>
       <form className="modal-form-compact" onSubmit={(e) => { e.preventDefault(); submit(false) }}>
         <Field label="Dispenser & nozzle">
           <select className="form-input" value={id} onChange={(e) => { const n = usable.find((x) => x.id === e.target.value); if (n) pick(n) }}>
@@ -79,8 +79,8 @@ const ReadingModal: React.FC<{ nozzleId: string; onClose: () => void; onSaved: (
           </select>
         </Field>
 
-        <Grid2>
-          <Field label="Date" hint={isCashier ? 'Cashiers record today only' : undefined}>
+        <Grid3>
+          <Field label="Date" hint={isCashier ? 'Today only' : undefined}>
             <input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={isCashier} required />
           </Field>
           <Field label="Shift">
@@ -88,25 +88,22 @@ const ReadingModal: React.FC<{ nozzleId: string; onClose: () => void; onSaved: (
               {SHIFT_NAMES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </Field>
-        </Grid2>
-
-        <Grid2>
-          <Field label="Opening meter" hint={`Last recorded reading: ${nozzle.closingMeter.toLocaleString()}`}>
-            <input type="number" step="any" className="form-input" value={opening} onChange={(e) => setOpening(e.target.value)} required />
-          </Field>
-          <Field label="Closing meter (dial now)" strong hint="Current number on the dispenser display">
-            <input type="number" step="any" className="form-input" value={closing} onChange={(e) => setClosing(e.target.value)} autoFocus required />
-          </Field>
-        </Grid2>
-
-        <Grid2>
-          <Field label="Calibration testing (liters)" hint="Poured back into the tank — deducted from sales">
-            <input type="number" step="any" min={0} className="form-input" value={testing} onChange={(e) => setTesting(e.target.value)} required />
-          </Field>
           <Field label="Attendant / cashier">
             <input type="text" className="form-input" value={attendant} onChange={(e) => setAttendant(e.target.value)} required />
           </Field>
-        </Grid2>
+        </Grid3>
+
+        <Grid3>
+          <Field label="Opening meter" hint={`Last reading: ${nozzle.closingMeter.toLocaleString()}`}>
+            <input type="number" step="any" className="form-input" value={opening} onChange={(e) => setOpening(e.target.value)} required />
+          </Field>
+          <Field label="Closing meter (now)" strong hint="Number on the display">
+            <input type="number" step="any" className="form-input" value={closing} onChange={(e) => setClosing(e.target.value)} autoFocus required />
+          </Field>
+          <Field label="Testing (liters)" hint="Poured back, not sold">
+            <input type="number" step="any" min={0} className="form-input" value={testing} onChange={(e) => setTesting(e.target.value)} required />
+          </Field>
+        </Grid3>
 
         <CalcStrip items={[
           { label: 'Gross liters', value: `${gross.toLocaleString()} L` },
@@ -168,43 +165,43 @@ const NozzleModal: React.FC<{ nozzle?: Nozzle; onClose: () => void }> = ({ nozzl
   }
 
   return (
-    <Modal title={nozzle ? 'Edit Nozzle' : 'Add New Nozzle'} subtitle={nozzle ? `Dispenser ${nozzle.dispenserNo} • Nozzle ${nozzle.nozzleNo}` : 'Register a new dispenser nozzle and connect it to its underground tank'} onClose={onClose} busy={busy}>
+    <Modal title={nozzle ? 'Edit Nozzle' : 'Add New Nozzle'} subtitle={nozzle ? `Dispenser ${nozzle.dispenserNo} • Nozzle ${nozzle.nozzleNo}` : 'Register a nozzle and connect it to its tank'} onClose={onClose} busy={busy} width={740}>
       <form className="modal-form-compact" onSubmit={submit}>
-        <Grid2>
+        <Grid3>
           <Field label="Dispenser number">
             <input type="number" min={1} step={1} className="form-input" value={dispenser} onChange={(e) => setDispenser(e.target.value)} required />
           </Field>
-          <Field label="Nozzle number (on that dispenser)">
+          <Field label="Nozzle number">
             <input type="number" min={1} step={1} className="form-input" value={number} onChange={(e) => setNumber(e.target.value)} required />
           </Field>
-        </Grid2>
-        <Field label="Underground tank it draws from" hint={tank ? `This nozzle will sell ${tank.fuelType} at the station rate.` : 'Add a tank first (Tank Dip & Stock page).'}>
-          <select className="form-input" value={tankId} onChange={(e) => setTankId(e.target.value)} required>
-            {tanks.map((t) => <option key={t.id} value={t.id}>Tank #{t.tankNo} — {t.fuelType} ({t.capacityLiters.toLocaleString()} L)</option>)}
-          </select>
-        </Field>
-        <Grid2>
+          <Field label="Tank it draws from" hint={tank ? `Sells ${tank.fuelType}` : 'Add a tank first'}>
+            <select className="form-input" value={tankId} onChange={(e) => setTankId(e.target.value)} required>
+              {tanks.map((t) => <option key={t.id} value={t.id}>Tank #{t.tankNo} — {t.fuelType}</option>)}
+            </select>
+          </Field>
+        </Grid3>
+        <Grid3>
           {nozzle ? (
-            <Field label="Current meter reading" hint="Changes only when readings are recorded">
+            <Field label="Current meter" hint="Changes with each reading">
               <div className="read-only-box"><strong>{nozzle.closingMeter.toLocaleString()}</strong></div>
             </Field>
           ) : (
-            <Field label="Meter reading today (starting point)" hint="The number on the dispenser now — the first reading starts here">
+            <Field label="Meter reading now" hint="The number on the display">
               <input type="number" min={0} step="any" className="form-input" value={meter} onChange={(e) => setMeter(e.target.value)} required />
             </Field>
           )}
-          <Field label="Default testing (liters)">
+          <Field label="Usual testing (liters)">
             <input type="number" min={0} step="any" className="form-input" value={testing} onChange={(e) => setTesting(e.target.value)} required />
           </Field>
-        </Grid2>
-        <Field label="Assigned attendant">
-          <input type="text" className="form-input" list="nozzle-staff" value={staff} onChange={(e) => setStaff(e.target.value)} placeholder="Pump attendant name" />
-          <datalist id="nozzle-staff">{staffNames.map((n) => <option key={n} value={n} />)}</datalist>
-        </Field>
+          <Field label="Attendant">
+            <input type="text" className="form-input" list="nozzle-staff" value={staff} onChange={(e) => setStaff(e.target.value)} placeholder="Pump attendant name" />
+            <datalist id="nozzle-staff">{staffNames.map((n) => <option key={n} value={n} />)}</datalist>
+          </Field>
+        </Grid3>
         {nozzle && (
           <label className="ui-checkbox-row">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-            <span>Active — untick to take this nozzle out of service (its history is kept)</span>
+            <span>Working — untick to take this nozzle out of service (history is kept)</span>
           </label>
         )}
         <FormError message={error} />

@@ -269,3 +269,6 @@ export const isLowTank = (t: Tank, lowStockAlertPct: number): boolean =>
 
 /** Cash currently in the safe. */
 export const safeCash = (d: StationData): number => (d.daybook.length ? d.daybook[d.daybook.length - 1].balanceAfter : 0)
+
+/** What a customer can still take on credit: the limit minus what they owe (an advance adds to it). Negative = over the limit. */
+export const creditLeft = (c: { creditLimit: number; currentBalance: number }): number => round2(c.creditLimit - c.currentBalance)

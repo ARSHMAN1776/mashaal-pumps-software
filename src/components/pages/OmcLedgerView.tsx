@@ -11,7 +11,7 @@ import { Modal, FormError } from '../common/Modal'
 import { useConfirm } from '../common/Confirm'
 import { useToast } from '../common/Toast'
 import { useSubmit } from '../common/useSubmit'
-import { CalcStrip, EmptyRow, Field, Grid2, Grid3, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
+import { CalcStrip, EmptyRow, Field, Grid2, Grid3, Grid4, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
 
 const InvoiceModal: React.FC<{ invoice?: OmcInvoice; onClose: () => void }> = ({ invoice, onClose }) => {
   const [version] = useState(invoice?.updatedAt) // the record's version when this window was opened
@@ -47,7 +47,7 @@ const InvoiceModal: React.FC<{ invoice?: OmcInvoice; onClose: () => void }> = ({
   }
 
   return (
-    <Modal title={invoice ? `Edit Invoice ${invoice.invoiceNo}` : `Record ${activeSiteData.siteInfo.brand} Fuel Delivery`} subtitle="Official tanker invoice and the quantity actually decanted" onClose={onClose} busy={busy} width={700}>
+    <Modal title={invoice ? `Edit Invoice ${invoice.invoiceNo}` : `Record ${activeSiteData.siteInfo.brand} Fuel Delivery`} subtitle="Official tanker invoice and the quantity actually decanted" onClose={onClose} busy={busy} width={760}>
       <form className="modal-form-compact" onSubmit={submit}>
         <Grid3>
           <Field label="Invoice number"><input className="form-input" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} required autoFocus /></Field>
@@ -66,12 +66,12 @@ const InvoiceModal: React.FC<{ invoice?: OmcInvoice; onClose: () => void }> = ({
             </select>
           </Field>
         </Grid3>
-        <Grid3>
+        <Grid4>
           <Field label="Invoice volume (L)"><input type="number" min={0} step="any" className="form-input" value={invVol} onChange={(e) => { setInvVol(e.target.value); if (!decVol || decVol === invVol) setDecVol(e.target.value) }} required /></Field>
           <Field label="Decanted volume (L)" strong><input type="number" min={0.001} step="any" className="form-input" value={decVol} onChange={(e) => setDecVol(e.target.value)} required /></Field>
-          <Field label="Rate / liter (ex-depot)"><input type="number" min={0.01} step="any" className="form-input" value={rate} onChange={(e) => setRate(e.target.value)} required /></Field>
-        </Grid3>
-        <Field label="Freight / cartage (PKR)"><input type="number" min={0} step="any" className="form-input" value={freight} onChange={(e) => setFreight(e.target.value)} required /></Field>
+          <Field label="Rate / liter (Rs)"><input type="number" min={0.01} step="any" className="form-input" value={rate} onChange={(e) => setRate(e.target.value)} required /></Field>
+          <Field label="Freight (Rs)"><input type="number" min={0} step="any" className="form-input" value={freight} onChange={(e) => setFreight(e.target.value)} required /></Field>
+        </Grid4>
         <CalcStrip items={[
           { label: 'Product cost', value: rs(Number(decVol) * Number(rate) || 0) },
           { label: 'Freight', value: `+ ${rs(Number(freight) || 0)}` },
