@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { failed, freshBackend, must, openStation as baseOpen, type BackendKind } from './harness'
 import { safeCash } from '../../src/data/derive'
 import type { Backend } from '../../src/data/backend'
+import { addDays, todayISO } from '../../src/lib/dates'
 
 const S1 = 'SITE-01'
 const S2 = 'SITE-02'
@@ -439,12 +440,63 @@ describe.each(KINDS)('%s backend', (kind) => {
   describe('settings and OGRA revision', () => {
     it('a new tariff changes every nozzle rate and records the stock gain/loss', async () => {
       const st = await openStation(S1, 'naveed.akhtar')
-      const log = must(await st.act.applyOgraPriceChange({ newRates: { 'PMG Super': 270, 'HSD Diesel': 280, 'Hi-Octane': 300 }, effectiveDate: '2026-09-25 00:00', notificationNo: 'N-1' }))
+      const log = must(await st.act.applyOgraPriceChange({ newRates: { 'PMG Super': 270, 'HSD Diesel': 280, 'Hi-Octane': 300 }, effectiveDate: `${todayISO()} 00:00`, notificationNo: 'N-1' }))
       expect(log.netInventoryGainLoss).toBe(Math.round(31200 * 3.55) + Math.round(16450 * 1.64) + Math.round(6500 * 4.5))
       expect(st.data.settings.rates['HSD Diesel']).toBe(280)
       expect(st.data.nozzles.find((n) => n.id === 'N1-S1')!.ratePerLiter).toBe(280)
       expect(st.data.tariffHistory).toHaveLength(1)
     })
+    describe('a price change and the readings around it', () => {
+      const NEW = { 'PMG Super': 270, 'HSD Diesel': 280, 'Hi-Octane': 300 }
+      const reading = (st: Awaited<ReturnType<typeof openStation>>, date: string, opening: number) =>
+        st.act.recordFuelSale({
+          nozzleId: 'N1-S1', date, shiftName: 'Morning', openingMeter: opening, closingMeter: opening + 100, testingLiters: 0,
+          cashierName: 'Test', acknowledge: ['METER_OVERLAP', 'METER_GAP'],
+        })
+
+      it('a reading for a day before the change keeps the old price, one from the change day uses the new price', async () => {
+        const st = await openStation(S1, 'naveed.akhtar')
+        const old = st.data.settings.rates['HSD Diesel']
+        must(await st.act.applyOgraPriceChange({ newRates: NEW, effectiveDate: todayISO(), notificationNo: 'N-2' }))
+        const yesterday = must(await reading(st, addDays(todayISO(), -1), 414210))
+        const today = must(await reading(st, todayISO(), 414310))
+        expect(yesterday.ratePerLiter).toBe(old)
+        expect(yesterday.totalAmount).toBe(Math.round(100 * old * 100) / 100)
+        expect(today.ratePerLiter).toBe(280)
+        // the old sale keeps its price for good
+        await st.reload()
+        expect(st.data.fuelSales.find((s) => s.id === yesterday.id)!.ratePerLiter).toBe(old)
+      })
+
+      it('a price typed into Station Settings is also kept as a price revision', async () => {
+        const st = await openStation(S1, 'naveed.akhtar')
+        const old = st.data.settings.rates['HSD Diesel']
+        must(await st.act.saveSettings({ ...st.data.settings, rates: NEW }))
+        expect(st.data.tariffHistory).toHaveLength(1)
+        expect(st.data.tariffHistory[0].oldRates['HSD Diesel']).toBe(old)
+        const back = must(await reading(st, addDays(todayISO(), -3), 414210))
+        expect(back.ratePerLiter).toBe(old)
+        // saving without touching a price adds no revision
+        must(await st.act.saveSettings({ ...st.data.settings, cashDifferenceAlertLimit: 999 }))
+        expect(st.data.tariffHistory).toHaveLength(1)
+      })
+
+      it('refuses a price revision dated in the future or with a bad date', async () => {
+        const st = await openStation(S1, 'naveed.akhtar')
+        expect(failed(await st.act.applyOgraPriceChange({ newRates: NEW, effectiveDate: addDays(todayISO(), 2) })).error).toMatch(/future/)
+        expect(failed(await st.act.applyOgraPriceChange({ newRates: NEW, effectiveDate: 'soon' })).error).toMatch(/valid/)
+        expect(st.data.tariffHistory).toHaveLength(0)
+      })
+    })
+
+    it('no record can be dated in the future, even by a manager', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      const future = addDays(todayISO(), 1)
+      expect(failed(await st.act.addExpense({ category: 'Staff Meals & Tea', payee: 'x', description: 'x', amount: 100, paymentMode: 'Cash', date: future })).error).toMatch(/future/)
+      expect(failed(await st.act.addDaybookEntry({ particulars: 'x', category: 'Other', direction: 'IN', amount: 5, date: future })).error).toMatch(/future/)
+      expect(failed(await st.act.recordRecovery({ customerId: 'CUST-01', amount: 10, method: 'Cash', referenceNo: '', date: future })).error).toMatch(/future/)
+    })
+
     it('the cash-difference limit and dealer margins are saved (not overwritten)', async () => {
       const st = await openStation(S1, 'naveed.akhtar')
       must(await st.act.saveSettings({ ...st.data.settings, cashDifferenceAlertLimit: 1500, margins: { 'PMG Super': 9, 'HSD Diesel': 8, 'Hi-Octane': 10 } }))

@@ -425,6 +425,73 @@
   }
 }
 
+/* ---- page banner: the title block never runs into the action buttons ---------------------------------- */
+.page-title-banner {
+  gap: 24px;
+}
+.page-title-banner > div:first-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.page-heading {
+  line-height: 1.2;
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+.page-sub {
+  line-height: 1.5;
+  max-width: 72ch;
+  margin-top: 6px;
+}
+.page-actions {
+  flex: 0 0 auto;
+}
+
+/* ---- bank account cards: label left, value right, long names wrap instead of colliding ----------------- */
+.bank-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+.bank-card-meta .meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+}
+.bank-card-meta .meta-row > :first-child {
+  flex: 0 0 auto;
+}
+.bank-card-meta .meta-row > :last-child {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* ---- settings banner heading spacing ------------------------------------------------------------------- */
+.settings-title {
+  line-height: 1.2;
+}
+.settings-header-banner > div:first-child {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.settings-card-header {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ---- report tabs never push the page sideways ---------------------------------------------------------- */
+.report-tab-strip {
+  flex-wrap: wrap;
+}
+.report-tab-btn {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
 /* ---- small screens: page banners, forms and KPI strips stack instead of overflowing ---------------- */
 @media (max-width: 860px) {
   .page-title-banner {

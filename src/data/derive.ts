@@ -17,14 +17,36 @@
  */
 import { BANK_CREDIT_TYPES } from '../types'
 import type {
-  BankAccount, BankTransaction, Customer, DaybookEntry, FuelType, LubricantProduct, Nozzle, OmcInvoice, StaffMember,
-  StationData, Supplier, Tank,
+  BankAccount, BankTransaction, Customer, DaybookEntry, FuelRates, FuelType, LubricantProduct, Nozzle, OmcInvoice, StaffMember,
+  StationData, Supplier, Tank, TariffRevisionLog,
 } from '../types'
 import { formatDate } from '../lib/dates'
 import { round2 } from '../lib/money'
 import type { RawStation } from './raw'
 
 const EPS = 0.005
+
+/**
+ * The selling price in force on a given date. Price revisions carry the date they took effect, so a reading
+ * that belongs to a day before a price change is still priced with the old rate. From the latest revision
+ * onward the station's current rate applies.
+ */
+export function rateOnDate(
+  history: readonly TariffRevisionLog[], current: FuelRates, fuel: FuelType, date: string,
+): number {
+  const isoDay = /^\d{4}-\d{2}-\d{2}$/
+  // older records store "2026-09-16 00:00"; only the day matters
+  const revs = history
+    .map((r) => ({ ...r, effectiveDate: String(r.effectiveDate ?? '').slice(0, 10) }))
+    .filter((r) => isoDay.test(r.effectiveDate))
+    .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate) || a.date.localeCompare(b.date))
+  if (!revs.length || !isoDay.test(date)) return current[fuel]
+  let inForce = -1
+  revs.forEach((r, i) => { if (r.effectiveDate <= date) inForce = i })
+  if (inForce === revs.length - 1) return current[fuel]
+  if (inForce === -1) return revs[0].oldRates[fuel] || current[fuel]
+  return revs[inForce].newRates[fuel] || current[fuel]
+}
 
 /** newest first: date desc, then createdAt desc */
 const newestFirst = <T extends { date: string; createdAt?: string }>(a: T, b: T) =>

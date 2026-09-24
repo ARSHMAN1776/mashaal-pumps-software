@@ -6,8 +6,26 @@ import { fail, ok, type Result } from '../../data/errors'
 import { op, type Op } from '../../data/ops'
 import type { RawStation } from '../../data/raw'
 import { newId } from '../../lib/ids'
-import { todayISO } from '../../lib/dates'
+import { isValidISODate, todayISO } from '../../lib/dates'
 import { auditOp, clean, fmt, isNonNegative, isPositive, money, needManager, needRole, run, type ActionCtx } from './core'
+
+/** The price-revision record (with the stock gain / loss of every tank) for a change from the current rates to `newRates`. */
+function buildRevision(c: ActionCtx, newRates: FuelRates, effectiveDate: string, notificationNo: string, notes: string): TariffRevisionLog {
+  const oldRates = { ...c.data.settings.rates }
+  const tankSnapshots = c.data.tanks.map((t) => {
+    const oldRate = oldRates[t.fuelType] || 0
+    const newRate = newRates[t.fuelType] || oldRate
+    const diff = Math.round((newRate - oldRate) * 100) / 100
+    return {
+      tankNo: t.tankNo, fuelType: t.fuelType, litersAtRevision: t.currentLiters, oldRate, newRate, rateDiff: diff,
+      gainLossAmount: Math.round(t.currentLiters * diff),
+    }
+  })
+  return {
+    id: newId('REV'), date: todayISO(), effectiveDate, notificationNo, oldRates, newRates: { ...newRates }, tankSnapshots,
+    netInventoryGainLoss: tankSnapshots.reduce((a, t) => a + t.gainLossAmount, 0), revisedBy: c.user.name, notes,
+  }
+}
 
 export function saveSettings(c: ActionCtx, s: StationSettings): Promise<Result<void>> {
   return run(async () => {
@@ -21,8 +39,13 @@ export function saveSettings(c: ActionCtx, s: StationSettings): Promise<Result<v
     if (!isNonNegative(money(s.cashDifferenceAlertLimit))) return fail('The cash-difference alert limit cannot be negative.')
     const old = c.raw.settings
     const changedRates = FUEL_TYPES.filter((f) => Math.abs(old.rates[f] - s.rates[f]) > 0.0001)
+    // a price change made here is a price revision from today, so the history of prices stays complete
+    const revision = changedRates.length
+      ? [op.insert('tariff_revisions', buildRevision(c, s.rates, todayISO(), `MANUAL/${todayISO()}`, 'Price changed in Station Settings.'))]
+      : []
     await c.commit([
       op.settings({ ...s, stationPhone: clean(s.stationPhone), managerContact: clean(s.managerContact) }),
+      ...revision,
       auditOp(c, 'settings.save', 'settings', 'main', changedRates.length ? `Changed rates: ${changedRates.map((f) => `${f} ${old.rates[f]} → ${s.rates[f]}`).join(', ')}` : 'Saved station settings', { before: old, after: s }),
     ])
     return ok(undefined)
@@ -42,23 +65,15 @@ export function applyOgraPriceChange(c: ActionCtx, i: OgraInput): Promise<Result
     const denied = needManager(c, 'apply OGRA price revisions')
     if (denied) return denied
     for (const f of FUEL_TYPES) if (!isPositive(money(i.newRates[f]))) return fail(`Enter the new ${f} rate.`)
-    if (!clean(i.effectiveDate)) return fail('Enter the effective date.')
+    const effective = clean(i.effectiveDate).slice(0, 10) // also accepts "2026-09-16 00:00"
+    if (!isValidISODate(effective)) return fail('Enter a valid effective date.')
+    if (effective > todayISO()) return fail('The effective date cannot be in the future. Apply the revision on the day the new prices start.')
     const oldRates = { ...c.data.settings.rates }
-    const tankSnapshots = c.data.tanks.map((t) => {
-      const oldRate = oldRates[t.fuelType] || 0
-      const newRate = i.newRates[t.fuelType] || oldRate
-      const diff = Math.round((newRate - oldRate) * 100) / 100
-      return {
-        tankNo: t.tankNo, fuelType: t.fuelType, litersAtRevision: t.currentLiters, oldRate, newRate, rateDiff: diff,
-        gainLossAmount: Math.round(t.currentLiters * diff),
-      }
-    })
-    const net = tankSnapshots.reduce((a, t) => a + t.gainLossAmount, 0)
-    const log: TariffRevisionLog = {
-      id: newId('REV'), date: todayISO(), effectiveDate: clean(i.effectiveDate),
-      notificationNo: clean(i.notificationNo) || `OGRA/NOTIF/${todayISO()}`, oldRates, newRates: { ...i.newRates }, tankSnapshots,
-      netInventoryGainLoss: net, revisedBy: c.user.name, notes: clean(i.notes) || 'Fortnightly OGRA price revision applied.',
-    }
+    const log = buildRevision(
+      c, i.newRates, effective, clean(i.notificationNo) || `OGRA/NOTIF/${todayISO()}`,
+      clean(i.notes) || 'Fortnightly OGRA price revision applied.',
+    )
+    const net = log.netInventoryGainLoss
     await c.commit([
       op.settings({ ...c.raw.settings, rates: { ...i.newRates } }),
       op.insert('tariff_revisions', log),

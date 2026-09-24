@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext'
 import type { CreditSaleSlip, Customer, CustomerAdjustment, CustomerRecovery, FuelType, RecoveryMethod } from '../../types'
 import { FUEL_TYPES } from '../../types'
 import { todayISO } from '../../lib/dates'
+import { rateOnDate } from '../../data/derive'
 import { round2 } from '../../lib/money'
 import { CheckCircleIcon, WhatsAppIcon } from '../../components/common/Icons'
 import { Modal, FormError } from '../../components/common/Modal'
@@ -102,7 +103,7 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
   const [date, setDate] = useState(slip?.date ?? todayISO())
   const [phone, setPhone] = useState(initial?.phone ?? '')
 
-  const rate = slip && rateText !== '' ? Number(rateText) : rates[fuel]
+  const rate = slip && rateText !== '' ? Number(rateText) : rateOnDate(activeSiteData.tariffHistory, rates, fuel, date)
   const l = Number(liters)
   const total = Number.isFinite(l) && l > 0 ? round2(l * (Number.isFinite(rate) ? rate : 0)) : 0
   const before = customer ? customer.currentBalance - (slip ? slip.totalAmount : 0) : 0

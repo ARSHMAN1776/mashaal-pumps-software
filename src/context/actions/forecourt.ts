@@ -2,6 +2,7 @@
 import { FUEL_TYPES, SHIFT_NAMES } from '../../types'
 import type { FuelSaleRecord, FuelType, Nozzle, ShiftName, Tank, TankDipRecord } from '../../types'
 import { fail, ok, type Result } from '../../data/errors'
+import { rateOnDate } from '../../data/derive'
 import { op } from '../../data/ops'
 import { newId } from '../../lib/ids'
 import { round2 } from '../../lib/money'
@@ -213,7 +214,8 @@ export function recordFuelSale(c: ActionCtx, i: FuelSaleInput): Promise<Result<F
     if (!isNonNegative(testing)) return fail('Testing liters cannot be negative.')
     const gross = round2(closing - opening)
     if (testing >= gross) return fail('Testing liters must be less than the liters dispensed.')
-    const rate = c.data.settings.rates[nozzle.fuelType]
+    // the price in force on the reading's date, so a late entry for a day before a price change keeps the old rate
+    const rate = rateOnDate(c.data.tariffHistory, c.data.settings.rates, nozzle.fuelType, date)
     if (!isPositive(rate)) return fail(`Set the ${nozzle.fuelType} rate in Settings before recording sales.`)
     if (!clean(i.cashierName)) return fail('Enter the attendant / cashier name.')
 

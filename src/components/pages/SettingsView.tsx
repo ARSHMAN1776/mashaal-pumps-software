@@ -38,7 +38,7 @@ const OgraModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [rates, setRates] = useState<Record<FuelType, string>>({
     'PMG Super': String(settings.rates['PMG Super']), 'HSD Diesel': String(settings.rates['HSD Diesel']), 'Hi-Octane': String(settings.rates['Hi-Octane']),
   })
-  const [effective, setEffective] = useState(`${todayISO()} 00:00`)
+  const [effective, setEffective] = useState(todayISO())
   const [notif, setNotif] = useState(`OGRA/PL/${todayISO().slice(0, 7)}-A`)
   const [notes, setNotes] = useState('Fortnightly OGRA official price determination')
   const { busy, error, run } = useSubmit()
@@ -64,7 +64,7 @@ const OgraModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     <Modal title="OGRA Fortnightly Price Revision Wizard" subtitle="Applies new official tariffs to every nozzle and calculates the stock gain / loss" onClose={onClose} busy={busy} width={700}>
       <form className="modal-form-compact" onSubmit={submit}>
         <Grid2>
-          <Field label="Effective date & time (midnight)"><input className="form-input" value={effective} onChange={(e) => setEffective(e.target.value)} placeholder="YYYY-MM-DD 00:00" required /></Field>
+          <Field label="Effective date (new prices start at midnight)" hint="Readings dated before this day keep the old price."><input type="date" className="form-input" value={effective} max={todayISO()} onChange={(e) => setEffective(e.target.value)} required /></Field>
           <Field label="OGRA notification reference"><input className="form-input" value={notif} onChange={(e) => setNotif(e.target.value)} required /></Field>
         </Grid2>
         <Grid3>
@@ -75,17 +75,17 @@ const OgraModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           ))}
         </Grid3>
         <div style={{ background: '#faf6ee', border: '1px solid #ebd9c8', borderRadius: 8, padding: '10px 12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
             <strong style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Underground stock revaluation (latest dip)</strong>
             <span className={`badge ${net >= 0 ? 'badge-success' : 'badge-danger'}`}>{net >= 0 ? 'Net inventory gain' : 'Net inventory loss'}</span>
           </div>
           {lines.map(({ tank, oldR, newR, diff, gain }) => (
-            <div key={tank.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, padding: '2px 0', borderBottom: '1px dashed #e5dcc7' }}>
-              <span><strong>Tank #{tank.tankNo}: {tank.fuelType}</strong> <span style={{ color: '#686256' }}>({tank.currentLiters.toLocaleString()} L @ Rs. {oldR} → Rs. {newR})</span></span>
-              <span style={{ color: diff >= 0 ? '#15803d' : '#b91c1c', fontWeight: 700 }}>{diff >= 0 ? '+' : ''}Rs. {gain.toLocaleString()}</span>
+            <div key={tank.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 12px', fontSize: 11.5, padding: '3px 0', borderBottom: '1px dashed #e5dcc7' }}>
+              <span style={{ minWidth: 0 }}><strong>Tank #{tank.tankNo}: {tank.fuelType}</strong> <span style={{ color: '#686256' }}>({tank.currentLiters.toLocaleString()} L @ Rs. {oldR} → Rs. {newR})</span></span>
+              <span style={{ color: diff >= 0 ? '#15803d' : '#b91c1c', fontWeight: 700, whiteSpace: 'nowrap' }}>{diff >= 0 ? '+' : ''}Rs. {gain.toLocaleString()}</span>
             </div>
           ))}
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, fontSize: 12.5 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '2px 12px', paddingTop: 6, fontSize: 12.5 }}>
             <strong>Total net revaluation impact:</strong>
             <strong style={{ color: net >= 0 ? '#15803d' : '#b91c1c' }}>{net >= 0 ? '+' : ''}Rs. {net.toLocaleString()}</strong>
           </div>

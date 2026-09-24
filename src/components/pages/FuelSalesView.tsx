@@ -4,6 +4,7 @@ import type { FuelSaleRecord, Nozzle, ShiftName } from '../../types'
 import { SHIFT_NAMES } from '../../types'
 import { currentShift, formatDate, todayISO } from '../../lib/dates'
 import { rs, rs2 } from '../../lib/money'
+import { rateOnDate } from '../../data/derive'
 import { GasPumpIcon, PlusIcon, PrinterIcon, CheckCircleIcon, WhatsAppIcon, EditIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
@@ -47,7 +48,7 @@ const ReadingModal: React.FC<{ nozzleId: string; onClose: () => void; onSaved: (
   const t = Number(testing) || 0
   const gross = Number.isFinite(o) && Number.isFinite(c) && closing !== '' ? Math.max(0, c - o) : 0
   const net = Math.max(0, gross - t)
-  const rate = nozzle?.ratePerLiter ?? 0
+  const rate = nozzle ? rateOnDate(activeSiteData.tariffHistory, activeSiteData.settings.rates, nozzle.fuelType, date) : 0
 
   const submit = (print: boolean) => {
     if (!nozzle) return

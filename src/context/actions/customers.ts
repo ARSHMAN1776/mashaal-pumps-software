@@ -15,6 +15,7 @@ import { FUEL_TYPES } from '../../types'
 import type {
   CreditSaleSlip, Customer, CustomerAdjustment, CustomerRecovery, CustomerStatus, FuelType, RecoveryMethod,
 } from '../../types'
+import { rateOnDate } from '../../data/derive'
 import { fail, ok, type Result } from '../../data/errors'
 import { op, type Op } from '../../data/ops'
 import { newId } from '../../lib/ids'
@@ -195,7 +196,8 @@ export function issueSlip(c: ActionCtx, i: SlipInput): Promise<Result<CreditSale
     if (!FUEL_TYPES.includes(i.fuelType)) return fail('Choose the fuel product.')
     const liters = money(i.liters)
     if (!isPositive(liters)) return fail('Liters must be more than 0.')
-    const rate = c.data.settings.rates[i.fuelType]
+    // the price in force on the slip's date (a late slip for a day before a price change keeps the old rate)
+    const rate = rateOnDate(c.data.tariffHistory, c.data.settings.rates, i.fuelType, date)
     if (!isPositive(rate)) return fail(`Set the ${i.fuelType} rate in Settings first.`)
     const total = round2(liters * rate)
 
@@ -245,7 +247,7 @@ export function updateSlip(c: ActionCtx, id: string, i: SlipEdit): Promise<Resul
     if (!FUEL_TYPES.includes(i.fuelType)) return fail('Choose the fuel product.')
     const liters = money(i.liters)
     if (!isPositive(liters)) return fail('Liters must be more than 0.')
-    const rate = i.rate !== undefined ? money(i.rate) : i.fuelType === slip.fuelType ? slip.rate : c.data.settings.rates[i.fuelType]
+    const rate = i.rate !== undefined ? money(i.rate) : i.fuelType === slip.fuelType ? slip.rate : rateOnDate(c.data.tariffHistory, c.data.settings.rates, i.fuelType, i.date)
     if (!isPositive(rate)) return fail('The rate per liter must be more than 0.')
     const total = round2(liters * rate)
     await c.commit([

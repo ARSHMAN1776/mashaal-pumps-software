@@ -65,9 +65,10 @@ export const isPositive = (n: number) => Number.isFinite(n) && n > 0
 export const isNonNegative = (n: number) => Number.isFinite(n) && n >= 0
 export const clean = (s: unknown) => String(s ?? '').trim()
 
-/** Cashiers may only post records dated today. */
+/** Nobody can post a record dated in the future; cashiers may only post records dated today. */
 export function checkDate(c: ActionCtx, date: string): Result<never> | null {
   if (!isValidISODate(date)) return fail('Enter a valid date.')
+  if (date > todayISO()) return fail('The date cannot be in the future.')
   if (!isManager(c) && date !== todayISO()) return fail('Cashiers can only record entries dated today.', 'FORBIDDEN')
   return null
 }

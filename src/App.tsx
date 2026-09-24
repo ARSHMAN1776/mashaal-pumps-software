@@ -38,8 +38,23 @@ export const AppContent: React.FC = () => {
   const [menuOpen, setMenuOpen] = React.useState(false)
   const {
     booting, bootError, backendKind, activeSiteId, isSiteLoggedIn, activeModule, activeSiteData, currentUser,
-    dataStatus, dataError, reloadData, online, logout,
+    dataStatus, dataError, reloadData, online, logout, selectSite, login,
   } = useApp()
+
+  // demo mode only (compiled out of production): ?as=username&site=SITE-01 signs in a sample user for screenshots
+  const autoLogin = React.useRef(false)
+  React.useEffect(() => {
+    if (!__PREVIEW__ || booting || autoLogin.current || isSiteLoggedIn) return
+    const q = new URLSearchParams(window.location.search)
+    const as = q.get('as')
+    if (!as) return
+    autoLogin.current = true
+    void (async () => {
+      await selectSite(q.get('site') ?? 'SITE-01')
+      await new Promise((r) => setTimeout(r, 300)) // let the station selection render before signing in
+      await login(as, 'Preview#123', false)
+    })()
+  }, [booting, isSiteLoggedIn, selectSite, login])
 
   if (booting) {
     return (
