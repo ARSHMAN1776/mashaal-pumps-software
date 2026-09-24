@@ -578,3 +578,216 @@
     flex: 1;
   }
 }
+
+/* ---- phone layout: the title block keeps its natural height (the wide-screen flex-basis must not apply vertically) ---- */
+@media (max-width: 860px) {
+  .page-title-banner > div:first-child {
+    flex: 0 0 auto !important;
+    width: 100%;
+  }
+  .page-actions {
+    justify-content: stretch;
+  }
+}
+
+/* ---- phone layout: a slim top bar — menu, station, status dot, user — that never overflows ---------------- */
+@media (max-width: 720px) {
+  .navbar-surface {
+    height: 56px;
+    padding: 0 10px;
+    gap: 8px;
+  }
+  .navbar-left-identity {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 8px;
+  }
+  .station-badge-pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 4px 8px;
+  }
+  .header-station-info {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .header-station-title {
+    font-size: 13px !important;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .navbar-right-cluster {
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+  .header-online-status {
+    padding: 6px !important;
+  }
+  .live-status-label {
+    display: none !important;
+  }
+  .header-profile-trigger {
+    padding: 2px 4px !important;
+    gap: 4px;
+  }
+  .header-profile-trigger .ui-icon-btn {
+    margin-left: 0 !important;
+  }
+}
+@media (max-width: 420px) {
+  .header-station-info {
+    display: none;
+  }
+}
+
+/* ---- the "change my password" key in the top bar: white key on a see-through button (it was white on white) ---- */
+.navbar-surface .header-profile-trigger .ui-icon-btn {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #ffffff;
+}
+.navbar-surface .header-profile-trigger .ui-icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.7);
+  color: #ffffff;
+}
+.navbar-surface .header-profile-trigger .ui-icon-btn svg {
+  color: #ffffff;
+}
+
+/* the "expenses" dashboard icon had no colour rule (it showed as a bare black icon) */
+.summary-icon-box.expense {
+  background-color: var(--icon-bubble-shift-bg);
+  color: var(--icon-bubble-shift-color);
+}
+
+/* ---- phone layout: the guide card on top of every page is one clean stacked block --------------------------- */
+@media (max-width: 720px) {
+  .module-guide-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px;
+  }
+  .guide-header-left {
+    min-width: 0;
+    width: 100%;
+  }
+  .guide-header-left > div:last-child {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .guide-title-line {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+  .guide-purpose-preview {
+    display: none;
+  }
+  .guide-toggle-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .guide-steps-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ---- phone layout: the stats strip is a tidy two-column grid; an odd last card spans the full width ----------- */
+@media (max-width: 860px) {
+  .executive-kpi-strip > .kpi-cell {
+    padding: 16px 18px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .executive-kpi-strip > .kpi-cell:nth-child(odd) {
+    border-right: 1px solid var(--border-subtle);
+  }
+  .executive-kpi-strip > .kpi-cell:last-child,
+  .executive-kpi-strip > .kpi-cell:nth-last-child(2):nth-child(odd) {
+    border-bottom: 0;
+  }
+  .executive-kpi-strip > .kpi-cell:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    border-right: 0;
+  }
+}
+@media (max-width: 420px) {
+  .kpi-cell-value {
+    font-size: 20px;
+  }
+}
+
+/* ---- tables on a phone: a customer / party name column that is readable (left-aligned, not squeezed) ---- */
+.ui-link-btn {
+  text-align: left;
+}
+@media (max-width: 720px) {
+  .clean-table td:has(> .ui-link-btn) {
+    min-width: 160px;
+  }
+}
+
+/* ---- phone layout: choose-a-station screen — one card per row, compact header, full-width open button ------ */
+@media (max-width: 720px) {
+  .site-select-topbar {
+    height: auto;
+    min-height: 56px;
+    padding: 8px 14px;
+    gap: 8px;
+  }
+  .site-select-topbar .brand-crest-tag,
+  .site-select-topbar .topbar-user-area {
+    display: none;
+  }
+  .site-select-body {
+    padding: 22px 14px;
+  }
+  .site-select-hero {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .hero-date-pill {
+    align-self: flex-start;
+  }
+  .site-cards-flow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+  .station-card-ribbon {
+    padding: 10px 16px;
+  }
+  .station-card-main {
+    padding: 18px 16px;
+  }
+  .station-card-title {
+    font-size: 18px;
+  }
+  .station-card-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .station-open-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .system-assurance-banner {
+    padding: 12px 14px;
+    align-items: flex-start;
+  }
+}
+
+/* ---- card headers (title + a button) wrap instead of pushing the button off a narrow screen ----------------- */
+.table-surface-header {
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+.table-surface-header > div:first-child {
+  min-width: 0;
+  flex: 1 1 220px;
+}
