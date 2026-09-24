@@ -21,7 +21,7 @@
 | naveed.akhtar / tariq.manager / station.manager | manager123 | Manager |
 | tariq.cashier / kamran.cashier / station.cashier | cashier123 | Cashier |
 
-Every account is forced to choose a new password at first sign-in. Owners can add,
+Passwords are not forced to change; each user can change theirs with the key button in the top bar. Owners can add,
 edit, reset and remove users in **Station Setup → Users**.
 
 ## 3. Data layout

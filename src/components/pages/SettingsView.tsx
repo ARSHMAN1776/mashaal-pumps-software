@@ -213,7 +213,7 @@ const UsersPanel: React.FC = () => {
                   <td>{u.fullName}<div className="text-muted text-xs">{u.phone}</div></td>
                   <td><span className={`badge ${u.role === 'owner' ? 'badge-gold' : u.role === 'manager' ? 'badge-success' : 'badge-neutral'}`} style={{ textTransform: 'capitalize' }}>{u.role}</span></td>
                   <td>{u.sites.map(code).join(', ')}</td>
-                  <td>{!u.isActive ? <span className="badge badge-danger">Disabled</span> : u.mustChangePassword ? <span className="badge badge-warning">Must change password</span> : <span className="badge badge-success">Active</span>}</td>
+                  <td>{!u.isActive ? <span className="badge badge-danger">Disabled</span> : <span className="badge badge-success">Active</span>}</td>
                   <td><RowActions>
                     <IconButton label="Edit / reset password" onClick={() => setForm({ user: u })}><EditIcon size={14} /></IconButton>
                     {u.userId !== currentUser?.id && <IconButton label="Delete user" tone="danger" onClick={() => void remove(u)}><TrashIcon size={14} /></IconButton>}

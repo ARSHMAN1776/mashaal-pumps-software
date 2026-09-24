@@ -20,7 +20,6 @@ import { ReportsView } from './components/pages/ReportsView'
 import { SettingsView } from './components/pages/SettingsView'
 import { OwnerPortalView } from './components/pages/OwnerPortalView'
 import { OwnerFinancialView } from './components/pages/OwnerFinancialView'
-import { PasswordDialog } from './components/common/PasswordDialog'
 import { LegacyCopyBanner } from './components/common/LegacyCopyBanner'
 import { Spinner } from './components/common/kit'
 import { WifiOffIcon } from './components/common/Icons'
@@ -156,7 +155,6 @@ export const AppContent: React.FC = () => {
           {renderModule()}
         </main>
       </div>
-      {currentUser.mustChangePassword && <PasswordDialog forced />}
     </div>
   )
 }
