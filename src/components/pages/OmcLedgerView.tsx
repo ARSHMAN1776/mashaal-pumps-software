@@ -200,24 +200,6 @@ export const OmcLedgerView: React.FC = () => {
         }
       />
 
-      <ModuleGuide
-        title="OMC Supply & Tanker Deliveries SOP"
-        urduTitle="آئل مارکیٹنگ کمپنی اور ٹینکر ڈلیوری کے اصول"
-        role="manager"
-        roleLabel="Station Manager / Owner"
-        purpose="Track bulk fuel tanker receipts, decanting variance against depot invoices, freight, and payments. Payments post to the bank account or the cash safe automatically."
-        steps={[
-          { step: 1, title: 'Tanker arrival & dip (ٹینکر کی آمد)', detail: 'Check seals and dip the tanker before decanting into the underground tank.', urdu: 'ڈپو کی سیل چیک کریں اور ٹینکر کی پیمائش کریں۔' },
-          { step: 2, title: 'Record decanted liters (اتاری گئی مقدار)', detail: 'Enter invoice volume, decanted volume and the receiving tank. The transit shortage is shown.', urdu: 'انوائس اور اصل اتاری گئی مقدار درج کریں۔' },
-          { step: 3, title: 'Pay the OMC (ادائیگی)', detail: 'Record the transfer / pay order / cheque against the invoice and choose the bank account it left from.', urdu: 'بینک اکاؤنٹ منتخب کر کے ادائیگی درج کریں۔' },
-        ]}
-        criticalChecks={[
-          'Test fuel with water paste before decanting.',
-          'Decanted volume must match the temperature-corrected dip report.',
-          'A payment cannot exceed the invoice balance without manager authorization.',
-        ]}
-      />
-
       <KpiStrip>
         <Kpi label="Primary OMC supplier" value={siteInfo.brand} sub="Contracted supply depot" />
         <Kpi label="Total fuel purchased" value={rs(totalInvoiced)} tone="gold" sub={`${omcInvoices.length} tanker invoice(s)`} />
@@ -291,6 +273,24 @@ export const OmcLedgerView: React.FC = () => {
         <div className="receipt-divider" />
         <div className="slip-row highlight"><span>Net outstanding payable to OMC:</span><strong>{rs(net)}</strong></div>
       </PrintReceiptModal>
+
+      <ModuleGuide
+        title="OMC Supply & Tanker Deliveries SOP"
+        urduTitle="آئل مارکیٹنگ کمپنی اور ٹینکر ڈلیوری کے اصول"
+        role="manager"
+        roleLabel="Station Manager / Owner"
+        purpose="Track bulk fuel tanker receipts, decanting variance against depot invoices, freight, and payments. Payments post to the bank account or the cash safe automatically."
+        steps={[
+          { step: 1, title: 'Tanker arrival & dip (ٹینکر کی آمد)', detail: 'Check seals and dip the tanker before decanting into the underground tank.', urdu: 'ڈپو کی سیل چیک کریں اور ٹینکر کی پیمائش کریں۔' },
+          { step: 2, title: 'Record decanted liters (اتاری گئی مقدار)', detail: 'Enter invoice volume, decanted volume and the receiving tank. The transit shortage is shown.', urdu: 'انوائس اور اصل اتاری گئی مقدار درج کریں۔' },
+          { step: 3, title: 'Pay the OMC (ادائیگی)', detail: 'Record the transfer / pay order / cheque against the invoice and choose the bank account it left from.', urdu: 'بینک اکاؤنٹ منتخب کر کے ادائیگی درج کریں۔' },
+        ]}
+        criticalChecks={[
+          'Test fuel with water paste before decanting.',
+          'Decanted volume must match the temperature-corrected dip report.',
+          'A payment cannot exceed the invoice balance without manager authorization.',
+        ]}
+      />
     </div>
   )
 }

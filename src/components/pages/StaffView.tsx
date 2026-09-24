@@ -220,24 +220,6 @@ export const StaffView: React.FC = () => {
         }
       />
 
-      <ModuleGuide
-        title="Staff Roster, Duty Shifts & Salary Guide"
-        urduTitle="اسٹاف حاضری، شفٹ ڈیوٹی اور تنخواہ کی رہنمائی"
-        role="manager"
-        roleLabel="Station Manager"
-        purpose="Keep the staff list, toggle duty status, issue advances from the safe, and pay the monthly salary with advances deducted automatically."
-        steps={[
-          { step: 1, title: 'Duty status (ڈیوٹی اسٹیٹس)', detail: 'Click the status badge to cycle On Duty → Off Duty → On Leave. It is saved for everyone.', urdu: 'ڈیوٹی بٹن پر کلک کر کے حاضری لگائیں۔' },
-          { step: 2, title: 'Issue advance (ایڈوانس)', detail: 'Enter the amount and reason. The limit per day and the salary are checked. Cash leaves the safe automatically.', urdu: 'ایڈوانس رقم اور وجہ درج کریں، رقم ڈے بک سے کٹ جائے گی۔' },
-          { step: 3, title: 'Pay salary (تنخواہ)', detail: 'Choose the month. Unsettled advances are deducted and the net cash is posted to the daybook.', urdu: 'ماہانہ تنخواہ میں سے ایڈوانس خودکار منہا ہو جاتا ہے۔' },
-          { step: 4, title: 'Correct mistakes (درستگی)', detail: 'Advances and salary payments can be deleted; everything they posted is reversed.', urdu: 'غلط اندراج حذف کریں، تمام اثرات واپس ہو جائیں گے۔' },
-        ]}
-        criticalChecks={[
-          'Advances must not exceed the policy limit for that role.',
-          'Obtain a signature or thumb impression on the printed advance / pay slip.',
-        ]}
-      />
-
       <KpiStrip>
         <Kpi label="Active staff" value={`${active.length} employees`} sub={`${active.filter((s) => s.status === 'On Duty').length} on duty now`} />
         <Kpi label="Monthly payroll" value={rs(payroll)} sub="Base salaries" />
@@ -352,6 +334,24 @@ export const StaffView: React.FC = () => {
           </>
         )}
       </PrintReceiptModal>
+
+      <ModuleGuide
+        title="Staff Roster, Duty Shifts & Salary Guide"
+        urduTitle="اسٹاف حاضری، شفٹ ڈیوٹی اور تنخواہ کی رہنمائی"
+        role="manager"
+        roleLabel="Station Manager"
+        purpose="Keep the staff list, toggle duty status, issue advances from the safe, and pay the monthly salary with advances deducted automatically."
+        steps={[
+          { step: 1, title: 'Duty status (ڈیوٹی اسٹیٹس)', detail: 'Click the status badge to cycle On Duty → Off Duty → On Leave. It is saved for everyone.', urdu: 'ڈیوٹی بٹن پر کلک کر کے حاضری لگائیں۔' },
+          { step: 2, title: 'Issue advance (ایڈوانس)', detail: 'Enter the amount and reason. The limit per day and the salary are checked. Cash leaves the safe automatically.', urdu: 'ایڈوانس رقم اور وجہ درج کریں، رقم ڈے بک سے کٹ جائے گی۔' },
+          { step: 3, title: 'Pay salary (تنخواہ)', detail: 'Choose the month. Unsettled advances are deducted and the net cash is posted to the daybook.', urdu: 'ماہانہ تنخواہ میں سے ایڈوانس خودکار منہا ہو جاتا ہے۔' },
+          { step: 4, title: 'Correct mistakes (درستگی)', detail: 'Advances and salary payments can be deleted; everything they posted is reversed.', urdu: 'غلط اندراج حذف کریں، تمام اثرات واپس ہو جائیں گے۔' },
+        ]}
+        criticalChecks={[
+          'Advances must not exceed the policy limit for that role.',
+          'Obtain a signature or thumb impression on the printed advance / pay slip.',
+        ]}
+      />
     </div>
   )
 }

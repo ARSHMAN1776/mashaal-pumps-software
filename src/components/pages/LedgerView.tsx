@@ -34,20 +34,6 @@ export const LedgerView: React.FC = () => {
         )}
       />
 
-      <ModuleGuide
-        title="Debit / Credit Ledger Guide"
-        urduTitle="ڈیبٹ / کریڈٹ کھاتہ کی رہنمائی"
-        role="manager"
-        roleLabel="Manager & Cashier"
-        purpose="See a customer's complete account: DEBIT is fuel taken on credit, CREDIT is money received. Every entry can be corrected or deleted by a manager and the balance updates instantly."
-        steps={[
-          { step: 1, title: 'Pick the customer (گاہک منتخب کریں)', detail: 'Choose the account from the list. The statement, totals and balance appear below.', urdu: 'فہرست سے گاہک منتخب کریں۔' },
-          { step: 2, title: 'Add entries (اندراج)', detail: 'Use "Debit: issue slip" for fuel on credit, "Credit: record payment" for money received, or a debit / credit note for corrections and discounts.', urdu: 'ادھار پرچی، وصولی یا ایڈجسٹمنٹ نوٹ درج کریں۔' },
-          { step: 3, title: 'Edit or delete (ترمیم یا حذف)', detail: 'Managers: use the pencil / bin on any row. Deleting a payment also removes its cash-book line. Everything is recorded in the audit trail.', urdu: 'مینیجر کسی بھی اندراج کو درست یا حذف کر سکتا ہے۔' },
-          { step: 4, title: 'Delete a customer (گاہک حذف)', detail: 'A customer without history is deleted. One with history is archived (ledger kept) once the balance is Rs 0.', urdu: 'لین دین والا گاہک صرف بیلنس صفر ہونے پر محفوظ شدہ (آرکائیو) ہوتا ہے۔' },
-        ]}
-      />
-
       <div className="account-selector-ribbon">
         <div className="form-group flex-1">
           <label className="form-label">Select customer account</label>
@@ -74,6 +60,20 @@ export const LedgerView: React.FC = () => {
       )}
 
       {newCustomer && <CustomerFormModal onClose={() => setNewCustomer(false)} onSaved={(c) => c && setSelectedId(c.id)} />}
+
+      <ModuleGuide
+        title="Debit / Credit Ledger Guide"
+        urduTitle="ڈیبٹ / کریڈٹ کھاتہ کی رہنمائی"
+        role="manager"
+        roleLabel="Manager & Cashier"
+        purpose="See a customer's complete account: DEBIT is fuel taken on credit, CREDIT is money received. Every entry can be corrected or deleted by a manager and the balance updates instantly."
+        steps={[
+          { step: 1, title: 'Pick the customer (گاہک منتخب کریں)', detail: 'Choose the account from the list. The statement, totals and balance appear below.', urdu: 'فہرست سے گاہک منتخب کریں۔' },
+          { step: 2, title: 'Add entries (اندراج)', detail: 'Use "Debit: issue slip" for fuel on credit, "Credit: record payment" for money received, or a debit / credit note for corrections and discounts.', urdu: 'ادھار پرچی، وصولی یا ایڈجسٹمنٹ نوٹ درج کریں۔' },
+          { step: 3, title: 'Edit or delete (ترمیم یا حذف)', detail: 'Managers: use the pencil / bin on any row. Deleting a payment also removes its cash-book line. Everything is recorded in the audit trail.', urdu: 'مینیجر کسی بھی اندراج کو درست یا حذف کر سکتا ہے۔' },
+          { step: 4, title: 'Delete a customer (گاہک حذف)', detail: 'A customer without history is deleted. One with history is archived (ledger kept) once the balance is Rs 0.', urdu: 'لین دین والا گاہک صرف بیلنس صفر ہونے پر محفوظ شدہ (آرکائیو) ہوتا ہے۔' },
+        ]}
+      />
     </div>
   )
 }

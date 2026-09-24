@@ -376,25 +376,6 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
-      <ModuleGuide
-        title="OGRA Tariffs & Station Configuration SOP"
-        urduTitle="اوگرا فیول ریٹس اور اسٹیشن ترتیبات"
-        role="owner"
-        roleLabel="Owner / Manager"
-        purpose="Set fuel prices and dealer margins, apply the fortnightly OGRA revision, keep station identity and slips correct, manage users, and take backups."
-        steps={[
-          { step: 1, title: 'Fortnightly OGRA notification (اوگرا نوٹیفکیشن)', detail: 'Use the OGRA wizard on the 1st and 16th at midnight. Every nozzle takes the new rate.', urdu: 'ہر ماہ کی پہلی اور سولہویں تاریخ کو اوگرا کا نیا نوٹیفکیشن لاگو کریں۔' },
-          { step: 2, title: 'Stock revaluation (اسٹاک نفع و نقصان)', detail: 'The wizard calculates the gain or loss on the fuel currently in each tank.', urdu: 'ٹینکوں میں موجود تیل پر نفع یا نقصان کا خودکار حساب۔' },
-          { step: 3, title: 'Users (صارفین)', detail: 'The owner creates sign-ins and chooses each person\'s role and stations.', urdu: 'مالک صارفین بناتا اور ان کا کردار اور اسٹیشن منتخب کرتا ہے۔' },
-          { step: 4, title: 'Backup (بیک اپ)', detail: 'Download a station backup regularly. The live data is already safe in the cloud database.', urdu: 'وقتاً فوقتاً بیک اپ ڈاؤن لوڈ کریں۔' },
-        ]}
-        criticalChecks={[
-          'Cashiers cannot see this page — only managers and the owner change prices.',
-          'Verify the OGRA notification number before applying a revision.',
-          'Restoring a backup replaces ALL data of the station and is owner-only.',
-        ]}
-      />
-
       <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
         <section className="settings-surface-card">
           <div className="settings-card-header">
@@ -618,6 +599,25 @@ export const SettingsView: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      <ModuleGuide
+        title="OGRA Tariffs & Station Configuration SOP"
+        urduTitle="اوگرا فیول ریٹس اور اسٹیشن ترتیبات"
+        role="owner"
+        roleLabel="Owner / Manager"
+        purpose="Set fuel prices and dealer margins, apply the fortnightly OGRA revision, keep station identity and slips correct, manage users, and take backups."
+        steps={[
+          { step: 1, title: 'Fortnightly OGRA notification (اوگرا نوٹیفکیشن)', detail: 'Use the OGRA wizard on the 1st and 16th at midnight. Every nozzle takes the new rate.', urdu: 'ہر ماہ کی پہلی اور سولہویں تاریخ کو اوگرا کا نیا نوٹیفکیشن لاگو کریں۔' },
+          { step: 2, title: 'Stock revaluation (اسٹاک نفع و نقصان)', detail: 'The wizard calculates the gain or loss on the fuel currently in each tank.', urdu: 'ٹینکوں میں موجود تیل پر نفع یا نقصان کا خودکار حساب۔' },
+          { step: 3, title: 'Users (صارفین)', detail: 'The owner creates sign-ins and chooses each person\'s role and stations.', urdu: 'مالک صارفین بناتا اور ان کا کردار اور اسٹیشن منتخب کرتا ہے۔' },
+          { step: 4, title: 'Backup (بیک اپ)', detail: 'Download a station backup regularly. The live data is already safe in the cloud database.', urdu: 'وقتاً فوقتاً بیک اپ ڈاؤن لوڈ کریں۔' },
+        ]}
+        criticalChecks={[
+          'Cashiers cannot see this page — only managers and the owner change prices.',
+          'Verify the OGRA notification number before applying a revision.',
+          'Restoring a backup replaces ALL data of the station and is owner-only.',
+        ]}
+      />
     </div>
   )
 }

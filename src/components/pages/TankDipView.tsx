@@ -206,25 +206,6 @@ export const TankDipView: React.FC = () => {
         }
       />
 
-      <ModuleGuide
-        title="Underground Tank Dip & Stock Calibration"
-        urduTitle="زیر زمین ٹینک پیمائش (ڈپ) اور اسٹاک آڈٹ"
-        role="manager"
-        roleLabel="Station Manager"
-        purpose="Measure underground fuel levels with the brass dip rod, detect bottom water with water-finding paste, and compare book stock with the physical reading."
-        steps={[
-          { step: 1, title: 'Take the dip (پیمائش)', detail: 'Insert the clean brass rod into the sounding pipe; note the millimeter level and the volume it equals.', urdu: 'ڈپ راڈ ڈال کر ملی میٹر اور لیٹر ریڈنگ نوٹ کریں۔' },
-          { step: 2, title: 'Deliveries and sales are pre-filled (خودکار)', detail: 'Tanker deliveries recorded in the OMC module and nozzle sales since the last dip are filled in for you.', urdu: 'ٹینکر کی سپلائی اور نوزل کی فروخت خودکار بھر جاتی ہے۔' },
-          { step: 3, title: 'Water paste test (پانی کی جانچ)', detail: 'Apply water paste to the bottom 100 mm of the rod. 0 mm means clear.', urdu: 'واٹر پیسٹ سے ٹینک میں پانی کی جانچ کریں۔' },
-          { step: 4, title: 'Compare variance (نقصان یا بچت)', detail: 'Physical stock is compared with book stock; anything beyond ±0.5% needs an explanation.', urdu: 'بُک اسٹاک اور فزیکل اسٹاک کا موازنہ کریں۔' },
-        ]}
-        criticalChecks={[
-          'Water paste turning dark pink / red means water contamination — STOP dispensing immediately!',
-          'Normal temperature & evaporation variance is within ±0.5% of tank volume.',
-          'Let tanker fuel settle for 15 minutes before taking the post-delivery dip.',
-        ]}
-      />
-
       {tanks.length === 0 ? (
         <div className="ui-empty">No tanks are set up yet.{isManager ? ' Click "Add Tank" to register the first underground tank.' : ''}</div>
       ) : (
@@ -307,6 +288,25 @@ export const TankDipView: React.FC = () => {
         <div className="receipt-divider" />
         <div className="slip-signatures"><div><div className="sig-line" /><span>Dip inspector</span></div><div><div className="sig-line" /><span>Station manager</span></div></div>
       </PrintReceiptModal>
+
+      <ModuleGuide
+        title="Underground Tank Dip & Stock Calibration"
+        urduTitle="زیر زمین ٹینک پیمائش (ڈپ) اور اسٹاک آڈٹ"
+        role="manager"
+        roleLabel="Station Manager"
+        purpose="Measure underground fuel levels with the brass dip rod, detect bottom water with water-finding paste, and compare book stock with the physical reading."
+        steps={[
+          { step: 1, title: 'Take the dip (پیمائش)', detail: 'Insert the clean brass rod into the sounding pipe; note the millimeter level and the volume it equals.', urdu: 'ڈپ راڈ ڈال کر ملی میٹر اور لیٹر ریڈنگ نوٹ کریں۔' },
+          { step: 2, title: 'Deliveries and sales are pre-filled (خودکار)', detail: 'Tanker deliveries recorded in the OMC module and nozzle sales since the last dip are filled in for you.', urdu: 'ٹینکر کی سپلائی اور نوزل کی فروخت خودکار بھر جاتی ہے۔' },
+          { step: 3, title: 'Water paste test (پانی کی جانچ)', detail: 'Apply water paste to the bottom 100 mm of the rod. 0 mm means clear.', urdu: 'واٹر پیسٹ سے ٹینک میں پانی کی جانچ کریں۔' },
+          { step: 4, title: 'Compare variance (نقصان یا بچت)', detail: 'Physical stock is compared with book stock; anything beyond ±0.5% needs an explanation.', urdu: 'بُک اسٹاک اور فزیکل اسٹاک کا موازنہ کریں۔' },
+        ]}
+        criticalChecks={[
+          'Water paste turning dark pink / red means water contamination — STOP dispensing immediately!',
+          'Normal temperature & evaporation variance is within ±0.5% of tank volume.',
+          'Let tanker fuel settle for 15 minutes before taking the post-delivery dip.',
+        ]}
+      />
     </div>
   )
 }

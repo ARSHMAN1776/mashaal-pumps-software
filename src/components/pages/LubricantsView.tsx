@@ -203,25 +203,6 @@ export const LubricantsView: React.FC = () => {
         }
       />
 
-      <ModuleGuide
-        title="Motor Oils & Lubricants POS SOP"
-        urduTitle="لیوبریکینٹس اور انجن آئل کاؤنٹر سیل کے اصول"
-        role="cashier"
-        roleLabel="Forecourt Cashier"
-        purpose="Manage engine oils and counter sales. A sale deducts stock and posts the cash to the daybook; managers add products, receive stock and correct records."
-        steps={[
-          { step: 1, title: 'Select the product (تیل کا انتخاب)', detail: 'Choose the exact oil and pack size.', urdu: 'مطلوبہ ڈبہ منتخب کریں۔' },
-          { step: 2, title: 'Count the cans (ڈبوں کی گنتی)', detail: 'Enter how many cans and who bought them.', urdu: 'ڈبوں کی تعداد اور گاہک کا نام درج کریں۔' },
-          { step: 3, title: 'Automatic entries (خودکار اندراج)', detail: 'Cash goes to the daybook and stock is reduced — nothing else to enter.', urdu: 'رقم ڈے بک میں اور سٹاک کم ہو جاتا ہے۔' },
-          { step: 4, title: 'Restock & adjust (سٹاک کی درستگی)', detail: 'Managers: "Receive Stock" when a delivery arrives; "Adjust" for damage or counting differences.', urdu: 'مینیجر نیا مال وصول یا سٹاک درست کر سکتا ہے۔' },
-        ]}
-        criticalChecks={[
-          'Do not hand over open-seal cans; report damaged seals to the manager.',
-          'The low-stock alert shows when cans reach the reorder level.',
-          'Print the valuation sheet for the weekly stock audit.',
-        ]}
-      />
-
       <KpiStrip>
         <Kpi label="Cans in stock" value={`${live.reduce((a, p) => a + p.stockCans, 0)} units`} sub={`${live.length} product(s)`} />
         <Kpi label="Stock value (cost)" value={rs(stockCost)} tone="gold" sub="Wholesale valuation" />
@@ -297,6 +278,25 @@ export const LubricantsView: React.FC = () => {
         <div className="receipt-divider" />
         <div className="slip-row highlight"><span>Total wholesale valuation:</span><strong>{rs(stockCost)}</strong></div>
       </PrintReceiptModal>
+
+      <ModuleGuide
+        title="Motor Oils & Lubricants POS SOP"
+        urduTitle="لیوبریکینٹس اور انجن آئل کاؤنٹر سیل کے اصول"
+        role="cashier"
+        roleLabel="Forecourt Cashier"
+        purpose="Manage engine oils and counter sales. A sale deducts stock and posts the cash to the daybook; managers add products, receive stock and correct records."
+        steps={[
+          { step: 1, title: 'Select the product (تیل کا انتخاب)', detail: 'Choose the exact oil and pack size.', urdu: 'مطلوبہ ڈبہ منتخب کریں۔' },
+          { step: 2, title: 'Count the cans (ڈبوں کی گنتی)', detail: 'Enter how many cans and who bought them.', urdu: 'ڈبوں کی تعداد اور گاہک کا نام درج کریں۔' },
+          { step: 3, title: 'Automatic entries (خودکار اندراج)', detail: 'Cash goes to the daybook and stock is reduced — nothing else to enter.', urdu: 'رقم ڈے بک میں اور سٹاک کم ہو جاتا ہے۔' },
+          { step: 4, title: 'Restock & adjust (سٹاک کی درستگی)', detail: 'Managers: "Receive Stock" when a delivery arrives; "Adjust" for damage or counting differences.', urdu: 'مینیجر نیا مال وصول یا سٹاک درست کر سکتا ہے۔' },
+        ]}
+        criticalChecks={[
+          'Do not hand over open-seal cans; report damaged seals to the manager.',
+          'The low-stock alert shows when cans reach the reorder level.',
+          'Print the valuation sheet for the weekly stock audit.',
+        ]}
+      />
     </div>
   )
 }

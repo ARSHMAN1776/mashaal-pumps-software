@@ -64,25 +64,6 @@ export const CustomersView: React.FC = () => {
         }
       />
 
-      <ModuleGuide
-        title="Commercial Fleet Credit & Recoveries Guide"
-        urduTitle="ٹرانسپورٹ کھاتہ، ادھار ڈیزل پرچیاں اور وصولیوں کی رہنمائی"
-        role="cashier"
-        roleLabel="Cashier &amp; Manager"
-        purpose="Issue computerized credit fuel slips (debit), receive payments (credit), keep every customer's running ledger, and send WhatsApp statements. Managers register, edit and delete customers and correct any ledger entry."
-        steps={[
-          { step: 1, title: 'Issue Credit Fuel (ادھار پرچی)', detail: 'Click "Issue Credit Slip", pick the account, vehicle, driver and liters. The credit limit and registered vehicles are checked for you.', urdu: 'گاڑی نمبر، ڈرائیور کا نام اور لیٹر درج کر کے ادھار پرچی کاٹیں۔' },
-          { step: 2, title: 'Instant WhatsApp Slip (واٹس ایپ)', detail: 'Use "Save & send WhatsApp" to send the computerized slip to the transporter.', urdu: 'سیو کرتے ہی کمپیوٹرائزڈ بل واٹس ایپ پر بھیجیں۔' },
-          { step: 3, title: 'Record Payment (وصولی)', detail: 'When the customer pays, click "Record Recovery". Cash payments are added to the Daybook automatically.', urdu: 'نقد رقم کی وصولی ڈے بک میں خودکار درج ہو جاتی ہے۔' },
-          { step: 4, title: 'Ledger, Edit & Delete (کھاتہ، تبدیلی اور حذف)', detail: 'Click the ledger button on a customer to see the full debit/credit statement. Managers can edit or delete customers and correct any entry.', urdu: 'ہر گاہک کا مکمل کھاتہ دیکھیں؛ مینیجر ترمیم یا حذف کر سکتا ہے۔' },
-        ]}
-        criticalChecks={[
-          'Always verify that the vehicle matches the customer\'s registered vehicle list.',
-          'If a customer would exceed the approved credit limit, a manager must authorize the slip.',
-          'A customer with ledger history is archived, never erased — and only once the balance is Rs 0.',
-        ]}
-      />
-
       <KpiStrip>
         <Kpi label="Credit accounts" value={`${live.length} accounts`} sub={`${live.filter((c) => c.status === 'Hold').length} on hold`} />
         <Kpi label="Total outstanding" value={rs(totalOutstanding)} tone="gold" sub="Station receivables" />
@@ -230,6 +211,25 @@ export const CustomersView: React.FC = () => {
         <div className="receipt-divider" />
         <div className="slip-row highlight"><span>Total receivables:</span><strong>{rs(totalOutstanding)}</strong></div>
       </PrintReceiptModal>
+
+      <ModuleGuide
+        title="Commercial Fleet Credit & Recoveries Guide"
+        urduTitle="ٹرانسپورٹ کھاتہ، ادھار ڈیزل پرچیاں اور وصولیوں کی رہنمائی"
+        role="cashier"
+        roleLabel="Cashier &amp; Manager"
+        purpose="Issue computerized credit fuel slips (debit), receive payments (credit), keep every customer's running ledger, and send WhatsApp statements. Managers register, edit and delete customers and correct any ledger entry."
+        steps={[
+          { step: 1, title: 'Issue Credit Fuel (ادھار پرچی)', detail: 'Click "Issue Credit Slip", pick the account, vehicle, driver and liters. The credit limit and registered vehicles are checked for you.', urdu: 'گاڑی نمبر، ڈرائیور کا نام اور لیٹر درج کر کے ادھار پرچی کاٹیں۔' },
+          { step: 2, title: 'Instant WhatsApp Slip (واٹس ایپ)', detail: 'Use "Save & send WhatsApp" to send the computerized slip to the transporter.', urdu: 'سیو کرتے ہی کمپیوٹرائزڈ بل واٹس ایپ پر بھیجیں۔' },
+          { step: 3, title: 'Record Payment (وصولی)', detail: 'When the customer pays, click "Record Recovery". Cash payments are added to the Daybook automatically.', urdu: 'نقد رقم کی وصولی ڈے بک میں خودکار درج ہو جاتی ہے۔' },
+          { step: 4, title: 'Ledger, Edit & Delete (کھاتہ، تبدیلی اور حذف)', detail: 'Click the ledger button on a customer to see the full debit/credit statement. Managers can edit or delete customers and correct any entry.', urdu: 'ہر گاہک کا مکمل کھاتہ دیکھیں؛ مینیجر ترمیم یا حذف کر سکتا ہے۔' },
+        ]}
+        criticalChecks={[
+          'Always verify that the vehicle matches the customer\'s registered vehicle list.',
+          'If a customer would exceed the approved credit limit, a manager must authorize the slip.',
+          'A customer with ledger history is archived, never erased — and only once the balance is Rs 0.',
+        ]}
+      />
     </div>
   )
 }

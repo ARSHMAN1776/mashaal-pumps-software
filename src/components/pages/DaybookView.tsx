@@ -123,25 +123,6 @@ export const DaybookView: React.FC = () => {
         }
       />
 
-      <ModuleGuide
-        title="Station Daybook (Cash Movement Register) Guide"
-        urduTitle="اسٹیشن ڈے بک (روزنامچہ کیش رجسٹر) کی رہنمائی"
-        role="manager"
-        roleLabel="Station Manager &amp; Head Cashier"
-        purpose="Every rupee entering or leaving the station safe. Recoveries, expenses, advances, lube sales, bank deposits and OMC cash payments are posted here automatically — use manual vouchers for everything else."
-        steps={[
-          { step: 1, title: 'Choose cash direction (آمد یا خرچ)', detail: 'Cash IN (+) for collections, Cash OUT (−) for payments.', urdu: 'آمد کے لیے کیش ان اور اخراجات کے لیے کیش آؤٹ منتخب کریں۔' },
-          { step: 2, title: 'Pick the category (مد)', detail: 'Choose Shift fuel handover, Bank deposit, Other, etc. Automatic entries already carry their own category.', urdu: 'صحیح کیٹیگری منتخب کریں۔' },
-          { step: 3, title: 'Enter amount & details (رقم اور تفصیل)', detail: 'Type the exact amount, who handled it and a reference slip number.', urdu: 'رقم اور مکمل تفصیل درج کریں۔' },
-          { step: 4, title: 'Safe balance updates (سیف بیلنس)', detail: 'The running safe balance is recalculated from the entries — it always equals the sum of what is recorded.', urdu: 'سیف میں نقد رقم خودکار طور پر اپ ڈیٹ ہو جاتی ہے۔' },
-        ]}
-        criticalChecks={[
-          'Physical cash counted in the safe must always match the Safe Cash in Hand balance.',
-          'Cash taken to the bank is recorded from the Bank Sheet (it also credits the bank account).',
-          'Cashiers can only record today\'s entries; managers can correct or delete manual entries.',
-        ]}
-      />
-
       {isCashier && (
         <div className="ui-notice ui-notice-warning"><ShieldIcon size={16} /><span><strong>Cashier shift mode:</strong> real-time voucher entry is active. Back-dating and deletion are restricted by station policy.</span></div>
       )}
@@ -207,6 +188,25 @@ export const DaybookView: React.FC = () => {
         <div className="receipt-divider" />
         <div className="slip-row highlight"><span>Closing safe balance:</span><strong>{rs(rows.length ? rows[rows.length - 1].balanceAfter : opening)}</strong></div>
       </PrintReceiptModal>
+
+      <ModuleGuide
+        title="Station Daybook (Cash Movement Register) Guide"
+        urduTitle="اسٹیشن ڈے بک (روزنامچہ کیش رجسٹر) کی رہنمائی"
+        role="manager"
+        roleLabel="Station Manager &amp; Head Cashier"
+        purpose="Every rupee entering or leaving the station safe. Recoveries, expenses, advances, lube sales, bank deposits and OMC cash payments are posted here automatically — use manual vouchers for everything else."
+        steps={[
+          { step: 1, title: 'Choose cash direction (آمد یا خرچ)', detail: 'Cash IN (+) for collections, Cash OUT (−) for payments.', urdu: 'آمد کے لیے کیش ان اور اخراجات کے لیے کیش آؤٹ منتخب کریں۔' },
+          { step: 2, title: 'Pick the category (مد)', detail: 'Choose Shift fuel handover, Bank deposit, Other, etc. Automatic entries already carry their own category.', urdu: 'صحیح کیٹیگری منتخب کریں۔' },
+          { step: 3, title: 'Enter amount & details (رقم اور تفصیل)', detail: 'Type the exact amount, who handled it and a reference slip number.', urdu: 'رقم اور مکمل تفصیل درج کریں۔' },
+          { step: 4, title: 'Safe balance updates (سیف بیلنس)', detail: 'The running safe balance is recalculated from the entries — it always equals the sum of what is recorded.', urdu: 'سیف میں نقد رقم خودکار طور پر اپ ڈیٹ ہو جاتی ہے۔' },
+        ]}
+        criticalChecks={[
+          'Physical cash counted in the safe must always match the Safe Cash in Hand balance.',
+          'Cash taken to the bank is recorded from the Bank Sheet (it also credits the bank account).',
+          'Cashiers can only record today\'s entries; managers can correct or delete manual entries.',
+        ]}
+      />
     </div>
   )
 }

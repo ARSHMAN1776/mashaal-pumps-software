@@ -330,25 +330,6 @@ export const FuelSalesView: React.FC = () => {
         }
       />
 
-      <ModuleGuide
-        title="Forecourt Nozzle Meter Readings Guide"
-        urduTitle="نوزل میٹر ریڈنگ اور پیمائش کی رہنمائی"
-        role="cashier"
-        roleLabel="Forecourt Cashier"
-        purpose="Record the meter reading of each dispenser nozzle, deduct calibration testing liters, and compute net fuel sales. Managers can add, edit or delete nozzles."
-        steps={[
-          { step: 1, title: 'Select Nozzle (نوزل کا انتخاب)', detail: 'Choose the dispenser and nozzle. The opening meter is filled with that nozzle\'s last recorded reading.', urdu: 'ڈسپنسر اور نوزل منتخب کریں، پچھلی ریڈنگ خودکار آ جائے گی۔' },
-          { step: 2, title: 'Enter the Closing Meter (موجودہ میٹر)', detail: 'Type the exact number shown on the physical dispenser display.', urdu: 'ڈسپنسر میٹر پر نظر آنے والی موجودہ ریڈنگ درج کریں۔' },
-          { step: 3, title: 'Deduct Testing Liters (پیمائش کین کی کٹوتی)', detail: 'Deduct any 5L or 10L calibration testing poured back into the tank.', urdu: 'ٹینک میں واپس ڈالا گیا ٹیسٹنگ تیل منہا کریں۔' },
-          { step: 4, title: 'Add / Delete Nozzles (نوزل شامل یا حذف کریں)', detail: 'Managers: use "Add Nozzle" for a new dispenser nozzle, or the edit / delete buttons on a nozzle card.', urdu: 'مینیجر نیا نوزل شامل کر سکتا ہے یا کارڈ پر موجود بٹن سے تبدیل / حذف کر سکتا ہے۔' },
-        ]}
-        criticalChecks={[
-          'The closing meter must always be greater than the opening meter, and the opening must match the last reading.',
-          'Always log testing liters so the cashier is not held responsible for missing cash.',
-          'For commercial fleet vehicles buying on credit, record a Credit Slip in the Customers module.',
-        ]}
-      />
-
       <FilterBar>
         <div className="form-group">
           <label className="form-label">Show readings for</label>
@@ -499,6 +480,25 @@ export const FuelSalesView: React.FC = () => {
           </div>
         )}
       </PrintReceiptModal>
+
+      <ModuleGuide
+        title="Forecourt Nozzle Meter Readings Guide"
+        urduTitle="نوزل میٹر ریڈنگ اور پیمائش کی رہنمائی"
+        role="cashier"
+        roleLabel="Forecourt Cashier"
+        purpose="Record the meter reading of each dispenser nozzle, deduct calibration testing liters, and compute net fuel sales. Managers can add, edit or delete nozzles."
+        steps={[
+          { step: 1, title: 'Select Nozzle (نوزل کا انتخاب)', detail: 'Choose the dispenser and nozzle. The opening meter is filled with that nozzle\'s last recorded reading.', urdu: 'ڈسپنسر اور نوزل منتخب کریں، پچھلی ریڈنگ خودکار آ جائے گی۔' },
+          { step: 2, title: 'Enter the Closing Meter (موجودہ میٹر)', detail: 'Type the exact number shown on the physical dispenser display.', urdu: 'ڈسپنسر میٹر پر نظر آنے والی موجودہ ریڈنگ درج کریں۔' },
+          { step: 3, title: 'Deduct Testing Liters (پیمائش کین کی کٹوتی)', detail: 'Deduct any 5L or 10L calibration testing poured back into the tank.', urdu: 'ٹینک میں واپس ڈالا گیا ٹیسٹنگ تیل منہا کریں۔' },
+          { step: 4, title: 'Add / Delete Nozzles (نوزل شامل یا حذف کریں)', detail: 'Managers: use "Add Nozzle" for a new dispenser nozzle, or the edit / delete buttons on a nozzle card.', urdu: 'مینیجر نیا نوزل شامل کر سکتا ہے یا کارڈ پر موجود بٹن سے تبدیل / حذف کر سکتا ہے۔' },
+        ]}
+        criticalChecks={[
+          'The closing meter must always be greater than the opening meter, and the opening must match the last reading.',
+          'Always log testing liters so the cashier is not held responsible for missing cash.',
+          'For commercial fleet vehicles buying on credit, record a Credit Slip in the Customers module.',
+        ]}
+      />
     </div>
   )
 }

@@ -81,25 +81,6 @@ export const OwnerPortalView: React.FC = () => {
 
       <PendingBankNotice />
 
-      <ModuleGuide
-        title="Owner Executive Portal & Margin Auditing"
-        urduTitle="اسٹیشن اونر کے لیے ماہانہ منافع اور اخراجات کا خلاصہ"
-        role="owner"
-        roleLabel="Station Owner"
-        purpose="Top-level view of liters sold, estimated dealer margin, expenses and salaries, cash and bank liquidity, and take-home profit for any month."
-        steps={[
-          { step: 1, title: 'Filter by month (ماہانہ انتخاب)', detail: 'Pick any month, or all recorded history.', urdu: 'ڈراپ ڈاؤن سے مہینہ منتخب کریں۔' },
-          { step: 2, title: 'Dealer margin (ڈیلر کمیشن)', detail: `Computed from liters sold × the margin per liter set in Settings (${marginRates}). It is an estimate — compare it with your OMC statement.`, urdu: 'ڈیلر مارجن سیٹنگز میں مقرر شرح کے مطابق حساب ہوتا ہے۔' },
-          { step: 3, title: 'Costs (اخراجات)', detail: 'Operating expenses and staff salaries are deducted from the margin.', urdu: 'اخراجات اور تنخواہیں منہا کر کے اصل بچت دیکھیں۔' },
-          { step: 4, title: 'Check liquidity (کیش اور بینک)', detail: 'Confirm safe cash and bank balances, then use "Withdraw Capital" to record money moved to your personal account.', urdu: 'رقم منتقل کرنے سے پہلے سیف اور بینک بیلنس دیکھیں۔' },
-        ]}
-        criticalChecks={[
-          'Reconcile physical safe cash with the Daybook before authorising withdrawals.',
-          'Keep a working-capital reserve for upcoming OMC tanker payments.',
-          'Withdrawals are recorded as bank debits and cannot exceed the bank balance.',
-        ]}
-      />
-
       {lowTanks.length > 0 && (
         <div className="dashboard-alert-banner" style={{ margin: '0 0 16px' }}>
           {lowTanks.map((t) => (
@@ -265,6 +246,25 @@ export const OwnerPortalView: React.FC = () => {
         <div className="receipt-divider" />
         <div className="slip-signatures"><div><div className="sig-line" /><span>Station manager</span></div><div><div className="sig-line" /><span>Station owner</span></div></div>
       </PrintReceiptModal>
+
+      <ModuleGuide
+        title="Owner Executive Portal & Margin Auditing"
+        urduTitle="اسٹیشن اونر کے لیے ماہانہ منافع اور اخراجات کا خلاصہ"
+        role="owner"
+        roleLabel="Station Owner"
+        purpose="Top-level view of liters sold, estimated dealer margin, expenses and salaries, cash and bank liquidity, and take-home profit for any month."
+        steps={[
+          { step: 1, title: 'Filter by month (ماہانہ انتخاب)', detail: 'Pick any month, or all recorded history.', urdu: 'ڈراپ ڈاؤن سے مہینہ منتخب کریں۔' },
+          { step: 2, title: 'Dealer margin (ڈیلر کمیشن)', detail: `Computed from liters sold × the margin per liter set in Settings (${marginRates}). It is an estimate — compare it with your OMC statement.`, urdu: 'ڈیلر مارجن سیٹنگز میں مقرر شرح کے مطابق حساب ہوتا ہے۔' },
+          { step: 3, title: 'Costs (اخراجات)', detail: 'Operating expenses and staff salaries are deducted from the margin.', urdu: 'اخراجات اور تنخواہیں منہا کر کے اصل بچت دیکھیں۔' },
+          { step: 4, title: 'Check liquidity (کیش اور بینک)', detail: 'Confirm safe cash and bank balances, then use "Withdraw Capital" to record money moved to your personal account.', urdu: 'رقم منتقل کرنے سے پہلے سیف اور بینک بیلنس دیکھیں۔' },
+        ]}
+        criticalChecks={[
+          'Reconcile physical safe cash with the Daybook before authorising withdrawals.',
+          'Keep a working-capital reserve for upcoming OMC tanker payments.',
+          'Withdrawals are recorded as bank debits and cannot exceed the bank balance.',
+        ]}
+      />
     </div>
   )
 }

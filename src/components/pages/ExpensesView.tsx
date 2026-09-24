@@ -122,25 +122,6 @@ export const ExpensesView: React.FC = () => {
         }
       />
 
-      <ModuleGuide
-        title="Station Operating Expenses & Overheads Guide"
-        urduTitle="اسٹیشن کے روزمرہ اخراجات کی رہنمائی"
-        role="manager"
-        roleLabel="Station Manager"
-        purpose="Record forecourt operating expenses. Cash expenses leave the safe (daybook) and bank expenses leave the chosen bank account — automatically, in the same step."
-        steps={[
-          { step: 1, title: 'Select category (مد)', detail: 'Generator fuel, WAPDA electricity, dispenser repairs, staff meals, municipal fees, stationery or miscellaneous.', urdu: 'صحیح شعبہ منتخب کریں۔' },
-          { step: 2, title: 'Choose payment mode (ادائیگی)', detail: 'Cash from the safe, or (managers) a bank account.', urdu: 'سیف سے نقد یا بینک اکاؤنٹ سے ادائیگی منتخب کریں۔' },
-          { step: 3, title: 'Enter payee & details (تفصیل)', detail: 'Vendor name and what was bought.', urdu: 'دکان دار کا نام اور خرچ کی تفصیل درج کریں۔' },
-          { step: 4, title: 'Edit or delete (درستگی)', detail: 'Managers can correct or delete a voucher; the safe or bank balance follows.', urdu: 'مینیجر وائوچر درست یا حذف کر سکتا ہے۔' },
-        ]}
-        criticalChecks={[
-          'Cash vouchers reduce the safe immediately — verify manager authorization.',
-          'Keep the vendor\'s cash memo or repair invoice attached to the voucher.',
-          'Large utility bills should be paid from a bank account.',
-        ]}
-      />
-
       <FilterBar>
         <div className="form-group">
           <label className="form-label">Month</label>
@@ -201,6 +182,25 @@ export const ExpensesView: React.FC = () => {
         <div className="receipt-divider" />
         <div className="slip-row highlight"><span>Total operational outflow:</span><strong>{rs(total)}</strong></div>
       </PrintReceiptModal>
+
+      <ModuleGuide
+        title="Station Operating Expenses & Overheads Guide"
+        urduTitle="اسٹیشن کے روزمرہ اخراجات کی رہنمائی"
+        role="manager"
+        roleLabel="Station Manager"
+        purpose="Record forecourt operating expenses. Cash expenses leave the safe (daybook) and bank expenses leave the chosen bank account — automatically, in the same step."
+        steps={[
+          { step: 1, title: 'Select category (مد)', detail: 'Generator fuel, WAPDA electricity, dispenser repairs, staff meals, municipal fees, stationery or miscellaneous.', urdu: 'صحیح شعبہ منتخب کریں۔' },
+          { step: 2, title: 'Choose payment mode (ادائیگی)', detail: 'Cash from the safe, or (managers) a bank account.', urdu: 'سیف سے نقد یا بینک اکاؤنٹ سے ادائیگی منتخب کریں۔' },
+          { step: 3, title: 'Enter payee & details (تفصیل)', detail: 'Vendor name and what was bought.', urdu: 'دکان دار کا نام اور خرچ کی تفصیل درج کریں۔' },
+          { step: 4, title: 'Edit or delete (درستگی)', detail: 'Managers can correct or delete a voucher; the safe or bank balance follows.', urdu: 'مینیجر وائوچر درست یا حذف کر سکتا ہے۔' },
+        ]}
+        criticalChecks={[
+          'Cash vouchers reduce the safe immediately — verify manager authorization.',
+          'Keep the vendor\'s cash memo or repair invoice attached to the voucher.',
+          'Large utility bills should be paid from a bank account.',
+        ]}
+      />
     </div>
   )
 }

@@ -184,25 +184,6 @@ export const BankSheetView: React.FC = () => {
 
       <PendingBankNotice />
 
-      <ModuleGuide
-        title="Station Commercial Banking & Cash Remittances Guide"
-        urduTitle="اسٹیشن کے بینک کھاتہ جات اور کیش جمع کی رہنمائی"
-        role="manager"
-        roleLabel="Station Manager &amp; Owner"
-        purpose="Keep every station bank account, deposit slip, withdrawal and charge. Balances are always opening balance plus credits minus debits — payments to OMC, vendors and the owner reduce them automatically."
-        steps={[
-          { step: 1, title: 'Deposit physical cash (کیش جمع کروانا)', detail: 'Take cash from the safe to the bank and get the stamped deposit slip.', urdu: 'سیف سے نقد رقم لے جا کر بینک میں جمع کروائیں اور مہر شدہ سلپ لیں۔' },
-          { step: 2, title: 'Record the deposit (اندراج)', detail: 'Choose the account, enter the slip number and amount. The safe is reduced and the bank credited in one step.', urdu: 'بینک، سلپ نمبر اور رقم درج کریں۔' },
-          { step: 3, title: 'Cheques & online credits', detail: 'Choose "Cheque / online credit" so the safe is not touched.', urdu: 'چیک یا آن لائن رقم کے لیے سیف متاثر نہیں ہوتا۔' },
-          { step: 4, title: 'Withdrawals & charges (رقم نکلوانا)', detail: 'Cash withdrawn adds to the safe; bank charges reduce the balance.', urdu: 'بینک سے نکلوائی گئی رقم سیف میں شامل ہوتی ہے۔' },
-        ]}
-        criticalChecks={[
-          'Always verify the teller stamp and deposit slip number.',
-          'Keep enough balance for OMC tanker payments 24 hours before delivery.',
-          'Entries created by payments (OMC, expenses, owner transfers) are removed by deleting the payment record.',
-        ]}
-      />
-
       {bankAccounts.length === 0 ? (
         <div className="ui-empty">No bank accounts yet. Click "Add Bank Account".</div>
       ) : (
@@ -289,6 +270,25 @@ export const BankSheetView: React.FC = () => {
         <div className="receipt-divider" />
         <div className="slip-row highlight"><span>Total liquid bank balance:</span><strong>{rs(totalBalances)}</strong></div>
       </PrintReceiptModal>
+
+      <ModuleGuide
+        title="Station Commercial Banking & Cash Remittances Guide"
+        urduTitle="اسٹیشن کے بینک کھاتہ جات اور کیش جمع کی رہنمائی"
+        role="manager"
+        roleLabel="Station Manager &amp; Owner"
+        purpose="Keep every station bank account, deposit slip, withdrawal and charge. Balances are always opening balance plus credits minus debits — payments to OMC, vendors and the owner reduce them automatically."
+        steps={[
+          { step: 1, title: 'Deposit physical cash (کیش جمع کروانا)', detail: 'Take cash from the safe to the bank and get the stamped deposit slip.', urdu: 'سیف سے نقد رقم لے جا کر بینک میں جمع کروائیں اور مہر شدہ سلپ لیں۔' },
+          { step: 2, title: 'Record the deposit (اندراج)', detail: 'Choose the account, enter the slip number and amount. The safe is reduced and the bank credited in one step.', urdu: 'بینک، سلپ نمبر اور رقم درج کریں۔' },
+          { step: 3, title: 'Cheques & online credits', detail: 'Choose "Cheque / online credit" so the safe is not touched.', urdu: 'چیک یا آن لائن رقم کے لیے سیف متاثر نہیں ہوتا۔' },
+          { step: 4, title: 'Withdrawals & charges (رقم نکلوانا)', detail: 'Cash withdrawn adds to the safe; bank charges reduce the balance.', urdu: 'بینک سے نکلوائی گئی رقم سیف میں شامل ہوتی ہے۔' },
+        ]}
+        criticalChecks={[
+          'Always verify the teller stamp and deposit slip number.',
+          'Keep enough balance for OMC tanker payments 24 hours before delivery.',
+          'Entries created by payments (OMC, expenses, owner transfers) are removed by deleting the payment record.',
+        ]}
+      />
     </div>
   )
 }
