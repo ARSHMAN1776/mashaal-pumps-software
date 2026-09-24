@@ -174,16 +174,17 @@ export type DaybookCategory =
   | 'Staff Advance'
   | 'Salary Payment'
   | 'Vendor Payment'
+  | 'Owner Withdrawal'
   | 'Other'
 export const DAYBOOK_CATEGORIES: DaybookCategory[] = [
   'Shift Fuel', 'Customer Recovery', 'Lube Sale', 'Bank Deposit', 'Bank Withdrawal', 'Expense',
-  'OMC Payment', 'Staff Advance', 'Salary Payment', 'Vendor Payment', 'Other',
+  'OMC Payment', 'Staff Advance', 'Salary Payment', 'Vendor Payment', 'Owner Withdrawal', 'Other',
 ]
 
 /** Records that were created together with (and are removed together with) another record. */
 export type SourceType =
   | 'recovery' | 'expense' | 'staff_advance' | 'salary' | 'lube_sale' | 'bank_deposit'
-  | 'bank_withdrawal' | 'omc_payment' | 'supplier_payment' | 'owner_transfer'
+  | 'bank_withdrawal' | 'omc_payment' | 'supplier_payment' | 'owner_transfer' | 'owner_cash' | 'lube_restock'
 
 export interface DaybookEntry {
   id: string
@@ -243,6 +244,8 @@ export interface CustomerRecovery {
   referenceNo: string
   receivedBy: string
   bankAccountId: string
+  /** a cheque / online payment noted by a cashier that a manager still has to place in a bank account */
+  bankPending: boolean
   createdAt: string
 }
 
@@ -360,6 +363,10 @@ export interface SalaryPayment {
   period: string // YYYY-MM
   date: string
   grossSalary: number
+  /** absence and other deductions (the station does not pay these) */
+  deduction: number
+  absentDays: number
+  deductionNote: string
   advancesDeducted: number
   netPaid: number
   paidBy: string
@@ -416,6 +423,9 @@ export interface SupplierTransaction {
   note: string
   paymentSource: 'Cash' | 'Bank' | ''
   bankAccountId: string
+  /** set when this bill was created by another record (a lubricant restock) */
+  sourceType: SourceType | ''
+  sourceId: string
   recordedBy: string
   createdAt: string
 }

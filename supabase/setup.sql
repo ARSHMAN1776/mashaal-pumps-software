@@ -986,6 +986,16 @@ create table if not exists public.s01_doc_counters (
   last_value bigint not null default 0
 );
 
+-- ---- columns added after the first release (each line is safe to run again) --
+-- UPGRADES-BEGIN
+alter table public.s01_customer_recoveries   add column if not exists bank_pending   boolean not null default false;
+alter table public.s01_staff_salary_payments add column if not exists deduction      numeric not null default 0;
+alter table public.s01_staff_salary_payments add column if not exists absent_days    numeric not null default 0;
+alter table public.s01_staff_salary_payments add column if not exists deduction_note text;
+alter table public.s01_supplier_transactions add column if not exists source_type    text;
+alter table public.s01_supplier_transactions add column if not exists source_id      text;
+-- UPGRADES-END
+
 -- ---- indexes ------------------------------------------------------------
 create index if not exists s01_fuel_sales_date_idx     on public.s01_fuel_sales (date);
 create index if not exists s01_fuel_sales_nozzle_idx   on public.s01_fuel_sales (nozzle_id);
@@ -1575,6 +1585,16 @@ create table if not exists public.s02_doc_counters (
   kind       text primary key,
   last_value bigint not null default 0
 );
+
+-- ---- columns added after the first release (each line is safe to run again) --
+-- UPGRADES-BEGIN
+alter table public.s02_customer_recoveries   add column if not exists bank_pending   boolean not null default false;
+alter table public.s02_staff_salary_payments add column if not exists deduction      numeric not null default 0;
+alter table public.s02_staff_salary_payments add column if not exists absent_days    numeric not null default 0;
+alter table public.s02_staff_salary_payments add column if not exists deduction_note text;
+alter table public.s02_supplier_transactions add column if not exists source_type    text;
+alter table public.s02_supplier_transactions add column if not exists source_id      text;
+-- UPGRADES-END
 
 -- ---- indexes ------------------------------------------------------------
 create index if not exists s02_fuel_sales_date_idx     on public.s02_fuel_sales (date);

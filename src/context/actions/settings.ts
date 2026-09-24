@@ -16,9 +16,11 @@ function buildRevision(c: ActionCtx, newRates: FuelRates, effectiveDate: string,
     const oldRate = oldRates[t.fuelType] || 0
     const newRate = newRates[t.fuelType] || oldRate
     const diff = Math.round((newRate - oldRate) * 100) / 100
+    // the stock in the tank right now: last dip plus deliveries minus sales since
+    const liters = t.estimatedBookLiters
     return {
-      tankNo: t.tankNo, fuelType: t.fuelType, litersAtRevision: t.currentLiters, oldRate, newRate, rateDiff: diff,
-      gainLossAmount: Math.round(t.currentLiters * diff),
+      tankNo: t.tankNo, fuelType: t.fuelType, litersAtRevision: liters, oldRate, newRate, rateDiff: diff,
+      gainLossAmount: Math.round(liters * diff),
     }
   })
   return {

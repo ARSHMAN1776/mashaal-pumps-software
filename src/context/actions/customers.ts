@@ -318,7 +318,9 @@ export function recordRecovery(c: ActionCtx, i: RecoveryInput): Promise<Result<C
     const receiptNo = `RCP-${await c.nextNo('receipt')}`
     const rec: CustomerRecovery = {
       id: newId('REC'), receiptNo, date, customerId: customer.id, customerName: customer.businessName, paymentMethod: i.method,
-      amount, referenceNo: clean(i.referenceNo) || (i.method === 'Cash' ? 'Cash' : ''), receivedBy: c.user.name, bankAccountId: bankId, createdAt: '',
+      amount, referenceNo: clean(i.referenceNo) || (i.method === 'Cash' ? 'Cash' : ''), receivedBy: c.user.name, bankAccountId: bankId,
+      // a cheque / online payment with no bank account yet waits for a manager to place it (see assignRecoveryBank)
+      bankPending: i.method !== 'Cash' && !bankId, createdAt: '',
     }
     const ops: Op[] = [op.insert('customer_recoveries', rec)]
     if (i.method === 'Cash') {
@@ -361,7 +363,7 @@ export function updateRecovery(c: ActionCtx, id: string, i: RecoveryEdit): Promi
     const bankId = i.method !== 'Cash' ? clean(i.bankAccountId) : ''
     if (bankId && !c.raw.bankAccounts.some((b) => b.id === bankId)) return fail('Choose a valid bank account.')
 
-    const next: CustomerRecovery = { ...rec, amount, paymentMethod: i.method, referenceNo: clean(i.referenceNo), date: i.date, bankAccountId: bankId }
+    const next: CustomerRecovery = { ...rec, amount, paymentMethod: i.method, referenceNo: clean(i.referenceNo), date: i.date, bankAccountId: bankId, bankPending: i.method !== 'Cash' && !bankId }
     const ops: Op[] = [op.update('customer_recoveries', next)]
     ops.push(...syncLinkedDaybook(c, 'recovery', id, i.method === 'Cash' ? recoveryDaybook({ ...next, method: i.method }) : null))
     ops.push(...syncLinkedBankTx(c, 'recovery', id, bankId ? {
@@ -371,6 +373,29 @@ export function updateRecovery(c: ActionCtx, id: string, i: RecoveryEdit): Promi
       before: { amount: rec.amount, method: rec.paymentMethod, date: rec.date }, after: { amount, method: i.method, date: i.date },
     }))
     await c.commit(ops)
+    return ok(undefined)
+  })
+}
+
+/** A manager places a cheque / online payment noted by a cashier into a bank account: adds the bank line. */
+export function assignRecoveryBank(c: ActionCtx, id: string, bankId: string): Promise<Result<void>> {
+  return run(async () => {
+    const denied = needManager(c, 'confirm bank receipts')
+    if (denied) return denied
+    const rec = c.raw.recoveries.find((r) => r.id === id)
+    if (!rec) return fail('Receipt not found.')
+    if (!rec.bankPending) return fail('This receipt is already placed in a bank account.')
+    const bank = c.raw.bankAccounts.find((b) => b.id === bankId)
+    if (!bank) return fail('Choose the bank account.')
+    if (!bank.isActive) return fail(`${bank.bankName} is deactivated.`)
+    await c.commit([
+      op.update('customer_recoveries', { ...rec, bankAccountId: bank.id, bankPending: false }),
+      ...syncLinkedBankTx(c, 'recovery', id, {
+        bankId: bank.id, date: rec.date, type: 'Credit Received', amount: rec.amount,
+        description: `${rec.paymentMethod} from ${rec.customerName} (${rec.referenceNo}) — ${rec.receiptNo}`,
+      }),
+      auditOp(c, 'recovery.bank', 'recovery', id, `Receipt ${rec.receiptNo} (${fmt(rec.amount)}) placed in ${bank.bankName}`),
+    ])
     return ok(undefined)
   })
 }

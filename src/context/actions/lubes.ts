@@ -3,7 +3,7 @@
  * Stock is never stored — it is opening stock + restocks - sales +/- adjustments.
  * A counter sale automatically posts its cash to the daybook.
  */
-import type { LubricantMovement, LubricantProduct } from '../../types'
+import type { LubricantMovement, LubricantProduct, SupplierTransaction } from '../../types'
 import { fail, ok, type Result } from '../../data/errors'
 import { op, type Op } from '../../data/ops'
 import { newId } from '../../lib/ids'
@@ -138,6 +138,8 @@ export interface LubeRestockInput {
   productId: string
   quantity: number
   unitCost: number
+  /** a supplier from the Suppliers page: the purchase is then added to their account as an unpaid bill */
+  supplierId?: string
   supplierName: string
   referenceNo: string
   date?: string
@@ -155,11 +157,23 @@ export function restockLube(c: ActionCtx, i: LubeRestockInput): Promise<Result<L
     const qty = money(i.quantity)
     if (!isWhole(qty) || qty < 1) return fail('Enter the number of cans received as a whole number (1 or more).')
     if (!isNonNegative(money(i.unitCost))) return fail('The cost cannot be negative.')
+    const supplier = i.supplierId ? c.raw.suppliers.find((s) => s.id === i.supplierId) : undefined
+    if (i.supplierId && !supplier) return fail('Choose the supplier from the list.')
+    if (supplier && !supplier.isActive) return fail(`${supplier.name} is deactivated.`)
     const m: LubricantMovement = {
       id: newId('LMV'), productId: p.id, date, type: 'Restock', quantity: qty, unitPrice: money(i.unitCost),
-      totalAmount: round2(qty * money(i.unitCost)), counterparty: clean(i.supplierName), referenceNo: clean(i.referenceNo), recordedBy: c.user.name, createdAt: '',
+      totalAmount: round2(qty * money(i.unitCost)), counterparty: supplier ? supplier.name : clean(i.supplierName), referenceNo: clean(i.referenceNo), recordedBy: c.user.name, createdAt: '',
     }
     const ops: Op[] = [op.insert('lubricant_movements', m)]
+    // bought from a listed supplier: the amount is added to their account, linked to this stock entry
+    if (supplier && m.totalAmount > EPS) {
+      const bill: SupplierTransaction = {
+        id: newId('SUPTX'), supplierId: supplier.id, date, type: 'Bill', amount: m.totalAmount, referenceNo: m.referenceNo,
+        note: `Lubricants: ${qty} x ${p.name}`, paymentSource: '', bankAccountId: '', sourceType: 'lube_restock', sourceId: m.id,
+        recordedBy: c.user.name, createdAt: '',
+      }
+      ops.push(op.insert('supplier_transactions', bill))
+    }
     if (money(i.unitCost) > 0 && Math.abs(money(i.unitCost) - p.costPrice) > EPS) ops.push(op.update('lubricant_products', { ...p, costPrice: money(i.unitCost) }))
     ops.push(auditOp(c, 'lube.restock', 'lubricant', p.id, `Received ${qty} x ${p.name}`))
     await c.commit(ops)
@@ -207,8 +221,11 @@ export function removeLubeMovement(c: ActionCtx, id: string): Promise<Result<voi
     if ((m.type === 'Restock' || m.type === 'Adjustment In') && p && p.stockCans - m.quantity < 0) {
       return fail(`Deleting this would leave ${p.name} with negative stock (${p.stockCans} in stock, ${m.quantity} received).`)
     }
+    // a supplier bill created by this restock goes with it
+    const bills = c.raw.supplierTransactions.filter((t) => t.sourceType === 'lube_restock' && t.sourceId === id)
     await c.commit([
       op.remove('lubricant_movements', id),
+      ...bills.map((b) => op.remove('supplier_transactions', b.id)),
       ...syncLinkedDaybook(c, 'lube_sale', id, null),
       auditOp(c, 'lube.movement.delete', 'lubricant_movement', id, `Deleted ${m.type} of ${m.quantity} can(s) (${fmt(m.totalAmount)})`, { movement: m }),
     ])

@@ -131,7 +131,7 @@ export function legacyToRaw(old: Record<string, any>, siteId: string): RawStatio
   }))
   raw.recoveries = recs.filter((r) => n(r.amount) > 0 && knownCustomers.has(s(r.customerId))).map((r) => ({
     id: s(r.id), receiptNo: s(r.receiptNo), date: s(r.date, todayISO()), customerId: s(r.customerId), customerName: s(r.customerName),
-    paymentMethod: r.paymentMethod ?? 'Cash', amount: n(r.amount), referenceNo: s(r.referenceNo), receivedBy: s(r.receivedBy), bankAccountId: '', createdAt: noon(s(r.date)),
+    paymentMethod: r.paymentMethod ?? 'Cash', amount: n(r.amount), referenceNo: s(r.referenceNo), receivedBy: s(r.receivedBy), bankAccountId: '', bankPending: false, createdAt: noon(s(r.date)),
   }))
   raw.expenses = asArray(old.expenses).filter((r) => n(r.amount) > 0).map((r) => ({
     id: s(r.id), voucherNo: s(r.voucherNo, s(r.id)), date: s(r.date, todayISO()), category: r.category ?? 'Misc', description: s(r.description),

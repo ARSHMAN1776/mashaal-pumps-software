@@ -19,7 +19,7 @@ export interface ProfitSummary {
   /** lubricant sales minus the cost of the cans sold (at the product's current cost price) */
   lubeMargin: number
   expenses: number
-  /** gross salaries paid for the period (advances are part of them) */
+  /** salaries paid for the period after deductions (advances are part of them) */
   salaries: number
   netProfit: number
 }
@@ -42,7 +42,8 @@ export function computeProfit(d: StationData, from?: string, to?: string): Profi
   const lubeSales = lubeSold.reduce((a, m) => a + m.totalAmount, 0)
   const lubeCost = lubeSold.reduce((a, m) => a + m.quantity * (cost.get(m.productId) ?? 0), 0)
   const expenses = d.expenses.filter((e) => inRange(e.date, from, to)).reduce((a, e) => a + e.amount, 0)
-  const salaries = d.salaryPayments.filter((p) => inRange(p.date, from, to)).reduce((a, p) => a + p.grossSalary, 0)
+  // what the station really pays: the salary less absence / other deductions (advances are part of what is paid)
+  const salaries = d.salaryPayments.filter((p) => inRange(p.date, from, to)).reduce((a, p) => a + p.grossSalary - (p.deduction ?? 0), 0)
 
   const dealerMargin = round2(fuel.reduce((a, f) => a + f.margin, 0))
   const lubeMargin = round2(lubeSales - lubeCost)

@@ -7,6 +7,7 @@ import { rs } from '../../lib/money'
 import { PlusIcon, PrinterIcon, CheckCircleIcon, EditIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
+import { PendingBankNotice } from '../../features/customers/PendingBankNotice'
 import { Modal, FormError } from '../common/Modal'
 import { useConfirm } from '../common/Confirm'
 import { useToast } from '../common/Toast'
@@ -180,6 +181,8 @@ export const BankSheetView: React.FC = () => {
           </>
         }
       />
+
+      <PendingBankNotice />
 
       <ModuleGuide
         title="Station Commercial Banking & Cash Remittances Guide"

@@ -20,17 +20,29 @@ export const OwnerFinancialView: React.FC = () => {
   const isParco = site.brand === 'TOTAL PARCO'
   const thisYear = String(new Date().getFullYear())
 
+  // everything the owner has taken out: bank transfers and cash taken from the safe
+  const withdrawals = useMemo(() => [
+    ...activeSiteData.ownerTransfers.map((t) => ({
+      id: t.id, date: t.date, amount: t.amount, ref: t.referenceNo, title: t.accountTitle, sub: t.accountNumber, from: t.bankName,
+      by: t.transferredBy, notes: t.notes || '', status: t.status, cash: false,
+    })),
+    ...activeSiteData.daybook.filter((e) => e.category === 'Owner Withdrawal').map((e) => ({
+      id: e.id, date: e.date, amount: e.cashOut, ref: '', title: 'Cash taken by owner', sub: '', from: 'Cash in safe',
+      by: e.handledBy, notes: e.particulars.replace(/^Owner cash withdrawal( — )?/, ''), status: 'Completed', cash: true,
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date)), [activeSiteData])
+
   // every year that has any recorded activity, plus the current year
   const availableYears = useMemo(() => {
     const years = new Set<string>([thisYear])
     const dates = [
       ...activeSiteData.fuelSales.map((r) => r.date), ...activeSiteData.expenses.map((r) => r.date),
-      ...activeSiteData.ownerTransfers.map((r) => r.date), ...activeSiteData.bankTransactions.map((r) => r.date),
+      ...withdrawals.map((r) => r.date), ...activeSiteData.bankTransactions.map((r) => r.date),
       ...activeSiteData.salaryPayments.map((r) => r.date), ...activeSiteData.lubricantMovements.map((r) => r.date),
     ]
     for (const d of dates) if (d) years.add(d.slice(0, 4))
     return [...years].sort().reverse()
-  }, [activeSiteData, thisYear])
+  }, [activeSiteData, withdrawals, thisYear])
 
   const [year, setYear] = useState(thisYear)
   const [printOpen, setPrintOpen] = useState(false)
@@ -40,7 +52,7 @@ export const OwnerFinancialView: React.FC = () => {
     const mm = String(i + 1).padStart(2, '0')
     const prefix = `${year}-${mm}`
     const p = computeProfit(activeSiteData, `${prefix}-01`, `${prefix}-31`)
-    const transfers = activeSiteData.ownerTransfers.filter((t) => t.date.startsWith(prefix))
+    const transfers = withdrawals.filter((t) => t.date.startsWith(prefix))
     const transferred = transfers.reduce((s, t) => s + t.amount, 0)
     const salesCount = activeSiteData.fuelSales.filter((s) => s.date.startsWith(prefix)).length
     const expCount = activeSiteData.expenses.filter((e) => e.date.startsWith(prefix)).length
@@ -48,7 +60,7 @@ export const OwnerFinancialView: React.FC = () => {
     return {
       mm, name, ...p, transferred, retained: p.netProfit - transferred, hasData, txCount: salesCount + expCount + transfers.length, transfers,
     }
-  }), [activeSiteData, year])
+  }), [activeSiteData, withdrawals, year])
 
   const totals = useMemo(() => monthly.reduce((a, m) => ({
     liters: a.liters + m.liters, revenue: a.revenue + m.fuelRevenue, margin: a.margin + m.dealerMargin + m.lubeMargin,
@@ -57,7 +69,7 @@ export const OwnerFinancialView: React.FC = () => {
   }), { liters: 0, revenue: 0, margin: 0, costs: 0, net: 0, transferred: 0, retained: 0, tx: 0 }), [monthly])
 
   const current = monthly[new Date().getMonth()]
-  const transfers = activeSiteData.ownerTransfers
+  const transfers = withdrawals
   const lifetime = transfers.reduce((s, t) => s + t.amount, 0)
   const chartMax = Math.max(100000, Math.ceil(Math.max(...monthly.map((m) => Math.max(m.dealerMargin, Math.abs(m.netProfit), m.transferred))) / 100000) * 100000)
 
@@ -77,9 +89,9 @@ export const OwnerFinancialView: React.FC = () => {
     toast.success(`Annual breakdown for ${year} exported.`)
   }
 
-  const removeTransfer = async (id: string, amount: number, date: string) => {
-    if (!(await confirm({ title: 'Delete this owner withdrawal?', message: `${rs(amount)} on ${formatDate(date)}. The matching bank debit is removed too, so the bank balance goes back up. Recorded in the audit trail.`, confirmLabel: 'Delete withdrawal', tone: 'danger' }))) return
-    const r = await act.removeOwnerTransfer(id)
+  const removeTransfer = async (id: string, amount: number, date: string, cash: boolean) => {
+    if (!(await confirm({ title: 'Delete this owner withdrawal?', message: `${rs(amount)} on ${formatDate(date)}. ${cash ? 'The cash goes back into the safe balance.' : 'The matching bank debit is removed too, so the bank balance goes back up.'} Recorded in the audit trail.`, confirmLabel: 'Delete withdrawal', tone: 'danger' }))) return
+    const r = cash ? await act.removeDaybookEntry(id) : await act.removeOwnerTransfer(id)
     if (r.ok) toast.success('Withdrawal deleted.'); else toast.error(r.error)
   }
 
@@ -219,7 +231,7 @@ export const OwnerFinancialView: React.FC = () => {
         <div className="table-surface-header">
           <div>
             <h3 className="surface-heading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CreditCardIcon size={18} color="#967938" />Owner Withdrawals & Capital Transfers</h3>
-            <p className="surface-sub">Money actually moved from station bank accounts to the owner. Lifetime total {rs(lifetime)} in {transfers.length} transfer(s).</p>
+            <p className="surface-sub">Money actually taken by the owner, from a bank account or in cash from the safe. Lifetime total {rs(lifetime)} in {transfers.length} transfer(s).</p>
           </div>
           <button type="button" className="btn btn-primary" style={{ backgroundColor: accent, borderColor: accent, fontSize: 12.5 }} onClick={() => setTransferOpen(true)}>+ Record New Withdrawal</button>
         </div>
@@ -232,14 +244,14 @@ export const OwnerFinancialView: React.FC = () => {
               ) : transfers.map((t) => (
                 <tr key={t.id}>
                   <td className="font-bold">{formatDate(t.date)}</td>
-                  <td><span className="badge badge-outline" style={{ fontSize: 11, fontFamily: 'monospace' }}>{t.referenceNo}</span></td>
+                  <td>{t.ref ? <span className="badge badge-outline" style={{ fontSize: 11, fontFamily: 'monospace' }}>{t.ref}</span> : '—'}</td>
                   <td className="font-bold" style={{ color: '#1d4ed8', fontSize: 14 }}>{rs(t.amount)}</td>
-                  <td><strong>{t.accountTitle}</strong><span style={{ fontSize: 11, color: '#686256', display: 'block' }}>{t.accountNumber}</span></td>
-                  <td>{t.bankName}</td>
+                  <td><strong>{t.title}</strong>{t.sub && <span style={{ fontSize: 11, color: '#686256', display: 'block' }}>{t.sub}</span>}</td>
+                  <td>{t.from}</td>
                   <td><span className="badge" style={{ background: '#dcfce7', color: '#15803d', borderColor: '#bbf7d0', fontSize: 11 }}>{t.status}</span></td>
-                  <td>{t.transferredBy}</td>
+                  <td>{t.by}</td>
                   <td style={{ fontSize: 12, color: '#686256' }}>{t.notes || '—'}</td>
-                  {currentUser?.role === 'owner' && <td><RowActions><IconButton label="Delete withdrawal" tone="danger" onClick={() => void removeTransfer(t.id, t.amount, t.date)}><TrashIcon size={14} /></IconButton></RowActions></td>}
+                  {currentUser?.role === 'owner' && <td><RowActions><IconButton label="Delete withdrawal" tone="danger" onClick={() => void removeTransfer(t.id, t.amount, t.date, t.cash)}><TrashIcon size={14} /></IconButton></RowActions></td>}
                 </tr>
               ))}
             </tbody>

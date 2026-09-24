@@ -11,6 +11,12 @@
 3. Make sure `.env` contains `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 4. `npm install` then `npm run dev` (or `npm run build` for production).
 
+### Updating a database that is already set up
+
+When a new version adds columns, run `supabase/update.sql` once in the SQL Editor **before** you deploy the new
+app. It only adds columns, changes no data, and is safe to run again. (Latest update: cheque confirmation,
+salary deductions, supplier bills from lubricant restocks.)
+
 ## 2. First login
 
 | User | Password (first time only) | Role |

@@ -11,7 +11,8 @@ export type FieldKind =
   | 's' // text, never null
   | 'sn' // nullable text: '' in the model <-> NULL in the database
   | 'n' // number
-  | 'b' // boolean
+  | 'b' // boolean, true when missing
+  | 'bf' // boolean, false when missing
   | 'sa' // text[]
   | 'd' // date (YYYY-MM-DD)
   | 'dn' // nullable date: '' <-> NULL
@@ -180,7 +181,7 @@ export const TABLES = {
       id, f('receiptNo', 'receipt_no', 's'), f('date', 'date', 'd'), f('customerId', 'customer_id', 's'),
       f('customerName', 'customer_name', 's'), f('paymentMethod', 'payment_method', 's'), f('amount', 'amount', 'n'),
       f('referenceNo', 'reference_no', 's'), f('receivedBy', 'received_by', 's'),
-      f('bankAccountId', 'bank_account_id', 'sn'), createdAt,
+      f('bankAccountId', 'bank_account_id', 'sn'), f('bankPending', 'bank_pending', 'bf'), createdAt,
     ],
   },
   customer_adjustments: {
@@ -219,7 +220,8 @@ export const TABLES = {
     table: 'staff_salary_payments', key: 'salaryPayments',
     fields: [
       id, f('staffId', 'staff_id', 's'), f('period', 'period', 's'), f('date', 'date', 'd'),
-      f('grossSalary', 'gross_salary', 'n'), f('advancesDeducted', 'advances_deducted', 'n'), f('netPaid', 'net_paid', 'n'),
+      f('grossSalary', 'gross_salary', 'n'), f('deduction', 'deduction', 'n'), f('absentDays', 'absent_days', 'n'),
+      f('deductionNote', 'deduction_note', 'sn'), f('advancesDeducted', 'advances_deducted', 'n'), f('netPaid', 'net_paid', 'n'),
       f('paidBy', 'paid_by', 's'), f('notes', 'notes', 'sn'),
     ],
   },
@@ -253,7 +255,8 @@ export const TABLES = {
     fields: [
       id, f('supplierId', 'supplier_id', 's'), f('date', 'date', 'd'), f('type', 'type', 's'), f('amount', 'amount', 'n'),
       f('referenceNo', 'reference_no', 's'), f('note', 'note', 's'), f('paymentSource', 'payment_source', 'sn'),
-      f('bankAccountId', 'bank_account_id', 'sn'), f('recordedBy', 'recorded_by', 's'), createdAt,
+      f('bankAccountId', 'bank_account_id', 'sn'), f('sourceType', 'source_type', 'sn'), f('sourceId', 'source_id', 'sn'),
+      f('recordedBy', 'recorded_by', 's'), createdAt,
     ],
   },
   tariff_revisions: {
@@ -293,6 +296,7 @@ export function toRow(table: keyof typeof TABLES, model: Record<string, unknown>
       case 'n': row[fs.c] = toNumber(v); break
       case 'ni': row[fs.c] = v === undefined || v === null || v === '' ? null : toNumber(v); break
       case 'b': row[fs.c] = v === undefined ? true : Boolean(v); break
+      case 'bf': row[fs.c] = Boolean(v); break
       case 'sa': row[fs.c] = Array.isArray(v) ? v.map(String) : []; break
       case 'd': row[fs.c] = String(v ?? ''); break
     }
@@ -313,6 +317,7 @@ export function fromRow<T>(table: keyof typeof TABLES, row: Row, siteId: SiteId)
       case 'n': m[fs.m] = toNumber(v); break
       case 'ni': m[fs.m] = v === null || v === undefined ? undefined : toNumber(v); break
       case 'b': m[fs.m] = v === null || v === undefined ? true : Boolean(v); break
+      case 'bf': m[fs.m] = Boolean(v); break
       case 'sa': m[fs.m] = Array.isArray(v) ? v.map(String) : []; break
       case 'd': m[fs.m] = v === null || v === undefined ? '' : String(v).slice(0, 10); break
     }

@@ -38,6 +38,7 @@ export function bindActions(getCtx: () => ActionCtx) {
     updateSlip: b(customers.updateSlip),
     removeSlip: b(customers.removeSlip),
     recordRecovery: b(customers.recordRecovery),
+    assignRecoveryBank: b(customers.assignRecoveryBank),
     updateRecovery: b(customers.updateRecovery),
     removeRecovery: b(customers.removeRecovery),
     addAdjustment: b(customers.addAdjustment),
@@ -68,6 +69,7 @@ export function bindActions(getCtx: () => ActionCtx) {
     paySupplier: b(finance.paySupplier),
     removeSupplierTransaction: b(finance.removeSupplierTransaction),
     addOwnerTransfer: b(finance.addOwnerTransfer),
+    addOwnerCashWithdrawal: b(finance.addOwnerCashWithdrawal),
     removeOwnerTransfer: b(finance.removeOwnerTransfer),
     // staff & payroll
     addStaff: b(people.addStaff),

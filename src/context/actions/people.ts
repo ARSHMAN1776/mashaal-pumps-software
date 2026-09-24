@@ -174,7 +174,37 @@ export interface SalaryInput {
   period?: string
   date?: string
   notes?: string
+  /** days the employee did not work; each costs one thirtieth of the monthly salary */
+  absentDays?: number
+  /** any other amount to hold back (fine, damage ...) */
+  otherDeduction?: number
+  deductionNote?: string
   acknowledge?: string[]
+}
+
+/**
+ * How a month's salary is worked out. The payment form and the save both use this, so the form always
+ * shows exactly what will be paid: salary − absent days (salary ÷ 30 each) − other deduction − advances.
+ */
+export function planSalary(
+  gross: number, absentDays: number, otherDeduction: number,
+  outstandingAdvances: readonly StaffAdvance[],
+) {
+  const absent = round2(Math.min(gross, (gross / 30) * absentDays))
+  const other = round2(otherDeduction)
+  const deduction = round2(absent + other)
+  const payable = round2(gross - deduction)
+  // advances come off what is left of the salary, oldest first
+  const oldestFirst = [...outstandingAdvances].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
+  let advances = 0
+  const settle: StaffAdvance[] = []
+  for (const a of oldestFirst) {
+    if (advances + a.amount <= payable + EPS) {
+      advances = round2(advances + a.amount)
+      settle.push(a)
+    }
+  }
+  return { absent, other, deduction, payable, advances, settle, net: round2(payable - advances) }
 }
 
 export function paySalary(c: ActionCtx, i: SalaryInput): Promise<Result<SalaryPayment>> {
@@ -194,32 +224,30 @@ export function paySalary(c: ActionCtx, i: SalaryInput): Promise<Result<SalaryPa
     const gross = round2(staff.monthlySalary)
     if (!isPositive(gross)) return fail(`${staff.name} has no monthly salary set.`)
 
-    // deduct outstanding advances, oldest first, never more than the salary
-    const outstanding = c.raw.staffAdvances.filter((a) => a.staffId === staff.id && a.status === 'Outstanding')
-      .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
-    let deducted = 0
-    const settle: StaffAdvance[] = []
-    for (const a of outstanding) {
-      if (deducted + a.amount <= gross + EPS) {
-        deducted = round2(deducted + a.amount)
-        settle.push(a)
-      }
-    }
-    const net = round2(gross - deducted)
+    const absentDays = i.absentDays === undefined ? 0 : money(i.absentDays)
+    const otherDeduction = i.otherDeduction === undefined ? 0 : money(i.otherDeduction)
+    if (!Number.isFinite(absentDays) || absentDays < 0 || absentDays > 31) return fail('Days absent must be a number from 0 to 31.')
+    if (!isNonNegative(otherDeduction)) return fail('The other deduction cannot be negative.')
+    if (otherDeduction > gross + EPS) return fail(`The deduction (${fmt(otherDeduction)}) is more than the salary (${fmt(gross)}).`)
+    if (otherDeduction > EPS && !clean(i.deductionNote)) return fail('Write the reason for the other deduction.')
+    const split = planSalary(gross, absentDays, otherDeduction, c.raw.staffAdvances.filter((a) => a.staffId === staff.id && a.status === 'Outstanding'))
+    if (split.absent + split.other > gross + EPS) return fail(`The deductions (${fmt(split.absent + split.other)}) are more than the salary (${fmt(gross)}).`)
+    const { settle, advances: deducted, net } = split
     const low = guard(c, i.acknowledge, 'NEGATIVE_SAFE', net > safeCash(c) + EPS, `Only ${fmt(safeCash(c))} is recorded in the safe; the net salary is ${fmt(net)}.`)
     if (low) return low
 
     const pay: SalaryPayment = {
-      id: newId('SAL'), staffId: staff.id, period, date, grossSalary: gross, advancesDeducted: deducted, netPaid: net, paidBy: c.user.name, notes: clean(i.notes),
+      id: newId('SAL'), staffId: staff.id, period, date, grossSalary: gross, deduction: split.deduction, absentDays,
+      deductionNote: clean(i.deductionNote), advancesDeducted: deducted, netPaid: net, paidBy: c.user.name, notes: clean(i.notes),
     }
     const ops: Op[] = [op.insert('staff_salary_payments', pay)]
     for (const a of settle) ops.push(op.update('staff_advances', { ...a, status: 'Settled', settledOn: date, settlementId: pay.id }))
     if (net > EPS) {
       ops.push(...syncLinkedDaybook(c, 'salary', pay.id, {
-        date, particulars: `Salary ${period}: ${staff.name} (net of ${fmt(deducted)} advances)`, category: 'Salary Payment', cashOut: net, referenceNo: pay.id,
+        date, particulars: `Salary ${period}: ${staff.name}${split.deduction + deducted > EPS ? ` (after ${fmt(split.deduction + deducted)} deductions)` : ''}`, category: 'Salary Payment', cashOut: net, referenceNo: pay.id,
       }))
     }
-    ops.push(auditOp(c, 'salary.pay', 'salary', pay.id, `Paid ${staff.name} ${fmt(net)} for ${period}`, { gross, deducted }))
+    ops.push(auditOp(c, 'salary.pay', 'salary', pay.id, `Paid ${staff.name} ${fmt(net)} for ${period}`, { gross, deduction: split.deduction, absentDays, advances: deducted }))
     await c.commit(ops)
     return ok(pay)
   })

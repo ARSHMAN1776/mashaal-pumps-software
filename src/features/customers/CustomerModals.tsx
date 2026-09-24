@@ -239,7 +239,7 @@ export const RecoveryModal: React.FC<{ customerId?: string; recovery?: CustomerR
     void run(
       (ack) => act.recordRecovery({ customerId: custId, amount: amt, method, referenceNo: ref, date, bankAccountId: bankId, acknowledge: ack }),
       (saved) => {
-        toast.success(`Recorded ${saved.receiptNo} — ${rsn(saved.amount)}${saved.paymentMethod === 'Cash' ? ' (added to the daybook)' : ''}`)
+        toast.success(`Recorded ${saved.receiptNo} — ${rsn(saved.amount)}${saved.paymentMethod === 'Cash' ? ' (added to the daybook)' : saved.bankPending ? ' (a manager will confirm the bank account)' : ''}`)
         onSaved?.(saved, print)
         onClose()
       },
@@ -276,14 +276,14 @@ export const RecoveryModal: React.FC<{ customerId?: string; recovery?: CustomerR
         <Grid2>
           <Field label="Date" hint={!isManager ? 'Cashiers record today only' : undefined}><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={!isManager} required /></Field>
           {method !== 'Cash' && isManager ? (
-            <Field label="Credit to bank account" hint="Choose the account the cheque / transfer was credited to (optional)">
+            <Field label="Credit to bank account" hint="Where did the money go? You can also leave it and confirm later.">
               <select className="form-input" value={bankId} onChange={(e) => setBankId(e.target.value)}>
-                <option value="">— not credited to a bank account yet —</option>
+                <option value="">Not in a bank yet (I will confirm later)</option>
                 {banks.map((b) => <option key={b.id} value={b.id}>{b.bankName} ({b.accountNumber})</option>)}
               </select>
             </Field>
           ) : (
-            <Field label="Cash book"><div className="read-only-box">{method === 'Cash' ? 'A cash-in line is added to the daybook automatically' : 'No cash movement — a manager records the bank credit'}</div></Field>
+            <Field label="Cash book"><div className="read-only-box">{method === 'Cash' ? 'A cash-in line is added to the daybook automatically' : 'Nothing more to do: your manager will choose the bank account later'}</div></Field>
           )}
         </Grid2>
         <CalcStrip items={[

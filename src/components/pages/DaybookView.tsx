@@ -53,7 +53,7 @@ const EntryModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <Grid2>
           <Field label="Category">
             <select className="form-input" value={category} onChange={(e) => setCategory(e.target.value as DaybookCategory)}>
-              {DAYBOOK_CATEGORIES.map((c) => <option key={c} value={c}>{c === 'Shift Fuel' ? 'Shift fuel sales handover' : c}</option>)}
+              {DAYBOOK_CATEGORIES.filter((c) => c !== 'Owner Withdrawal').map((c) => <option key={c} value={c}>{c === 'Shift Fuel' ? 'Shift fuel sales handover' : c}</option>)}
             </select>
           </Field>
           <Field label="Cash amount (PKR)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>

@@ -74,6 +74,8 @@ const MoveModal: React.FC<{ mode: MoveMode; productId?: string; onClose: () => v
   const [id, setId] = useState(productId ?? products[0]?.id ?? '')
   const p = products.find((x) => x.id === id)
   const [qty, setQty] = useState('1')
+  const suppliers = activeSiteData.suppliers.filter((s) => s.isActive)
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '') // '' = a shop that is not in the supplier list
   const [who, setWho] = useState(mode === 'sale' ? 'Counter Walk-in' : '')
   const [price, setPrice] = useState(String(p?.salePrice ?? ''))
   const [cost, setCost] = useState(String(p?.costPrice ?? ''))
@@ -89,14 +91,14 @@ const MoveModal: React.FC<{ mode: MoveMode; productId?: string; onClose: () => v
     if (mode === 'sale') {
       void run(() => act.sellLube({ productId: id, quantity: Number(qty), counterparty: who, unitPrice: isManager ? Number(price) : undefined, date }), (m) => { toast.success(`Sold ${m.quantity} can(s) — ${rs(m.totalAmount)} added to the daybook.`); onClose() })
     } else if (mode === 'restock') {
-      void run(() => act.restockLube({ productId: id, quantity: Number(qty), unitCost: Number(cost), supplierName: who, referenceNo: ref, date }), (m) => { toast.success(`Received ${m.quantity} can(s).`); onClose() })
+      void run(() => act.restockLube({ productId: id, quantity: Number(qty), unitCost: Number(cost), supplierId: supplierId || undefined, supplierName: who, referenceNo: ref, date }), (m) => { toast.success(supplierId ? `Received ${m.quantity} can(s). ${rs(m.totalAmount)} added to the supplier account.` : `Received ${m.quantity} can(s).`); onClose() })
     } else {
       void run(() => act.adjustLubeStock({ productId: id, quantity: Number(qty), direction, reason, date }), () => { toast.success('Stock adjusted.'); onClose() })
     }
   }
 
   const title = mode === 'sale' ? 'Record Lubricant Counter Sale' : mode === 'restock' ? 'Receive Lubricant Stock' : 'Stock Adjustment'
-  const sub = mode === 'sale' ? 'Deducts stock and posts the cash to the daybook' : mode === 'restock' ? 'Adds cans to stock (record the supplier bill in Suppliers)' : 'Correct stock for damage, counting differences or samples'
+  const sub = mode === 'sale' ? 'Deducts stock and posts the cash to the daybook' : mode === 'restock' ? 'Adds cans to stock. Choose the supplier and the bill is added to their account.' : 'Correct stock for damage, counting differences or samples'
 
   return (
     <Modal title={title} subtitle={sub} onClose={onClose} busy={busy} width={600}>
@@ -118,10 +120,17 @@ const MoveModal: React.FC<{ mode: MoveMode; productId?: string; onClose: () => v
         {mode === 'restock' && (
           <>
             <Grid2>
-              <Field label="Supplier / from"><input className="form-input" value={who} onChange={(e) => setWho(e.target.value)} /></Field>
+              <Field label="Bought from">
+                <select className="form-input" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  <option value="">Someone else (not in my supplier list)</option>
+                </select>
+              </Field>
               <Field label="Cost per can (PKR)"><input type="number" min={0} step="any" className="form-input" value={cost} onChange={(e) => setCost(e.target.value)} required /></Field>
             </Grid2>
-            <Field label="Invoice / reference #"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
+            {supplierId === '' && <Field label="Shop / person name"><input className="form-input" value={who} onChange={(e) => setWho(e.target.value)} /></Field>}
+            <Field label="Invoice / bill number" hint="Optional"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
+            {supplierId !== '' && q > 0 && <p className="ui-muted" style={{ margin: 0, fontSize: 12.5 }}>{rs(q * (Number(cost) || 0))} will be added to this supplier's account as an unpaid bill.</p>}
           </>
         )}
         {mode === 'adjust' && (

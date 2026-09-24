@@ -9,6 +9,7 @@ import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
 import { Kpi, KpiStrip } from '../common/kit'
 import { OwnerTransferModal } from '../../features/owner/OwnerTransferModal'
+import { PendingBankNotice } from '../../features/customers/PendingBankNotice'
 
 const monthLabel = (ym: string) => {
   if (ym === 'all') return 'All Recorded History'
@@ -77,6 +78,8 @@ export const OwnerPortalView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <PendingBankNotice />
 
       <ModuleGuide
         title="Owner Executive Portal & Margin Auditing"

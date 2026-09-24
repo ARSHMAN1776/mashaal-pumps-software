@@ -463,6 +463,16 @@ create table if not exists public.{p}_doc_counters (
   last_value bigint not null default 0
 );
 
+-- ---- columns added after the first release (each line is safe to run again) --
+-- UPGRADES-BEGIN
+alter table public.{p}_customer_recoveries   add column if not exists bank_pending   boolean not null default false;
+alter table public.{p}_staff_salary_payments add column if not exists deduction      numeric not null default 0;
+alter table public.{p}_staff_salary_payments add column if not exists absent_days    numeric not null default 0;
+alter table public.{p}_staff_salary_payments add column if not exists deduction_note text;
+alter table public.{p}_supplier_transactions add column if not exists source_type    text;
+alter table public.{p}_supplier_transactions add column if not exists source_id      text;
+-- UPGRADES-END
+
 -- ---- indexes ------------------------------------------------------------
 create index if not exists {p}_fuel_sales_date_idx     on public.{p}_fuel_sales (date);
 create index if not exists {p}_fuel_sales_nozzle_idx   on public.{p}_fuel_sales (nozzle_id);

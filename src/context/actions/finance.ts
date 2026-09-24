@@ -45,6 +45,7 @@ export function addDaybookEntry(c: ActionCtx, i: DaybookEntryInput): Promise<Res
     if (!isPositive(amount)) return fail('The amount must be more than 0.')
     if (!clean(i.particulars)) return fail('Enter a description.')
     if (!DAYBOOK_CATEGORIES.includes(i.category)) return fail('Choose a category.')
+    if (i.category === 'Owner Withdrawal') return fail('Owner withdrawals are recorded by the owner in Financial & Annual Performance (Owner Withdrawal).')
     const low = guard(c, i.acknowledge, 'NEGATIVE_SAFE', i.direction === 'OUT' && amount > safeCash(c) + EPS,
       `Only ${fmt(safeCash(c))} is recorded in the safe. This payment of ${fmt(amount)} would make the cash balance negative.`)
     if (low) return low
@@ -63,7 +64,10 @@ export function removeDaybookEntry(c: ActionCtx, id: string): Promise<Result<voi
     if (denied) return denied
     const e = c.raw.daybook.find((x) => x.id === id)
     if (!e) return fail('Entry not found.')
-    if (e.sourceType) {
+    if (e.sourceType === 'owner_cash') {
+      const notOwner = needRole(c, ['owner'], 'delete owner cash withdrawals')
+      if (notOwner) return notOwner
+    } else if (e.sourceType) {
       return fail('This cash line was created by another record (a recovery, expense, deposit ...). Delete or edit that record instead.')
     }
     await c.commit([
@@ -396,11 +400,10 @@ function validateInvoice(c: ActionCtx, i: OmcInvoiceInput, selfId?: string): Res
   if (!isPositive(money(i.decantedVolumeLiters))) return fail('Decanted volume must be more than 0.')
   if (!isPositive(money(i.ratePerLiter))) return fail('The rate per liter must be more than 0.')
   if (!isNonNegative(money(i.freightAmount))) return fail('Freight cannot be negative.')
-  if (i.tankId) {
-    const tank = c.raw.tanks.find((t) => t.id === i.tankId)
-    if (!tank) return fail('Choose a valid receiving tank.')
-    if (tank.fuelType !== i.fuelType) return fail(`Tank #${tank.tankNo} holds ${tank.fuelType}, not ${i.fuelType}.`)
-  }
+  // the fuel must be booked into a tank, otherwise the stock figure would never include it
+  const tank = c.raw.tanks.find((t) => t.id === i.tankId)
+  if (!i.tankId || !tank) return fail('Choose the tank the fuel was unloaded into.')
+  if (tank.fuelType !== i.fuelType) return fail(`Tank #${tank.tankNo} holds ${tank.fuelType}, not ${i.fuelType}.`)
   return null
 }
 
@@ -612,7 +615,7 @@ export function addSupplierBill(c: ActionCtx, i: SupplierBillInput): Promise<Res
     if (bad) return bad
     const tx: SupplierTransaction = {
       id: newId('SUPTX'), supplierId: s.id, date, type: 'Bill', amount, referenceNo: clean(i.referenceNo), note: clean(i.note),
-      paymentSource: '', bankAccountId: '', recordedBy: c.user.name, createdAt: '',
+      paymentSource: '', bankAccountId: '', sourceType: '', sourceId: '', recordedBy: c.user.name, createdAt: '',
     }
     await c.commit([op.insert('supplier_transactions', tx)])
     return ok(tx)
@@ -656,7 +659,7 @@ export function paySupplier(c: ActionCtx, i: SupplierPaymentInput): Promise<Resu
     }
     const tx: SupplierTransaction = {
       id: newId('SUPTX'), supplierId: s.id, date, type: 'Payment', amount, referenceNo: clean(i.referenceNo), note: clean(i.note),
-      paymentSource: i.source, bankAccountId: bankId, recordedBy: c.user.name, createdAt: '',
+      paymentSource: i.source, bankAccountId: bankId, sourceType: '', sourceId: '', recordedBy: c.user.name, createdAt: '',
     }
     const ops: Op[] = [op.insert('supplier_transactions', tx)]
     ops.push(...(i.source === 'Cash'
@@ -673,6 +676,7 @@ export function removeSupplierTransaction(c: ActionCtx, id: string): Promise<Res
     if (denied) return denied
     const tx = c.raw.supplierTransactions.find((t) => t.id === id)
     if (!tx) return fail('Entry not found.')
+    if (tx.sourceType === 'lube_restock') return fail('This bill was created by a lubricant stock entry. Delete that stock entry (Lubricants page) instead.')
     await c.commit([
       op.remove('supplier_transactions', id),
       ...syncLinkedDaybook(c, 'supplier_payment', id, null),
@@ -723,6 +727,30 @@ export function addOwnerTransfer(c: ActionCtx, i: OwnerTransferInput): Promise<R
       auditOp(c, 'owner.transfer', 'owner_transfer', t.id, `Owner withdrawal ${fmt(amount)} from ${acc.bankName}`),
     ])
     return ok(t)
+  })
+}
+
+export interface OwnerCashInput { amount: number; date?: string; notes?: string; acknowledge?: string[] }
+
+/** The owner takes cash out of the safe (no bank involved): one cash-book line, kept apart from ordinary payments. */
+export function addOwnerCashWithdrawal(c: ActionCtx, i: OwnerCashInput): Promise<Result<void>> {
+  return run(async () => {
+    const denied = needRole(c, ['owner'], 'record owner withdrawals')
+    if (denied) return denied
+    const date = i.date || todayISO()
+    const bad = checkDate(c, date)
+    if (bad) return bad
+    const amount = round2(money(i.amount))
+    if (!isPositive(amount)) return fail('Enter a valid positive amount.')
+    const low = guard(c, i.acknowledge, 'NEGATIVE_SAFE', amount > safeCash(c) + EPS, `Only ${fmt(safeCash(c))} is recorded in the safe.`)
+    if (low) return low
+    const note = clean(i.notes)
+    const line = daybookInsertOp(c, {
+      date, particulars: `Owner cash withdrawal${note ? ` — ${note}` : ''}`, category: 'Owner Withdrawal',
+      cashOut: amount, referenceNo: '', sourceType: 'owner_cash', sourceId: '',
+    })
+    await c.commit([line, auditOp(c, 'owner.cash', 'daybook', String(line.row!.id), `Owner took ${fmt(amount)} cash from the safe`)])
+    return ok(undefined)
   })
 }
 

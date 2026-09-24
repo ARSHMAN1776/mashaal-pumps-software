@@ -22,7 +22,9 @@ const InvoiceModal: React.FC<{ invoice?: OmcInvoice; onClose: () => void }> = ({
   const [lorry, setLorry] = useState(invoice?.tankLorryNo ?? '')
   const [driver, setDriver] = useState(invoice?.driverName ?? '')
   const [fuel, setFuel] = useState<FuelType>(invoice?.fuelType ?? 'HSD Diesel')
-  const [tankId, setTankId] = useState(invoice?.tankId ?? '')
+  // a fuel with a single tank needs no choice: it is picked for you
+  const onlyTank = (f: FuelType) => { const l = tanks.filter((t) => t.fuelType === f); return l.length === 1 ? l[0].id : '' }
+  const [tankId, setTankId] = useState(invoice?.tankId || onlyTank(invoice?.fuelType ?? 'HSD Diesel'))
   const [invVol, setInvVol] = useState(String(invoice?.invoiceVolumeLiters ?? ''))
   const [decVol, setDecVol] = useState(String(invoice?.decantedVolumeLiters ?? ''))
   const [rate, setRate] = useState(String(invoice?.ratePerLiter ?? ''))
@@ -54,11 +56,11 @@ const InvoiceModal: React.FC<{ invoice?: OmcInvoice; onClose: () => void }> = ({
         <Grid3>
           <Field label="Driver name"><input className="form-input" value={driver} onChange={(e) => setDriver(e.target.value)} /></Field>
           <Field label="Fuel product">
-            <select className="form-input" value={fuel} onChange={(e) => { setFuel(e.target.value as FuelType); setTankId('') }}>{FUEL_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}</select>
+            <select className="form-input" value={fuel} onChange={(e) => { setFuel(e.target.value as FuelType); setTankId(onlyTank(e.target.value as FuelType)) }}>{FUEL_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}</select>
           </Field>
-          <Field label="Receiving tank" hint="So the tank stock can be tracked">
-            <select className="form-input" value={tankId} onChange={(e) => setTankId(e.target.value)}>
-              <option value="">— not recorded —</option>
+          <Field label="Unloaded into tank" hint="The fuel is added to this tank's stock">
+            <select className="form-input" value={tankId} onChange={(e) => setTankId(e.target.value)} required>
+              <option value="" disabled>Choose the tank</option>
               {fuelTanks.map((t) => <option key={t.id} value={t.id}>Tank #{t.tankNo} ({t.capacityLiters.toLocaleString()} L)</option>)}
             </select>
           </Field>

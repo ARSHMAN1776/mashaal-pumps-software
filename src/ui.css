@@ -427,10 +427,11 @@
 
 /* ---- page banner: the title block never runs into the action buttons ---------------------------------- */
 .page-title-banner {
-  gap: 24px;
+  gap: 12px 24px;
+  flex-wrap: wrap;
 }
 .page-title-banner > div:first-child {
-  flex: 1 1 0;
+  flex: 1 1 340px;
   min-width: 0;
 }
 .page-heading {
@@ -444,7 +445,9 @@
   margin-top: 6px;
 }
 .page-actions {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* ---- bank account cards: label left, value right, long names wrap instead of colliding ----------------- */
@@ -481,6 +484,15 @@
 .settings-card-header {
   flex-wrap: wrap;
   gap: 10px;
+}
+
+/* ---- tank cards: the edit / delete icons wrap under the name on a narrow card ------------------------- */
+.tank-card-top {
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+.tank-card-top > * {
+  min-width: 0;
 }
 
 /* ---- report tabs never push the page sideways ---------------------------------------------------------- */

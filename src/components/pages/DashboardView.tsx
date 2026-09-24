@@ -8,6 +8,7 @@ import {
   TrendingUpIcon, ChevronRightIcon, PlusIcon,
 } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
+import { PendingBankNotice } from '../../features/customers/PendingBankNotice'
 
 export const DashboardView: React.FC = () => {
   const { activeSiteData, setActiveModule, currentUser } = useApp()
@@ -46,6 +47,7 @@ export const DashboardView: React.FC = () => {
 
   return (
     <div className="dashboard-page-container">
+      <PendingBankNotice />
       {(lowStockTanks.length > 0 || pendingOmc) && (
         <section className="dashboard-alert-banner">
           {lowStockTanks.map((tank) => (

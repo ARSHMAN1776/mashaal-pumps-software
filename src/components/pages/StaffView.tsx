@@ -4,6 +4,7 @@ import type { SalaryPayment, StaffMember, StaffRole, StaffStatus } from '../../t
 import { STAFF_ROLES } from '../../types'
 import { formatDate, monthISO, todayISO } from '../../lib/dates'
 import { rs } from '../../lib/money'
+import { planSalary } from '../../context/actions/people'
 import { PrinterIcon, CheckCircleIcon, CashIcon, PlusIcon, EditIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
@@ -114,34 +115,46 @@ const SalaryModal: React.FC<{ staffId?: string; onClose: () => void; onPaid: (p:
   const list = activeSiteData.staff.filter((s) => s.isActive)
   const [id, setId] = useState(staffId ?? list[0]?.id ?? '')
   const [period, setPeriod] = useState(monthISO())
-  const [date, setDate] = useState(todayISO())
-  const [notes, setNotes] = useState('')
+  const [absent, setAbsent] = useState('0')
+  const [other, setOther] = useState('')
+  const [reason, setReason] = useState('')
   const { busy, error, run } = useSubmit()
   const s = list.find((x) => x.id === id)
-  const out = s?.currentAdvances ?? 0
-  const deducted = Math.min(out, s?.monthlySalary ?? 0)
+  const gross = s?.monthlySalary ?? 0
+  const outstanding = activeSiteData.staffAdvances.filter((a) => a.staffId === id && a.status === 'Outstanding')
+  const plan = planSalary(gross, Number(absent) || 0, Number(other) || 0, outstanding)
+  const perDay = Math.round(gross / 30)
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    void run((ack) => act.paySalary({ staffId: id, period, date, notes, acknowledge: ack }), (p) => { toast.success(`Salary paid: ${rs(p.netPaid)} (advances deducted ${rs(p.advancesDeducted)}).`); onPaid(p); onClose() })
+    void run(
+      (ack) => act.paySalary({ staffId: id, period, absentDays: Number(absent) || 0, otherDeduction: Number(other) || 0, deductionNote: reason, acknowledge: ack }),
+      (p) => { toast.success(`Salary paid: ${rs(p.netPaid)}.`); onPaid(p); onClose() },
+    )
   }
 
   return (
-    <Modal title="Pay Monthly Salary" subtitle="Deducts unsettled advances and posts the net cash to the daybook" onClose={onClose} busy={busy} width={580}>
+    <Modal title="Pay Monthly Salary" subtitle="Check the amount at the bottom, then press Pay salary" onClose={onClose} busy={busy} width={560}>
       <form className="modal-form-compact" onSubmit={submit}>
         <Grid2>
           <Field label="Employee"><select className="form-input" value={id} onChange={(e) => setId(e.target.value)} required>{list.map((m) => <option key={m.id} value={m.id}>{m.name} — {rs(m.monthlySalary)}</option>)}</select></Field>
           <Field label="Salary month"><input type="month" className="form-input" value={period} onChange={(e) => setPeriod(e.target.value)} required /></Field>
         </Grid2>
         <Grid2>
-          <Field label="Payment date"><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} required /></Field>
-          <Field label="Notes (optional)"><input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+          <Field label="Days absent" hint={`Each day absent takes off Rs ${perDay.toLocaleString()} (salary ÷ 30)`}><input type="number" min={0} max={31} step="0.5" className="form-input" value={absent} onChange={(e) => setAbsent(e.target.value)} /></Field>
+          <Field label="Other deduction (Rs)" hint="Only if needed (fine, damage …)"><input type="number" min={0} step="any" className="form-input" value={other} onChange={(e) => setOther(e.target.value)} placeholder="0" /></Field>
         </Grid2>
+        {(Number(other) || 0) > 0 && <Field label="Reason for the deduction"><input className="form-input" value={reason} onChange={(e) => setReason(e.target.value)} required /></Field>}
         <CalcStrip items={[
-          { label: 'Gross salary', value: rs(s?.monthlySalary ?? 0) },
-          { label: 'Advances deducted', value: `− ${rs(deducted)}`, tone: 'red' },
-          { label: 'Net cash to pay', value: rs((s?.monthlySalary ?? 0) - deducted), tone: 'green' },
+          { label: 'Monthly salary', value: rs(gross) },
+          { label: 'Taken off', value: `− ${rs(plan.deduction + plan.advances)}`, tone: 'red' },
+          { label: 'You pay', value: rs(plan.net), tone: 'green' },
         ]} />
+        {plan.deduction + plan.advances > 0 && (
+          <p className="ui-muted" style={{ margin: 0, fontSize: 12.5 }}>
+            {[plan.absent > 0 && `Absent: ${rs(plan.absent)}`, plan.other > 0 && `Other: ${rs(plan.other)}`, plan.advances > 0 && `Advances already taken: ${rs(plan.advances)}`].filter(Boolean).join('  •  ')}
+          </p>
+        )}
         <FormError message={error} />
         <div className="modal-actions-footer">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
@@ -296,11 +309,12 @@ export const StaffView: React.FC = () => {
         <SectionCard title="Salary Payments" subtitle="Newest first">
           <div className="table-responsive">
             <table className="clean-table">
-              <thead><tr><th>Paid on</th><th>Employee</th><th>Month</th><th>Gross</th><th>Advances</th><th>Net paid</th><th>Paid by</th><th /></tr></thead>
+              <thead><tr><th>Paid on</th><th>Employee</th><th>Month</th><th>Salary</th><th>Absent / other</th><th>Advances</th><th>Net paid</th><th>Paid by</th><th /></tr></thead>
               <tbody>
-                {salaryPayments.length === 0 ? <EmptyRow colSpan={8}>No salaries paid yet.</EmptyRow> : salaryPayments.map((p) => (
+                {salaryPayments.length === 0 ? <EmptyRow colSpan={9}>No salaries paid yet.</EmptyRow> : salaryPayments.map((p) => (
                   <tr key={p.id}>
                     <td>{formatDate(p.date)}</td><td><strong>{name(p.staffId)}</strong></td><td>{p.period}</td><td>{rs(p.grossSalary)}</td>
+                    <td className="text-red" title={p.deductionNote || undefined}>{p.deduction > 0 ? `- ${rs(p.deduction)}${p.absentDays > 0 ? ` (${p.absentDays} d)` : ''}` : '—'}</td>
                     <td className="text-red">{p.advancesDeducted > 0 ? `- ${rs(p.advancesDeducted)}` : '—'}</td><td className="text-green font-bold">{rs(p.netPaid)}</td><td>{p.paidBy}</td>
                     <td><RowActions>
                       <IconButton label="Print pay slip" onClick={() => { const m = staff.find((s) => s.id === p.staffId); if (m) setSlip({ member: m, payment: p }) }}><PrinterIcon size={14} /></IconButton>
@@ -328,6 +342,7 @@ export const StaffView: React.FC = () => {
             <div className="receipt-divider" />
             <div className="slip-summary-list">
               <div className="slip-row"><span>Base monthly salary:</span><strong>{rs(slip.payment?.grossSalary ?? slip.member.monthlySalary)}</strong></div>
+              {(slip.payment?.deduction ?? 0) > 0 && <div className="slip-row"><span>Absent / other deductions{slip.payment?.deductionNote ? ` (${slip.payment.deductionNote})` : ''}:</span><span className="text-red">- {rs(slip.payment?.deduction ?? 0)}</span></div>}
               <div className="slip-row"><span>Advances deducted:</span><span className="text-red">- {rs(slip.payment?.advancesDeducted ?? slip.member.currentAdvances)}</span></div>
               <div className="receipt-divider" />
               <div className="slip-row highlight"><span>{slip.payment ? 'Net paid:' : 'Net payable:'}</span><strong>{rs(slip.payment?.netPaid ?? slip.member.monthlySalary - slip.member.currentAdvances)}</strong></div>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { failed, freshBackend, must, openStation as baseOpen, type BackendKind } from './harness'
 import { safeCash } from '../../src/data/derive'
+import { computeProfit } from '../../src/data/profit'
 import type { Backend } from '../../src/data/backend'
 import { addDays, todayISO } from '../../src/lib/dates'
 
@@ -348,7 +349,7 @@ describe.each(KINDS)('%s backend', (kind) => {
   describe('OMC purchases', () => {
     it('payments are limited to the outstanding amount and post to the right account', async () => {
       const st = await openStation(S1, 'naveed.akhtar')
-      const inv = must(await st.act.addOmcInvoice({ invoiceNo: 'INV-2', tankLorryNo: 'TL', driverName: 'D', fuelType: 'PMG Super', invoiceVolumeLiters: 1000, decantedVolumeLiters: 1000, ratePerLiter: 100, freightAmount: 0 }))
+      const inv = must(await st.act.addOmcInvoice({ invoiceNo: 'INV-2', tankLorryNo: 'TL', driverName: 'D', fuelType: 'PMG Super', tankId: 'T2-S1', invoiceVolumeLiters: 1000, decantedVolumeLiters: 1000, ratePerLiter: 100, freightAmount: 0 }))
       expect(inv.totalAmount).toBe(100000)
       expect(failed(await st.act.payOmcInvoice({ invoiceNo: 'INV-2', amount: 150000, method: 'Bank Transfer', bankAccountId: 'BANK-01', referenceNo: 'R' })).code).toBe('OVERPAYMENT')
       must(await st.act.payOmcInvoice({ invoiceNo: 'INV-2', amount: 40000, method: 'Bank Transfer', bankAccountId: 'BANK-01', referenceNo: 'R1' }))
@@ -527,6 +528,123 @@ describe.each(KINDS)('%s backend', (kind) => {
       await st.reload()
       expect(st.raw.daybook.some((d) => d.id === 'ATOM-1')).toBe(false)
       expect(JSON.stringify(st.raw.daybook)).toBe(before)
+    })
+  })
+
+
+  describe('simple follow-ups: stock value, cheques, restock bills, salary, owner cash', () => {
+    it('the OGRA gain/loss is worked out on the stock in the tank now, deliveries since the last dip included', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      must(await st.act.addOmcInvoice({ invoiceNo: 'TEST-1', tankLorryNo: 'TL-1', driverName: 'D', fuelType: 'HSD Diesel', tankId: 'T1-S1', invoiceVolumeLiters: 1000, decantedVolumeLiters: 1000, ratePerLiter: 250, freightAmount: 0 }))
+      const log = must(await st.act.applyOgraPriceChange({ newRates: { ...st.data.settings.rates, 'HSD Diesel': st.data.settings.rates['HSD Diesel'] + 2 }, effectiveDate: todayISO() }))
+      const tankNo = st.data.tanks.find((x) => x.id === 'T1-S1')!.tankNo
+      const snap = log.tankSnapshots.find((t) => t.tankNo === tankNo)!
+      expect(snap.litersAtRevision).toBe(31200 + 1000)
+      expect(snap.gainLossAmount).toBe(Math.round((31200 + 1000) * 2))
+    })
+
+    it('a fuel delivery must name the tank it went into', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      const base = { invoiceNo: 'TEST-2', tankLorryNo: 'TL', driverName: 'D', fuelType: 'HSD Diesel' as const, invoiceVolumeLiters: 10, decantedVolumeLiters: 10, ratePerLiter: 1, freightAmount: 0 }
+      expect(failed(await st.act.addOmcInvoice(base)).error).toMatch(/tank/i)
+      expect(failed(await st.act.addOmcInvoice({ ...base, tankId: 'T2-S1' })).error).toMatch(/holds/)
+      must(await st.act.addOmcInvoice({ ...base, tankId: 'T1-S1' }))
+    })
+
+    it('a cheque noted by a cashier waits for a manager, who places it in a bank account', async () => {
+      const cashier = await openStation(S1, 'tariq.cashier')
+      const rec = must(await cashier.act.recordRecovery({ customerId: 'CUST-01', amount: 5000, method: 'Cheque', referenceNo: 'CHQ-1' }))
+      expect(rec.bankPending).toBe(true)
+      const boss = await openStation(S1, 'naveed.akhtar', cashier.be)
+      const bank0 = boss.data.bankAccounts[0].currentBalance
+      const balance0 = boss.data.customers.find((c) => c.id === 'CUST-01')!.currentBalance
+      expect(boss.data.recoveries.find((r) => r.id === rec.id)!.bankPending).toBe(true)
+      expect(failed(await cashier.act.assignRecoveryBank(rec.id, 'BANK-01')).code).toBe('FORBIDDEN')
+      must(await boss.act.assignRecoveryBank(rec.id, 'BANK-01'))
+      const after = boss.data.recoveries.find((r) => r.id === rec.id)!
+      expect(after.bankPending).toBe(false)
+      expect(after.bankAccountId).toBe('BANK-01')
+      expect(boss.data.bankAccounts[0].currentBalance).toBe(bank0 + 5000)
+      expect(boss.data.customers.find((c) => c.id === 'CUST-01')!.currentBalance).toBe(balance0) // the customer's balance was already reduced
+      expect(failed(await boss.act.assignRecoveryBank(rec.id, 'BANK-01')).error).toMatch(/already/)
+      // deleting the receipt takes the bank line away again
+      must(await boss.act.removeRecovery(rec.id))
+      expect(boss.data.bankAccounts[0].currentBalance).toBe(bank0)
+    })
+
+    it('a manager who picks the bank at once leaves nothing waiting; cash is never waiting', async () => {
+      const boss = await openStation(S1, 'naveed.akhtar')
+      const chq = must(await boss.act.recordRecovery({ customerId: 'CUST-01', amount: 1000, method: 'Cheque', referenceNo: 'C-9', bankAccountId: 'BANK-01' }))
+      const cash = must(await boss.act.recordRecovery({ customerId: 'CUST-01', amount: 1000, method: 'Cash', referenceNo: '' }))
+      expect(chq.bankPending).toBe(false)
+      expect(cash.bankPending).toBe(false)
+    })
+
+    it('restocking from a listed supplier adds an unpaid bill to that supplier, and deleting the stock entry removes it', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      const due0 = st.data.suppliers.find((s) => s.id === 'SUP-01')!.balanceDue
+      const m = must(await st.act.restockLube({ productId: 'LUB-01', quantity: 10, unitCost: 9000, supplierId: 'SUP-01', supplierName: '', referenceNo: 'INV-5' }))
+      expect(st.data.suppliers.find((s) => s.id === 'SUP-01')!.balanceDue).toBe(due0 + 90000)
+      const bill = st.data.supplierTransactions.find((t) => t.sourceId === m.id)!
+      expect(bill.type).toBe('Bill')
+      expect(bill.sourceType).toBe('lube_restock')
+      expect(failed(await st.act.removeSupplierTransaction(bill.id)).error).toMatch(/stock entry/)
+      must(await st.act.removeLubeMovement(m.id))
+      expect(st.data.suppliers.find((s) => s.id === 'SUP-01')!.balanceDue).toBe(due0)
+      expect(st.data.supplierTransactions.some((t) => t.sourceId === m.id)).toBe(false)
+    })
+
+    it('restocking from someone not in the supplier list makes no bill; an unknown supplier is refused', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      must(await st.act.restockLube({ productId: 'LUB-01', quantity: 2, unitCost: 100, supplierName: 'Market shop', referenceNo: '' }))
+      expect(st.data.supplierTransactions).toHaveLength(0)
+      expect(failed(await st.act.restockLube({ productId: 'LUB-01', quantity: 1, unitCost: 100, supplierId: 'NOPE', supplierName: '' })).error).toMatch(/supplier/i)
+    })
+
+    it('salary: absent days, another deduction and advances are taken off; the daybook gets only what is paid', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      must(await st.act.issueAdvance({ staffId: 'STF-02', amount: 2000, reason: 'family' }))
+      const cash0 = safeCash(st.data)
+      // 40 000 / 30 = 1 333.33 a day; 3 days = 4 000
+      const sal = must(await st.act.paySalary({ staffId: 'STF-02', absentDays: 3, otherDeduction: 500, deductionNote: 'damaged hose' }))
+      expect(sal.deduction).toBe(4500)
+      expect(sal.absentDays).toBe(3)
+      expect(sal.advancesDeducted).toBe(2000)
+      expect(sal.netPaid).toBe(40000 - 4500 - 2000)
+      expect(safeCash(st.data)).toBe(cash0 - sal.netPaid)
+      // only what the station really pays counts as a cost
+      expect(computeProfit(st.data).salaries).toBe(40000 - 4500)
+      await st.reload()
+      expect(st.data.salaryPayments.find((p) => p.id === sal.id)!.deductionNote).toBe('damaged hose')
+      must(await st.act.removeSalaryPayment(sal.id))
+      expect(st.data.staff.find((s) => s.id === 'STF-02')!.currentAdvances).toBe(2000)
+    })
+
+    it('salary deductions are checked', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      expect(failed(await st.act.paySalary({ staffId: 'STF-02', absentDays: 40 })).error).toMatch(/0 to 31/)
+      expect(failed(await st.act.paySalary({ staffId: 'STF-02', absentDays: -1 })).error).toMatch(/0 to 31/)
+      expect(failed(await st.act.paySalary({ staffId: 'STF-02', otherDeduction: 100 })).error).toMatch(/reason/)
+      expect(failed(await st.act.paySalary({ staffId: 'STF-02', otherDeduction: 999999, deductionNote: 'x' })).error).toMatch(/more than the salary/)
+      expect(st.data.salaryPayments).toHaveLength(0)
+      // a plain salary is unchanged
+      expect(must(await st.act.paySalary({ staffId: 'STF-02' })).netPaid).toBe(40000)
+    })
+
+    it('the owner can take cash from the safe; it is kept apart from ordinary payments', async () => {
+      const st = await openStation(S1, 'owner')
+      const cash0 = safeCash(st.data)
+      must(await st.act.addOwnerCashWithdrawal({ amount: 10000, notes: 'household' }))
+      expect(safeCash(st.data)).toBe(cash0 - 10000)
+      const line = st.data.daybook.find((e) => e.category === 'Owner Withdrawal')!
+      expect(line.cashOut).toBe(10000)
+      expect(failed(await st.act.addOwnerCashWithdrawal({ amount: cash0 * 10 })).code).toBe('NEGATIVE_SAFE')
+      expect(failed(await st.act.addDaybookEntry({ particulars: 'x', category: 'Owner Withdrawal', direction: 'OUT', amount: 5 })).error).toMatch(/owner/i)
+      const boss = await openStation(S1, 'naveed.akhtar', st.be)
+      expect(failed(await boss.act.addOwnerCashWithdrawal({ amount: 1 })).code).toBe('FORBIDDEN')
+      expect(failed(await boss.act.removeDaybookEntry(line.id)).code).toBe('FORBIDDEN')
+      must(await st.act.removeDaybookEntry(line.id))
+      expect(safeCash(st.data)).toBe(cash0)
     })
   })
 
