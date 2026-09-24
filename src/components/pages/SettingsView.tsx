@@ -624,6 +624,8 @@ export const SettingsView: React.FC = () => {
           'Restoring a backup replaces ALL data of the station and is owner-only.',
         ]}
       />
+
+      <p className="ui-muted" style={{ textAlign: 'center', margin: '0' }}>Mashaal Petroleum software — version {__APP_VERSION__} (built {__BUILD_DATE__})</p>
     </div>
   )
 }

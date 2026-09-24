@@ -904,3 +904,12 @@
 .ui-modal .modal-actions-footer .btn {
   max-width: 100%;
 }
+
+/* software version, small, above the Logout button */
+.sidebar-version {
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 8px;
+}

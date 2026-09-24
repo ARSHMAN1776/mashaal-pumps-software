@@ -169,6 +169,7 @@ export const Sidebar: React.FC<{ open?: boolean; onNavigate?: () => void }> = ({
 
       {/* Sidebar Footer Logout Button */}
       <div className="sidebar-footer-area">
+        <div className="sidebar-version" title={`Built on ${__BUILD_DATE__}`}>Version {__APP_VERSION__}</div>
         <button
           type="button"
           className="sidebar-logout-btn"

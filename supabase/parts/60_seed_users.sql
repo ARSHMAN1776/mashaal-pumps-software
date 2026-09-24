@@ -4,15 +4,21 @@
 -- The previous software kept these usernames/passwords inside the public
 -- JavaScript file. They are recreated here as real Supabase Auth accounts with
 -- the SAME usernames and passwords, so everyone can still sign in today.
--- Every seeded account is flagged "must change password": the app forces a new
--- password at first sign-in. After that these defaults no longer work.
+-- Change every default password after the first sign-in (key button in the top bar).
 -- Add / disable / re-assign users later from Settings > Users (owner only).
+--
+-- SAFE TO RE-RUN: the default accounts are created ONLY while there are no accounts at all
+-- (a brand-new project). On a system that is in use this block does nothing, so an account
+-- you deleted or a station you removed from someone is never brought back.
 -- =========================================================================
 do $seed$
 declare
   u     record;
   v_uid uuid;
 begin
+  if exists (select 1 from public.profiles) then
+    return;
+  end if;
   for u in
     select * from (values
       ('owner',           'mashaal@owner', 'Station Owner',             'owner',   '0300-0000000', array['SITE-01', 'SITE-02']),
