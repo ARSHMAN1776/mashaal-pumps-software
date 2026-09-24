@@ -1,383 +1,201 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import { PrinterIcon, FileTextIcon, CheckCircleIcon } from '../common/Icons'
+import { computeProfit } from '../../data/profit'
+import { addDays, formatDate, todayISO } from '../../lib/dates'
+import { rs } from '../../lib/money'
+import { PrinterIcon, FileTextIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
+import { EmptyRow, FilterBar, Kpi, KpiStrip, PageHeader, SectionCard, Tabs } from '../common/kit'
+import { useToast } from '../common/Toast'
+
+type Tab = 'daily' | 'nozzles' | 'dip-audit' | 'profit'
+
+const csvCell = (v: unknown) => {
+  const s = String(v ?? '')
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+const toCsv = (rows: unknown[][]) => rows.map((r) => r.map(csvCell).join(',')).join('\n')
 
 export const ReportsView: React.FC = () => {
   const { activeSiteData } = useApp()
-  const { fuelSales, lubricants, tanks, tankDips, customers, expenses, siteInfo } = activeSiteData
+  const toast = useToast()
+  const { fuelSales, tanks, tankDips, customers, siteInfo, settings, lubricantMovements } = activeSiteData
 
-  const [activeReportTab, setActiveReportTab] = useState<'daily' | 'nozzles' | 'dip-audit' | 'profit'>('daily')
+  const monthStart = `${todayISO().slice(0, 8)}01`
+  const [from, setFrom] = useState(monthStart)
+  const [to, setTo] = useState(todayISO())
+  const [tab, setTab] = useState<Tab>('daily')
   const [printOpen, setPrintOpen] = useState(false)
-  const [exportNotice, setExportNotice] = useState(false)
 
-  // Calculations
-  const totalFuelRevenue = fuelSales.reduce((sum, s) => sum + s.totalAmount, 0)
-  const totalFuelLiters = fuelSales.reduce((sum, s) => sum + s.netLiters, 0)
-  const totalLubeRevenue = lubricants.reduce((sum, l) => sum + l.salePrice * 4, 0)
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
-  const totalCustomerReceivables = customers.reduce((sum, c) => sum + c.currentBalance, 0)
+  const profit = useMemo(() => computeProfit(activeSiteData, from || undefined, to || undefined), [activeSiteData, from, to])
+  const inRange = (d: string) => (!from || d >= from) && (!to || d <= to)
+  const sales = useMemo(() => fuelSales.filter((s) => inRange(s.date)), [fuelSales, from, to]) // eslint-disable-line react-hooks/exhaustive-deps
+  const dips = useMemo(() => tankDips.filter((d) => inRange(d.date)), [tankDips, from, to]) // eslint-disable-line react-hooks/exhaustive-deps
+  const receivables = customers.filter((c) => c.status !== 'Archived').reduce((s, c) => s + Math.max(0, c.currentBalance), 0)
+  const lubeCans = lubricantMovements.filter((m) => m.type === 'Sale' && inRange(m.date)).reduce((s, m) => s + m.quantity, 0)
+  const periodLabel = `${from ? formatDate(from) : 'start'} – ${to ? formatDate(to) : 'today'}`
 
-  // Estimated gross fuel margin (e.g. Rs 8.50 per liter dealer commission in Pakistan)
-  const estimatedDealerMargin = totalFuelLiters * 8.64
-  const estimatedLubeMargin = totalLubeRevenue * 0.18
-  const grossProfit = estimatedDealerMargin + estimatedLubeMargin
-  const netEstimatedProfit = grossProfit - totalExpenses
+  const preset = (kind: 'today' | 'week' | 'month' | 'all') => {
+    const t = todayISO()
+    if (kind === 'today') { setFrom(t); setTo(t) }
+    else if (kind === 'week') { setFrom(addDays(t, -6)); setTo(t) }
+    else if (kind === 'month') { setFrom(monthStart); setTo(t) }
+    else { setFrom(''); setTo('') }
+  }
 
-  const handleExportCSV = () => {
-    let csvRows: string[] = []
-
-    if (activeReportTab === 'daily') {
-      csvRows = [
-        'Component,Quantity,Turnover_PKR,Notes',
-        `PMG Super,${fuelSales.filter((s) => s.fuelType === 'PMG Super').reduce((a, b) => a + b.netLiters, 0)} L,${Math.round(fuelSales.filter((s) => s.fuelType === 'PMG Super').reduce((a, b) => a + b.totalAmount, 0))},Retail customer vehicles`,
-        `HSD Diesel,${fuelSales.filter((s) => s.fuelType === 'HSD Diesel').reduce((a, b) => a + b.netLiters, 0)} L,${Math.round(fuelSales.filter((s) => s.fuelType === 'HSD Diesel').reduce((a, b) => a + b.totalAmount, 0))},Commercial fleet and machinery`,
-        `Hi-Octane,${fuelSales.filter((s) => s.fuelType === 'Hi-Octane').reduce((a, b) => a + b.netLiters, 0)} L,${Math.round(fuelSales.filter((s) => s.fuelType === 'Hi-Octane').reduce((a, b) => a + b.totalAmount, 0))},High compression engines`,
-        `Lubricants,Various Packs,${totalLubeRevenue},Retail engine oils & grease`,
-        `Total Operating Expenses,-,-${totalExpenses},Station operations & utilities`,
-        `Net Estimated Profit,-,${Math.round(netEstimatedProfit)},Gross commission minus operational expenses`,
+  const exportCsv = () => {
+    let rows: unknown[][]
+    if (tab === 'daily' || tab === 'profit') {
+      rows = [
+        ['Component', 'Liters', 'Revenue_PKR', 'Dealer_margin_PKR'],
+        ...profit.fuel.map((f) => [f.fuelType, f.liters, Math.round(f.revenue), Math.round(f.margin)]),
+        ['Lubricants (counter sales)', `${lubeCans} cans`, Math.round(profit.lubeSales), Math.round(profit.lubeMargin)],
+        ['Operating expenses', '', '', -Math.round(profit.expenses)],
+        ['Staff salaries (gross)', '', '', -Math.round(profit.salaries)],
+        ['Net estimated profit', '', '', Math.round(profit.netProfit)],
       ]
-    } else if (activeReportTab === 'nozzles') {
-      csvRows = [
-        'Dispenser,Nozzle,Fuel_Type,Opening_Meter,Closing_Meter,Testing_Liters,Net_Liters,Rate_PKR,Total_Amount_PKR,Cashier',
-        ...fuelSales.map(
-          (s) =>
-            `Dispenser ${s.dispenserNo},Nozzle ${s.nozzleNo},"${s.fuelType}",${s.openingMeter},${s.closingMeter},${s.testingLiters},${s.netLiters},${s.ratePerLiter},${s.totalAmount},"${s.cashierName}"`
-        ),
-      ]
-    } else if (activeReportTab === 'dip-audit') {
-      csvRows = [
-        'Date,Tank_ID,Fuel_Type,Morning_Dip_mm,Closing_Dip_mm,Physical_Liters,Book_Liters,Variance_Liters,Water_Dip_mm,Inspector',
-        ...tankDips.map(
-          (d) =>
-            `${d.date},${d.tankId},"${d.fuelType}",${d.morningDipMm},${d.closingDipMm},${d.closingPhysicalLiters},${d.bookStockLiters},${d.varianceLiters},${d.waterDipMm},"${d.inspector}"`
-        ),
+    } else if (tab === 'nozzles') {
+      rows = [
+        ['Date', 'Shift', 'Dispenser', 'Nozzle', 'Fuel', 'Opening', 'Closing', 'Testing_L', 'Net_L', 'Rate', 'Amount_PKR', 'Attendant'],
+        ...sales.map((s) => [s.date, s.shiftName, s.dispenserNo, s.nozzleNo, s.fuelType, s.openingMeter, s.closingMeter, s.testingLiters, s.netLiters, s.ratePerLiter, s.totalAmount, s.cashierName]),
       ]
     } else {
-      csvRows = [
-        'Profit_Center,Basis_Quantity,Margin_Rate_PKR,Gross_Margin_PKR',
-        `PMG Super Dealer Margin,${fuelSales.filter((s) => s.fuelType === 'PMG Super').reduce((a, b) => a + b.netLiters, 0)} L,8.64,${Math.round(fuelSales.filter((s) => s.fuelType === 'PMG Super').reduce((a, b) => a + b.netLiters, 0) * 8.64)}`,
-        `HSD Diesel Dealer Margin,${fuelSales.filter((s) => s.fuelType === 'HSD Diesel').reduce((a, b) => a + b.netLiters, 0)} L,8.64,${Math.round(fuelSales.filter((s) => s.fuelType === 'HSD Diesel').reduce((a, b) => a + b.netLiters, 0) * 8.64)}`,
-        `Hi-Octane Dealer Margin,${fuelSales.filter((s) => s.fuelType === 'Hi-Octane').reduce((a, b) => a + b.netLiters, 0)} L,8.64,${Math.round(fuelSales.filter((s) => s.fuelType === 'Hi-Octane').reduce((a, b) => a + b.netLiters, 0) * 8.64)}`,
-        `Lubricants Gross Margin,Rs ${totalLubeRevenue},18%,${Math.round(estimatedLubeMargin)}`,
-        `Operating Expenses Deduction,-,-,${-totalExpenses}`,
-        `Net Estimated Station Profit,-,-,${Math.round(netEstimatedProfit)}`,
+      rows = [
+        ['Date', 'Tank', 'Fuel', 'Morning_mm', 'Closing_mm', 'Physical_L', 'Book_L', 'Variance_L', 'Water_mm', 'Inspector'],
+        ...dips.map((d) => [d.date, d.tankNo, d.fuelType, d.morningDipMm, d.closingDipMm, d.closingPhysicalLiters, d.bookStockLiters, d.varianceLiters, d.waterDipMm, d.inspector]),
       ]
     }
-
-    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(['﻿' + toCsv(rows)], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `mashaal-report-${activeReportTab}-${siteInfo.code.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.csv`
+    link.download = `mashaal-report-${tab}-${siteInfo.code.replace(/\s+/g, '-')}-${todayISO()}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-
-    setExportNotice(true)
-    setTimeout(() => setExportNotice(false), 3500)
+    toast.success('Report exported for Excel.')
   }
 
   return (
     <div className="page-content-wrapper">
-      <div className="page-title-banner">
-        <div>
-          <span className="page-eyebrow">EXECUTIVE AUDIT & ANALYTICS</span>
-          <h2 className="page-heading">Station Reports & Intelligence</h2>
-          <p className="page-sub">
-            Daily consolidated audits, nozzle performance, tank dip loss/gain, and dealer commission profit analysis
-          </p>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-outline" onClick={handleExportCSV}>
-            <FileTextIcon size={16} />
-            <span>Export CSV / Excel</span>
-          </button>
-          <button className="btn btn-primary" onClick={() => setPrintOpen(true)}>
-            <PrinterIcon size={16} />
-            <span>Print Current Report</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="EXECUTIVE AUDIT & ANALYTICS"
+        title="Station Reports & Intelligence"
+        subtitle="Consolidated audits, nozzle performance, tank dip loss / gain and estimated dealer profit — for any period"
+        actions={
+          <>
+            <button type="button" className="btn btn-outline" onClick={exportCsv}><FileTextIcon size={16} /><span>Export CSV / Excel</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Current Report</span></button>
+          </>
+        }
+      />
 
-      {exportNotice && (
-        <div className="alert-ribbon-success">
-          <CheckCircleIcon size={18} color="#27ae60" />
-          <span>Report successfully formatted and exported for Excel analysis.</span>
-        </div>
-      )}
+      <FilterBar>
+        <div className="form-group"><label className="form-label">From</label><input type="date" className="form-input" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} /></div>
+        <div className="form-group"><label className="form-label">To</label><input type="date" className="form-input" value={to} min={from || undefined} max={todayISO()} onChange={(e) => setTo(e.target.value)} /></div>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => preset('today')}>Today</button>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => preset('week')}>Last 7 days</button>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => preset('month')}>This month</button>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => preset('all')}>All time</button>
+      </FilterBar>
 
-      {/* Report Switcher Tabs */}
-      <div className="report-tab-strip">
-        <button
-          className={`report-tab-btn ${activeReportTab === 'daily' ? 'active' : ''}`}
-          onClick={() => setActiveReportTab('daily')}
-        >
-          Daily Consolidated Audit
-        </button>
-        <button
-          className={`report-tab-btn ${activeReportTab === 'nozzles' ? 'active' : ''}`}
-          onClick={() => setActiveReportTab('nozzles')}
-        >
-          Nozzle-wise Breakdown
-        </button>
-        <button
-          className={`report-tab-btn ${activeReportTab === 'dip-audit' ? 'active' : ''}`}
-          onClick={() => setActiveReportTab('dip-audit')}
-        >
-          Tank Dip Variance (Loss / Gain)
-        </button>
-        <button
-          className={`report-tab-btn ${activeReportTab === 'profit' ? 'active' : ''}`}
-          onClick={() => setActiveReportTab('profit')}
-        >
-          Dealer Profit & Margin Analysis
-        </button>
-      </div>
+      <Tabs
+        tabs={[{ id: 'daily', label: 'Consolidated audit' }, { id: 'nozzles', label: 'Nozzle-wise breakdown' }, { id: 'dip-audit', label: 'Tank dip variance' }, { id: 'profit', label: 'Dealer profit & margin' }]}
+        active={tab}
+        onChange={(t) => setTab(t as Tab)}
+      />
 
-      {/* Report 1: Daily Consolidated */}
-      {activeReportTab === 'daily' && (
-        <div className="table-surface">
-          <div className="table-surface-header">
-            <div>
-              <h3 className="surface-heading">Daily Consolidated Station Report</h3>
-              <p className="surface-sub">Comprehensive overview of all revenue, outflows, and credit</p>
-            </div>
-          </div>
-
-          <div className="executive-kpi-strip">
-            <div className="kpi-cell">
-              <span className="kpi-label">Gross Fuel Sales</span>
-              <strong className="kpi-cell-value text-gold">Rs {Math.round(totalFuelRevenue).toLocaleString()}</strong>
-              <span className="kpi-cell-sub">{totalFuelLiters.toLocaleString()} L dispensed</span>
-            </div>
-            <div className="kpi-cell">
-              <span className="kpi-label">Lubricant Sales</span>
-              <strong className="kpi-cell-value">Rs {totalLubeRevenue.toLocaleString()}</strong>
-              <span className="kpi-cell-sub">Counter retail sales</span>
-            </div>
-            <div className="kpi-cell">
-              <span className="kpi-label">Total Station Expenses</span>
-              <strong className="kpi-cell-value text-red">Rs {totalExpenses.toLocaleString()}</strong>
-              <span className="kpi-cell-sub">{expenses.length} operating vouchers</span>
-            </div>
-            <div className="kpi-cell">
-              <span className="kpi-label">Customer Receivables</span>
-              <strong className="kpi-cell-value">Rs {totalCustomerReceivables.toLocaleString()}</strong>
-              <span className="kpi-cell-sub">Active fleet credit</span>
-            </div>
-          </div>
-
+      {tab === 'daily' && (
+        <SectionCard title="Consolidated Station Report" subtitle={`Revenue, outflows and credit — ${periodLabel}`}>
+          <KpiStrip>
+            <Kpi label="Gross fuel sales" value={rs(profit.fuelRevenue)} tone="gold" sub={`${profit.liters.toLocaleString()} L dispensed`} />
+            <Kpi label="Lubricant sales" value={rs(profit.lubeSales)} sub={`${lubeCans} can(s) sold at the counter`} />
+            <Kpi label="Station expenses" value={rs(profit.expenses)} tone="red" sub="Vouchers in this period" />
+            <Kpi label="Customer receivables" value={rs(receivables)} sub="Outstanding today" />
+          </KpiStrip>
           <div className="table-responsive">
             <table className="clean-table">
-              <thead>
-                <tr>
-                  <th>Component</th>
-                  <th>Quantity / Count</th>
-                  <th>Total Turnover (PKR)</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Component</th><th>Quantity</th><th>Turnover (PKR)</th></tr></thead>
               <tbody>
-                <tr>
-                  <td><strong>Motor Gasoline (PMG Super 92)</strong></td>
-                  <td>{fuelSales.filter((s) => s.fuelType === 'PMG Super').reduce((a, b) => a + b.netLiters, 0).toLocaleString()} L</td>
-                  <td className="text-gold font-bold">Rs {Math.round(fuelSales.filter((s) => s.fuelType === 'PMG Super').reduce((a, b) => a + b.totalAmount, 0)).toLocaleString()}</td>
-                  <td>Retail customer vehicles</td>
-                </tr>
-                <tr>
-                  <td><strong>High Speed Diesel (HSD)</strong></td>
-                  <td>{fuelSales.filter((s) => s.fuelType === 'HSD Diesel').reduce((a, b) => a + b.netLiters, 0).toLocaleString()} L</td>
-                  <td className="text-gold font-bold">Rs {Math.round(fuelSales.filter((s) => s.fuelType === 'HSD Diesel').reduce((a, b) => a + b.totalAmount, 0)).toLocaleString()}</td>
-                  <td>Commercial trucks, tractors, buses</td>
-                </tr>
-                <tr>
-                  <td><strong>Altron / Hi-Octane</strong></td>
-                  <td>{fuelSales.filter((s) => s.fuelType === 'Hi-Octane').reduce((a, b) => a + b.netLiters, 0).toLocaleString()} L</td>
-                  <td className="text-gold font-bold">Rs {Math.round(fuelSales.filter((s) => s.fuelType === 'Hi-Octane').reduce((a, b) => a + b.totalAmount, 0)).toLocaleString()}</td>
-                  <td>Luxury cars & sports sedans</td>
-                </tr>
-                <tr>
-                  <td><strong>Motor Oils & Lubricants</strong></td>
-                  <td>Various Packs</td>
-                  <td className="text-green font-bold">Rs {totalLubeRevenue.toLocaleString()}</td>
-                  <td>Quartz & Carient oil packs</td>
-                </tr>
+                {profit.fuel.map((f) => <tr key={f.fuelType}><td><strong>{f.fuelType}</strong></td><td>{f.liters.toLocaleString()} L</td><td className="text-gold font-bold">{rs(f.revenue)}</td></tr>)}
+                <tr><td><strong>Motor oils & lubricants</strong></td><td>{lubeCans} cans</td><td className="text-green font-bold">{rs(profit.lubeSales)}</td></tr>
               </tbody>
             </table>
           </div>
-        </div>
+        </SectionCard>
       )}
 
-      {/* Report 2: Nozzle Breakdown */}
-      {activeReportTab === 'nozzles' && (
-        <div className="table-surface">
-          <div className="table-surface-header">
-            <div>
-              <h3 className="surface-heading">Nozzle-wise Dispenser Performance</h3>
-              <p className="surface-sub">Liters dispensed and total collected per individual nozzle</p>
-            </div>
-          </div>
-
+      {tab === 'nozzles' && (
+        <SectionCard title="Nozzle-wise Dispenser Performance" subtitle={`Liters and revenue per reading — ${periodLabel}`}>
           <div className="table-responsive">
             <table className="clean-table">
-              <thead>
-                <tr>
-                  <th>Dispenser / Nozzle</th>
-                  <th>Fuel Product</th>
-                  <th>Opening</th>
-                  <th>Closing</th>
-                  <th>Testing (L)</th>
-                  <th>Net Liters</th>
-                  <th>Revenue (PKR)</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Date</th><th>Nozzle</th><th>Fuel</th><th>Opening</th><th>Closing</th><th>Testing</th><th>Net liters</th><th>Revenue</th></tr></thead>
               <tbody>
-                {fuelSales.map((s) => (
-                  <tr key={s.id}>
-                    <td><strong>D{s.dispenserNo}-N{s.nozzleNo}</strong></td>
-                    <td><span className="fuel-pill">{s.fuelType}</span></td>
-                    <td>{s.openingMeter.toLocaleString()}</td>
-                    <td>{s.closingMeter.toLocaleString()}</td>
-                    <td>{s.testingLiters} L</td>
-                    <td><strong>{s.netLiters.toLocaleString()} L</strong></td>
-                    <td className="text-gold font-bold">Rs {Math.round(s.totalAmount).toLocaleString()}</td>
-                  </tr>
+                {sales.length === 0 ? <EmptyRow colSpan={8}>No readings in this period.</EmptyRow> : sales.map((s) => (
+                  <tr key={s.id}><td>{formatDate(s.date)} <span className="text-muted text-xs">{s.shiftName}</span></td><td><strong>D{s.dispenserNo}-N{s.nozzleNo}</strong></td><td><span className="fuel-pill">{s.fuelType}</span></td><td>{s.openingMeter.toLocaleString()}</td><td>{s.closingMeter.toLocaleString()}</td><td>{s.testingLiters} L</td><td><strong>{s.netLiters.toLocaleString()} L</strong></td><td className="text-gold font-bold">{rs(s.totalAmount)}</td></tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </SectionCard>
       )}
 
-      {/* Report 3: Tank Dip Audit */}
-      {activeReportTab === 'dip-audit' && (
-        <div className="table-surface">
-          <div className="table-surface-header">
-            <div>
-              <h3 className="surface-heading">Tank Dip Loss & Gain Audit</h3>
-              <p className="surface-sub">Physical dip stick verification vs calculated theoretical book stock</p>
-            </div>
-          </div>
-
+      {tab === 'dip-audit' && (
+        <SectionCard title="Tank Dip Loss & Gain Audit" subtitle={`Physical dip stick vs book stock — ${periodLabel}`}>
           <div className="table-responsive">
             <table className="clean-table">
-              <thead>
-                <tr>
-                  <th>Tank #</th>
-                  <th>Fuel</th>
-                  <th>Capacity</th>
-                  <th>Morning Liters</th>
-                  <th>Decanted (+)</th>
-                  <th>Sales (-)</th>
-                  <th>Theoretical Book</th>
-                  <th>Actual Physical Dip</th>
-                  <th>Variance</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Date</th><th>Tank</th><th>Fuel</th><th>Capacity</th><th>Morning</th><th>Decanted (+)</th><th>Sales (−)</th><th>Book</th><th>Physical</th><th>Variance</th></tr></thead>
               <tbody>
-                {tankDips.map((d) => (
+                {dips.length === 0 ? <EmptyRow colSpan={10}>No dip records in this period.</EmptyRow> : dips.map((d) => (
                   <tr key={d.id}>
-                    <td><strong>Tank #{d.tankNo}</strong></td>
-                    <td><span className="fuel-pill">{d.fuelType}</span></td>
-                    <td>{tanks.find((t) => t.id === d.tankId)?.capacityLiters.toLocaleString()} L</td>
-                    <td>{d.morningLiters.toLocaleString()} L</td>
-                    <td>{d.decantedLiters > 0 ? `+${d.decantedLiters.toLocaleString()} L` : '0 L'}</td>
-                    <td>-{d.dispensedLiters.toLocaleString()} L</td>
-                    <td>{d.bookStockLiters.toLocaleString()} L</td>
+                    <td>{formatDate(d.date)}</td><td><strong>#{d.tankNo}</strong></td><td><span className="fuel-pill">{d.fuelType}</span></td>
+                    <td>{tanks.find((t) => t.id === d.tankId)?.capacityLiters.toLocaleString() ?? '—'} L</td><td>{d.morningLiters.toLocaleString()} L</td>
+                    <td>{d.decantedLiters > 0 ? `+${d.decantedLiters.toLocaleString()} L` : '—'}</td><td>-{d.dispensedLiters.toLocaleString()} L</td><td>{d.bookStockLiters.toLocaleString()} L</td>
                     <td><strong>{d.closingPhysicalLiters.toLocaleString()} L ({d.closingDipMm} mm)</strong></td>
-                    <td>
-                      {d.varianceLiters < 0 ? (
-                        <span className="badge badge-danger">Loss: {Math.abs(d.varianceLiters)} L</span>
-                      ) : (
-                        <span className="badge badge-neutral">0 L (Balanced)</span>
-                      )}
-                    </td>
+                    <td>{d.varianceLiters < 0 ? <span className="badge badge-danger">Loss: {Math.abs(d.varianceLiters)} L</span> : d.varianceLiters > 0 ? <span className="badge badge-success">Gain: +{d.varianceLiters} L</span> : <span className="badge badge-neutral">0 L (balanced)</span>}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </SectionCard>
       )}
 
-      {/* Report 4: Dealer Profit & Margin */}
-      {activeReportTab === 'profit' && (
-        <div className="table-surface">
-          <div className="table-surface-header">
-            <div>
-              <h3 className="surface-heading">Estimated Dealer Margin & Net Profitability</h3>
-              <p className="surface-sub">Calculation of authorized dealer commission minus daily operational overheads</p>
-            </div>
+      {tab === 'profit' && (
+        <SectionCard title="Estimated Dealer Margin & Net Profitability" subtitle={`Dealer commission (margins from Settings) plus lubricant margin, minus expenses and salaries — ${periodLabel}`}>
+          <KpiStrip>
+            <Kpi label="Fuel dealer commission" value={rs(profit.dealerMargin)} tone="gold" sub={`On ${profit.liters.toLocaleString()} L at the margins set in Settings`} />
+            <Kpi label="Lubricant margin" value={rs(profit.lubeMargin)} tone="green" sub="Sales minus cost of cans sold" />
+            <Kpi label="Expenses + salaries" value={`- ${rs(profit.expenses + profit.salaries)}`} tone="red" sub={`Expenses ${rs(profit.expenses)} • salaries ${rs(profit.salaries)}`} />
+            <Kpi label="Net estimated profit" value={rs(profit.netProfit)} tone={profit.netProfit >= 0 ? 'green' : 'red'} sub="Estimate — not an accountant's statement" />
+          </KpiStrip>
+          <div className="table-responsive">
+            <table className="clean-table">
+              <thead><tr><th>Profit centre</th><th>Liters</th><th>Margin / L</th><th>Gross margin (PKR)</th></tr></thead>
+              <tbody>
+                {profit.fuel.map((f) => <tr key={f.fuelType}><td><strong>{f.fuelType} dealer margin</strong></td><td>{f.liters.toLocaleString()} L</td><td>Rs {settings.margins[f.fuelType]}</td><td className="text-gold font-bold">{rs(f.margin)}</td></tr>)}
+                <tr><td><strong>Lubricants gross margin</strong></td><td>{lubeCans} cans</td><td>—</td><td className="text-green font-bold">{rs(profit.lubeMargin)}</td></tr>
+                <tr><td><strong>Operating expenses</strong></td><td>—</td><td>—</td><td className="text-red font-bold">- {rs(profit.expenses)}</td></tr>
+                <tr><td><strong>Staff salaries (gross)</strong></td><td>—</td><td>—</td><td className="text-red font-bold">- {rs(profit.salaries)}</td></tr>
+              </tbody>
+            </table>
           </div>
-
-          <div className="executive-kpi-strip">
-            <div className="kpi-cell">
-              <span className="kpi-label">Gross Fuel Dealer Commission</span>
-              <strong className="kpi-cell-value text-gold">Rs {Math.round(estimatedDealerMargin).toLocaleString()}</strong>
-              <span className="kpi-cell-sub">Avg Rs 8.64/L margin on {totalFuelLiters.toLocaleString()} L</span>
-            </div>
-            <div className="kpi-cell">
-              <span className="kpi-label">Lubricants Retail Margin</span>
-              <strong className="kpi-cell-value text-green">Rs {Math.round(estimatedLubeMargin).toLocaleString()}</strong>
-              <span className="kpi-cell-sub">18% profit on lube counter sales</span>
-            </div>
-            <div className="kpi-cell">
-              <span className="kpi-label">Operational Overheads</span>
-              <strong className="kpi-cell-value text-red">- Rs {totalExpenses.toLocaleString()}</strong>
-              <span className="kpi-cell-sub">WAPDA, generator, staff meals</span>
-            </div>
-            <div className="kpi-cell">
-              <span className="kpi-label">Net Estimated Station Profit</span>
-              <strong className="kpi-cell-value text-green font-bold">
-                Rs {Math.round(netEstimatedProfit).toLocaleString()}
-              </strong>
-              <span className="kpi-cell-sub">Estimated net daily earnings</span>
-            </div>
-          </div>
-        </div>
+        </SectionCard>
       )}
 
-      {/* Print Slip */}
-      <PrintReceiptModal
-        isOpen={printOpen}
-        onClose={() => setPrintOpen(false)}
-        title="Official Station Management Report"
-        stationName={siteInfo.name}
-        stationLocation={siteInfo.location}
-        stationPhone={siteInfo.phone}
-      >
-        <div className="slip-meta-grid">
-          <div><strong>Report:</strong> {activeReportTab.toUpperCase()}</div>
-          <div><strong>Date:</strong> {new Date().toLocaleDateString()}</div>
-          <div><strong>Manager:</strong> {siteInfo.managerName}</div>
-          <div><strong>Station:</strong> {siteInfo.code}</div>
-        </div>
-
+      <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Official Station Management Report" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
+        <div className="slip-meta-grid"><div><strong>Period:</strong> {periodLabel}</div><div><strong>Station:</strong> {siteInfo.code}</div></div>
         <div className="receipt-divider" />
         <div className="slip-summary-list">
-          <div className="slip-row">
-            <span>Total Fuel Revenue:</span>
-            <strong>Rs {Math.round(totalFuelRevenue).toLocaleString()}</strong>
-          </div>
-          <div className="slip-row">
-            <span>Total Fuel Liters Dispensed:</span>
-            <span>{totalFuelLiters.toLocaleString()} Liters</span>
-          </div>
-          <div className="slip-row">
-            <span>Lubricants Revenue:</span>
-            <span>Rs {totalLubeRevenue.toLocaleString()}</span>
-          </div>
-          <div className="slip-row">
-            <span>Operational Expenses:</span>
-            <span className="text-red">- Rs {totalExpenses.toLocaleString()}</span>
-          </div>
+          <div className="slip-row"><span>Fuel revenue:</span><strong>{rs(profit.fuelRevenue)}</strong></div>
+          <div className="slip-row"><span>Fuel dispensed:</span><span>{profit.liters.toLocaleString()} L</span></div>
+          <div className="slip-row"><span>Dealer commission (est.):</span><span>{rs(profit.dealerMargin)}</span></div>
+          <div className="slip-row"><span>Lubricant margin:</span><span>{rs(profit.lubeMargin)}</span></div>
+          <div className="slip-row"><span>Operating expenses:</span><span className="text-red">- {rs(profit.expenses)}</span></div>
+          <div className="slip-row"><span>Staff salaries:</span><span className="text-red">- {rs(profit.salaries)}</span></div>
           <div className="receipt-divider" />
-          <div className="slip-row highlight">
-            <span>Net Estimated Profit:</span>
-            <strong className="text-gold">Rs {Math.round(netEstimatedProfit).toLocaleString()}</strong>
-          </div>
+          <div className="slip-row highlight"><span>Net estimated profit:</span><strong>{rs(profit.netProfit)}</strong></div>
         </div>
       </PrintReceiptModal>
     </div>

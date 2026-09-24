@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local data backups (contain financial records)
+backups/
+
+# secrets / local config
+.env
+.env.*
+!.env.example

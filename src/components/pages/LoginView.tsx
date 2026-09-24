@@ -13,21 +13,22 @@ import {
 import type { UserRole } from '../../types'
 
 export const LoginView: React.FC = () => {
-  const { login, loginError, activeSiteData, exitSite } = useApp()
-  const [username, setUsername] = useState('station.manager')
+  const { login, loginError, loggingIn, stations, activeSiteId, exitSite } = useApp()
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [selectedRole, setSelectedRole] = useState<UserRole>('manager')
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null)
   const [keepSignedIn, setKeepSignedIn] = useState(true)
 
-  const site = activeSiteData?.siteInfo
+  const site = stations.find((s) => s.id === activeSiteId)
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    login(username, password, keepSignedIn)
+    if (loggingIn) return
+    void login(username, password, keepSignedIn, selectedRole ?? undefined)
   }
 
-  const isParco = site?.brand === 'TOTAL PARCO' || site?.code === 'SITE 01'
+  const isParco = site?.brand === 'TOTAL PARCO'
 
   return (
     <div className={`luxury-auth-viewport ${isParco ? 'theme-parco' : 'theme-pso'}`}>
@@ -78,19 +79,19 @@ export const LoginView: React.FC = () => {
 
               {/* Badges: [SITE 01/02] and [BRAND] */}
               <div className="auth-badge-duo">
-                <span className="auth-site-pill">{site?.code || 'SITE 01'}</span>
-                <span className="auth-brand-pill">{site?.brand || 'TOTAL PARCO'}</span>
+                <span className="auth-site-pill">{site?.code || ''}</span>
+                <span className="auth-brand-pill">{site?.brand || ''}</span>
               </div>
             </div>
 
             {/* Station Name in High-Contrast Luxury Serif */}
             <h1 className="auth-station-title">
-              {site?.name || 'Mashaal Total PARCO Station'}
+              {site?.name || ''}
             </h1>
 
             {/* Station Location */}
             <p className="auth-station-location">
-              {site?.location || 'Khanpur Road, Rahim Yar Khan'}
+              {site?.location || ''}
             </p>
 
             {/* Diamond Divider */}
@@ -104,7 +105,7 @@ export const LoginView: React.FC = () => {
           <div className="auth-card-main-content">
             {/* Segmented Role Selection */}
             <div className="auth-role-section">
-              <span className="auth-role-eyebrow">S I G N &nbsp; I N &nbsp; A S</span>
+              <span className="auth-role-eyebrow">S I G N &nbsp; I N &nbsp; A S &nbsp; (optional)</span>
               <div className="auth-segmented-control" role="tablist">
                 <button
                   type="button"
@@ -112,9 +113,7 @@ export const LoginView: React.FC = () => {
                   aria-selected={selectedRole === 'manager'}
                   className={`auth-segment-btn ${selectedRole === 'manager' ? 'active' : ''}`}
                   onClick={() => {
-                    setSelectedRole('manager')
-                    setUsername('station.manager')
-                    setPassword('')
+                    setSelectedRole(selectedRole === 'manager' ? null : 'manager')
                   }}
                 >
                   Station Manager
@@ -125,9 +124,7 @@ export const LoginView: React.FC = () => {
                   aria-selected={selectedRole === 'cashier'}
                   className={`auth-segment-btn ${selectedRole === 'cashier' ? 'active' : ''}`}
                   onClick={() => {
-                    setSelectedRole('cashier')
-                    setUsername('station.cashier')
-                    setPassword('')
+                    setSelectedRole(selectedRole === 'cashier' ? null : 'cashier')
                   }}
                 >
                   Cashier
@@ -138,9 +135,7 @@ export const LoginView: React.FC = () => {
                   aria-selected={selectedRole === 'owner'}
                   className={`auth-segment-btn ${selectedRole === 'owner' ? 'active' : ''}`}
                   onClick={() => {
-                    setSelectedRole('owner')
-                    setUsername('owner')
-                    setPassword('')
+                    setSelectedRole(selectedRole === 'owner' ? null : 'owner')
                   }}
                 >
                   Owner
@@ -166,6 +161,9 @@ export const LoginView: React.FC = () => {
                     placeholder="Enter your username or staff ID"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    autoFocus
                     required
                   />
                 </div>
@@ -187,6 +185,7 @@ export const LoginView: React.FC = () => {
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
                     required
                   />
                   <button
@@ -232,10 +231,10 @@ export const LoginView: React.FC = () => {
               </div>
 
               {/* Primary Action Button */}
-              <button type="submit" className="auth-primary-btn">
+              <button type="submit" className="auth-primary-btn" disabled={loggingIn}>
                 <span className="btn-arrow-mark">→</span>
                 <span className="btn-cta-text">
-                  Open {site?.code || 'SITE 01'} Workspace
+                  {loggingIn ? 'Signing in…' : `Open ${site?.code || 'station'} Workspace`}
                 </span>
               </button>
             </form>
@@ -251,7 +250,7 @@ export const LoginView: React.FC = () => {
 
             <div className="auth-db-notice">
               <p className="notice-line-1">
-                Operating with independent database for {site?.name || 'Mashaal Total PARCO Station'}.
+                Operating with its own separate database tables for {site?.name || 'this station'}.
               </p>
               <p className="notice-line-2">No combined records.</p>
             </div>

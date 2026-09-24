@@ -1,367 +1,205 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import { PlusIcon, PrinterIcon, CheckCircleIcon, XIcon } from '../common/Icons'
+import type { ExpenseCategory, ExpenseRecord } from '../../types'
+import { EXPENSE_CATEGORIES } from '../../types'
+import { formatDate, monthISO, todayISO } from '../../lib/dates'
+import { rs } from '../../lib/money'
+import { PlusIcon, PrinterIcon, CheckCircleIcon, EditIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
+import { Modal, FormError } from '../common/Modal'
+import { useConfirm } from '../common/Confirm'
+import { useToast } from '../common/Toast'
+import { useSubmit } from '../common/useSubmit'
+import { CalcStrip, EmptyRow, Field, FilterBar, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
 
-export const ExpensesView: React.FC = () => {
-  const { activeSiteData, addExpense, addDaybookEntry } = useApp()
-  const { expenses, siteInfo } = activeSiteData
+const ExpenseModal: React.FC<{ expense?: ExpenseRecord; onClose: () => void }> = ({ expense, onClose }) => {
+  const { activeSiteData, act, currentUser } = useApp()
+  const toast = useToast()
+  const isCashier = currentUser?.role === 'cashier'
+  const banks = activeSiteData.bankAccounts.filter((b) => b.isActive || b.id === expense?.bankAccountId)
+  const [category, setCategory] = useState<ExpenseCategory>(expense?.category ?? 'Staff Meals & Tea')
+  const [payee, setPayee] = useState(expense?.payee ?? '')
+  const [description, setDescription] = useState(expense?.description ?? '')
+  const [amount, setAmount] = useState(expense ? String(expense.amount) : '')
+  const [mode, setMode] = useState<'Cash' | 'Bank'>(expense?.paymentMode ?? 'Cash')
+  const [bankId, setBankId] = useState(expense?.bankAccountId || banks[0]?.id || '')
+  const [date, setDate] = useState(expense?.date ?? todayISO())
+  const [voucher, setVoucher] = useState(expense?.voucherNo ?? '')
+  const { busy, error, run } = useSubmit()
+  const bank = banks.find((b) => b.id === bankId)
+  const amt = Number(amount) || 0
 
-  const [modalOpen, setModalOpen] = useState(false)
-  const [printOpen, setPrintOpen] = useState(false)
-
-  // Expense Form
-  const [voucherNo, setVoucherNo] = useState(`VOU-${Math.floor(100 + Math.random() * 900)}`)
-  const [category, setCategory] = useState<any>('Staff Meals & Tea')
-  const [payee, setPayee] = useState('')
-  const [description, setDescription] = useState('')
-  const [amount, setAmount] = useState<number>(3000)
-  const [paymentMode, setPaymentMode] = useState<'Cash' | 'Bank'>('Cash')
-  const [approvedBy, setApprovedBy] = useState(siteInfo.managerName)
-
-  const handleSaveExpense = (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    addExpense({
-      voucherNo,
-      date: new Date().toISOString().split('T')[0],
-      category,
-      description,
-      payee,
-      amount,
-      paymentMode,
-      approvedBy,
-    })
-
-    // If paid by cash, also deduct from daybook cash safe
-    if (paymentMode === 'Cash') {
-      addDaybookEntry({
-        date: new Date().toISOString().split('T')[0],
-        time: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
-        particulars: `Expense: ${category} (${description})`,
-        category: 'Expense',
-        cashIn: 0,
-        cashOut: amount,
-        balanceAfter: 0,
-        referenceNo: voucherNo,
-        handledBy: approvedBy,
-      })
-    }
-
-    setModalOpen(false)
-    setDescription('')
-    setPayee('')
+    const input = { category, payee, description, amount: Number(amount), paymentMode: mode, bankAccountId: mode === 'Bank' ? bankId : '', date, voucherNo: voucher }
+    if (expense) void run((ack) => act.updateExpense(expense.id, { ...input, acknowledge: ack }), () => { toast.success('Expense updated.'); onClose() })
+    else void run((ack) => act.addExpense({ ...input, acknowledge: ack }), (x) => { toast.success(`Voucher ${x.voucherNo} saved — ${rs(x.amount)}${x.paymentMode === 'Cash' ? ' (deducted from the safe)' : ''}`); onClose() })
   }
 
-  const totalExpenseAmount = expenses.reduce((sum, e) => sum + e.amount, 0)
+  return (
+    <Modal title={expense ? `Edit Voucher ${expense.voucherNo}` : 'Create Station Expense Voucher'} subtitle="Deducted from the safe (cash) or a bank account" onClose={onClose} busy={busy} width={660}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Expense category">
+            <select className="form-input" value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)}>
+              {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Voucher number" hint={expense ? undefined : 'Leave empty to number automatically'}>
+            <input className="form-input" value={voucher} onChange={(e) => setVoucher(e.target.value)} placeholder="Automatic" />
+          </Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Paid to (payee / vendor)"><input className="form-input" value={payee} onChange={(e) => setPayee(e.target.value)} placeholder="e.g. Al-Madina Hotel" required autoFocus /></Field>
+          <Field label="Payment mode">
+            <select className="form-input" value={mode} onChange={(e) => setMode(e.target.value as 'Cash' | 'Bank')}>
+              <option value="Cash">Physical cash from the station safe</option>
+              {!isCashier && <option value="Bank">Bank transfer / cheque</option>}
+            </select>
+          </Field>
+        </Grid2>
+        {mode === 'Bank' && (
+          <Field label="Paid from bank account" hint={bank ? `Balance ${rs(bank.currentBalance)}` : 'Add a bank account in the Bank Sheet first'}>
+            <select className="form-input" value={bankId} onChange={(e) => setBankId(e.target.value)} required>{banks.map((b) => <option key={b.id} value={b.id}>{b.bankName} ({b.accountNumber})</option>)}</select>
+          </Field>
+        )}
+        <Field label="Description / detail"><input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. 50 L generator diesel during load-shedding" required /></Field>
+        <Grid2>
+          <Field label="Amount (PKR)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required /></Field>
+          <Field label="Date" hint={isCashier ? 'Cashiers record today only' : undefined}><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={isCashier} required /></Field>
+        </Grid2>
+        <CalcStrip items={[{ label: 'Category', value: category }, { label: 'Funding source', value: mode === 'Cash' ? 'Cash safe (daybook)' : bank?.bankName ?? 'Bank account', tone: 'gold' }, { label: 'Total expense', value: rs(amt), tone: 'red' }]} />
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : expense ? 'Save changes' : 'Save expense voucher'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+export const ExpensesView: React.FC = () => {
+  const { activeSiteData, act, currentUser } = useApp()
+  const { expenses, siteInfo, bankAccounts } = activeSiteData
+  const isManager = currentUser?.role !== 'cashier'
+  const confirm = useConfirm()
+  const toast = useToast()
+  const [form, setForm] = useState<{ expense?: ExpenseRecord } | null>(null)
+  const [printOpen, setPrintOpen] = useState(false)
+  const [month, setMonth] = useState(monthISO())
+  const [category, setCategory] = useState<'all' | ExpenseCategory>('all')
+
+  const months = useMemo(() => {
+    const set = new Set<string>([monthISO()])
+    for (const e of expenses) if (e.date.length >= 7) set.add(e.date.slice(0, 7))
+    return [...set].sort().reverse()
+  }, [expenses])
+  const rows = useMemo(() => expenses.filter((e) => (month === 'all' || e.date.startsWith(month)) && (category === 'all' || e.category === category)), [expenses, month, category])
+  const total = rows.reduce((s, e) => s + e.amount, 0)
+  const cash = rows.filter((e) => e.paymentMode === 'Cash').reduce((s, e) => s + e.amount, 0)
+  const bank = total - cash
+
+  const removeExpense = async (e: ExpenseRecord) => {
+    const yes = await confirm({ title: `Delete voucher ${e.voucherNo}?`, message: `${e.category} — ${rs(e.amount)} paid to ${e.payee}. The ${e.paymentMode === 'Cash' ? 'cash-book' : 'bank'} line created with it is removed too and the balance is restored.`, confirmLabel: 'Delete voucher', tone: 'danger' })
+    if (!yes) return
+    const r = await act.removeExpense(e.id)
+    if (r.ok) toast.success('Voucher deleted.'); else toast.error(r.error)
+  }
 
   return (
     <div className="page-content-wrapper">
-      <div className="page-title-banner">
-        <div>
-          <span className="page-eyebrow">STATION OVERHEADS</span>
-          <h2 className="page-heading">Station Expenses & Vouchers</h2>
-          <p className="page-sub">
-            Generator diesel, electricity bills, dispenser repairs, staff food & tea, and station supplies
-          </p>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-outline" onClick={() => setPrintOpen(true)}>
-            <PrinterIcon size={16} />
-            <span>Print Expense Sheet</span>
-          </button>
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
-            <PlusIcon size={16} />
-            <span>New Expense Voucher</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="STATION OVERHEADS"
+        title="Station Expenses & Vouchers"
+        subtitle="Generator diesel, electricity bills, dispenser repairs, staff food & tea, and station supplies"
+        actions={
+          <>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Expense Sheet</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setForm({})}><PlusIcon size={16} /><span>New Expense Voucher</span></button>
+          </>
+        }
+      />
 
-      {/* Module Operational Guide */}
       <ModuleGuide
         title="Station Operating Expenses & Overheads Guide"
         urduTitle="اسٹیشن کے روزمرہ اخراجات کی رہنمائی"
         role="manager"
         roleLabel="Station Manager"
-        purpose="Record forecourt operational expenses: generator diesel during load-shedding, commercial electricity, dispenser nozzle calibration/parts, staff meals, and municipal fees."
+        purpose="Record forecourt operating expenses. Cash expenses leave the safe (daybook) and bank expenses leave the chosen bank account — automatically, in the same step."
         steps={[
-          {
-            step: 1,
-            title: 'Select Expense Category (مد کا انتخاب)',
-            detail: 'Classify as Generator Fuel, WAPDA Electricity, Dispenser Spares, Staff Meals/Tea, or Municipal Fees.',
-            urdu: 'صحیح شعبہ منتخب کریں جیسے جنریٹر ڈیزل، بجلی کا بل یا پمپ کی مرمت۔',
-          },
-          {
-            step: 2,
-            title: 'Choose Payment Mode (ادائیگی کا طریقہ)',
-            detail: 'Pick "Physical Cash from Safe" for forecourt disbursements or "Bank Transfer" for corporate utility bills.',
-            urdu: 'سیف سے نقد ادائیگی یا بینک چیک/آن لائن ٹرانسفر کا انتخاب کریں۔',
-          },
-          {
-            step: 3,
-            title: 'Enter Payee & Details (دکان دار اور تفصیل)',
-            detail: 'Input vendor/hotel name and itemized description (e.g. 50L generator fuel or nozzle seal replacement).',
-            urdu: 'دکان دار کا نام اور اخراجات کی مکمل تفصیل درج کریں۔',
-          },
-          {
-            step: 4,
-            title: 'Automatic Daybook Deduction (خودکار کٹوتی)',
-            detail: 'Cash expenses automatically post a cash-out entry into the Daybook and deduct from safe cash.',
-            urdu: 'نقد خرچ خودکار طور پر ڈے بک سے منہا ہو جائے گا۔',
-          },
+          { step: 1, title: 'Select category (مد)', detail: 'Generator fuel, WAPDA electricity, dispenser repairs, staff meals, municipal fees, stationery or miscellaneous.', urdu: 'صحیح شعبہ منتخب کریں۔' },
+          { step: 2, title: 'Choose payment mode (ادائیگی)', detail: 'Cash from the safe, or (managers) a bank account.', urdu: 'سیف سے نقد یا بینک اکاؤنٹ سے ادائیگی منتخب کریں۔' },
+          { step: 3, title: 'Enter payee & details (تفصیل)', detail: 'Vendor name and what was bought.', urdu: 'دکان دار کا نام اور خرچ کی تفصیل درج کریں۔' },
+          { step: 4, title: 'Edit or delete (درستگی)', detail: 'Managers can correct or delete a voucher; the safe or bank balance follows.', urdu: 'مینیجر وائوچر درست یا حذف کر سکتا ہے۔' },
         ]}
         criticalChecks={[
-          'Cash vouchers immediately reduce Daybook cash-in-hand — verify manager authorization.',
-          'Always retain vendor physical cash memo or repair invoice attached to the voucher.',
-          'Large corporate utility bills (WAPDA) should be settled via station Bank Account.',
+          'Cash vouchers reduce the safe immediately — verify manager authorization.',
+          'Keep the vendor\'s cash memo or repair invoice attached to the voucher.',
+          'Large utility bills should be paid from a bank account.',
         ]}
       />
 
-      {/* KPI Ribbon */}
-      <div className="executive-kpi-strip">
-        <div className="kpi-cell">
-          <span className="kpi-label">Total Recorded Expenses</span>
-          <strong className="kpi-cell-value text-red">Rs {totalExpenseAmount.toLocaleString()}</strong>
-          <span className="kpi-cell-sub">{expenses.length} Vouchers approved</span>
+      <FilterBar>
+        <div className="form-group">
+          <label className="form-label">Month</label>
+          <select className="form-input" value={month} onChange={(e) => setMonth(e.target.value)}>
+            <option value="all">All months</option>{months.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
         </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Cash Expenses from Safe</span>
-          <strong className="kpi-cell-value">
-            Rs {expenses.filter((e) => e.paymentMode === 'Cash').reduce((sum, e) => sum + e.amount, 0).toLocaleString()}
-          </strong>
-          <span className="kpi-cell-sub">Deducted from daily shift collections</span>
+        <div className="form-group">
+          <label className="form-label">Category</label>
+          <select className="form-input" value={category} onChange={(e) => setCategory(e.target.value as 'all' | ExpenseCategory)}>
+            <option value="all">All categories</option>{EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Bank Commercial Payments</span>
-          <strong className="kpi-cell-value">
-            Rs {expenses.filter((e) => e.paymentMode === 'Bank').reduce((sum, e) => sum + e.amount, 0).toLocaleString()}
-          </strong>
-          <span className="kpi-cell-sub">Electricity & corporate fees</span>
-        </div>
-      </div>
+      </FilterBar>
 
-      {/* Expenses Table */}
-      <div className="table-surface">
-        <div className="table-surface-header">
-          <div>
-            <h3 className="surface-heading">Station Expense Vouchers</h3>
-            <p className="surface-sub">Complete breakdown of operating costs</p>
-          </div>
-        </div>
+      <KpiStrip>
+        <Kpi label="Total expenses" value={rs(total)} tone="red" sub={`${rows.length} voucher(s)`} />
+        <Kpi label="Cash from safe" value={rs(cash)} sub="Deducted from shift collections" />
+        <Kpi label="Bank payments" value={rs(bank)} sub="Utilities & corporate fees" />
+      </KpiStrip>
 
+      <SectionCard title="Station Expense Vouchers" subtitle="Newest first">
         <div className="table-responsive">
           <table className="clean-table">
-            <thead>
-              <tr>
-                <th>Voucher #</th>
-                <th>Date</th>
-                <th>Category</th>
-                <th>Description</th>
-                <th>Paid To (Payee)</th>
-                <th>Mode</th>
-                <th>Amount (PKR)</th>
-                <th>Approved By</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Voucher #</th><th>Date</th><th>Category</th><th>Description</th><th>Paid to</th><th>Mode</th><th>Amount</th><th>Approved by</th>{isManager && <th />}</tr></thead>
             <tbody>
-              {expenses.map((exp) => (
-                <tr key={exp.id}>
-                  <td>
-                    <strong>{exp.voucherNo}</strong>
-                  </td>
-                  <td>{exp.date}</td>
-                  <td>
-                    <span className="category-tag">{exp.category}</span>
-                  </td>
-                  <td>{exp.description}</td>
-                  <td>{exp.payee}</td>
-                  <td>
-                    <span className={`badge ${exp.paymentMode === 'Cash' ? 'badge-neutral' : 'badge-gold'}`}>
-                      {exp.paymentMode}
-                    </span>
-                  </td>
-                  <td className="text-red font-bold">Rs {exp.amount.toLocaleString()}</td>
-                  <td>{exp.approvedBy}</td>
+              {rows.length === 0 ? <EmptyRow colSpan={isManager ? 9 : 8}>No expense vouchers for this selection.</EmptyRow> : rows.map((e) => (
+                <tr key={e.id}>
+                  <td><strong>{e.voucherNo}</strong></td>
+                  <td>{formatDate(e.date)}</td>
+                  <td><span className="category-tag">{e.category}</span></td>
+                  <td>{e.description}</td>
+                  <td>{e.payee}</td>
+                  <td><span className={`badge ${e.paymentMode === 'Cash' ? 'badge-neutral' : 'badge-gold'}`}>{e.paymentMode}</span>{e.bankAccountId && <div className="text-muted text-xs">{bankAccounts.find((b) => b.id === e.bankAccountId)?.bankName}</div>}</td>
+                  <td className="text-red font-bold">{rs(e.amount)}</td>
+                  <td>{e.approvedBy}</td>
+                  {isManager && (
+                    <td><RowActions>
+                      <IconButton label="Edit voucher" onClick={() => setForm({ expense: e })}><EditIcon size={14} /></IconButton>
+                      <IconButton label="Delete voucher" tone="danger" onClick={() => void removeExpense(e)}><TrashIcon size={14} /></IconButton>
+                    </RowActions></td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </SectionCard>
 
-      {/* Zero-Scroll Compact Expense Modal */}
-      {modalOpen && (
-        <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-          <div className="modal-container compact-zero-scroll" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '620px' }}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <h3 className="modal-heading">Create Station Expense Voucher</h3>
-                <span className="modal-sub">Deducts directly from shift cash or company bank account</span>
-              </div>
-              <button className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                <XIcon size={18} />
-              </button>
-            </div>
+      {form && <ExpenseModal expense={form.expense} onClose={() => setForm(null)} />}
 
-            <form onSubmit={handleSaveExpense} className="modal-form-compact">
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Expense Category</label>
-                  <select
-                    className="form-input"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as any)}
-                  >
-                    <option value="Staff Meals & Tea">Staff Meals &amp; Tea</option>
-                    <option value="Generator Fuel">Generator Diesel &amp; Oil</option>
-                    <option value="Electricity (WAPDA)">Electricity Bill (Commercial)</option>
-                    <option value="Dispenser Spares & Repairs">Dispenser Spares &amp; Repairs</option>
-                    <option value="Municipal & Legal">Municipal / Civil Defense Fees</option>
-                    <option value="Stationery & Cleaning">Cleaning Supplies &amp; Stationery</option>
-                    <option value="Misc">Miscellaneous</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Voucher Number</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={voucherNo}
-                    onChange={(e) => setVoucherNo(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Paid To (Payee Name / Vendor)</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={payee}
-                    onChange={(e) => setPayee(e.target.value)}
-                    placeholder="e.g. Al-Madina Hotel or Spare Parts Shop"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Payment Mode</label>
-                  <select
-                    className="form-input"
-                    value={paymentMode}
-                    onChange={(e) => setPaymentMode(e.target.value as any)}
-                  >
-                    <option value="Cash">Physical Cash from Station Safe</option>
-                    <option value="Bank">Bank Transfer / Cheque</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Expense Description / Detail</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="e.g. 50 Liters generator diesel filled during load-shedding"
-                  required
-                />
-              </div>
-
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label font-bold text-red">Amount (PKR)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
-                    required
-                    min={1}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Approved By</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={approvedBy}
-                    onChange={(e) => setApprovedBy(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Inline Calculation Strip */}
-              <div className="calc-preview-inline-strip">
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Category:</span>
-                  <span className="calc-pill-val">{category}</span>
-                </div>
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Funding Source:</span>
-                  <span className="calc-pill-val text-gold">{paymentMode === 'Cash' ? 'Cash Safe (Daybook)' : 'Bank Account'}</span>
-                </div>
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Total Expense:</span>
-                  <span className="calc-pill-val text-red">Rs. {amount.toLocaleString()}</span>
-                </div>
-              </div>
-
-              <div className="modal-actions-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  <CheckCircleIcon size={16} />
-                  <span>Save Expense Voucher</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Print Slip */}
-      <PrintReceiptModal
-        isOpen={printOpen}
-        onClose={() => setPrintOpen(false)}
-        title="Station Expense Statement"
-        stationName={siteInfo.name}
-        stationLocation={siteInfo.location}
-        stationPhone={siteInfo.phone}
-      >
+      <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Station Expense Statement" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
+        <div className="slip-meta-grid"><div><strong>Period:</strong> {month === 'all' ? 'All months' : month}</div><div><strong>Category:</strong> {category === 'all' ? 'All' : category}</div></div>
         <table className="slip-table">
-          <thead>
-            <tr>
-              <th>Voucher</th>
-              <th>Category</th>
-              <th>Payee</th>
-              <th>Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses.map((e) => (
-              <tr key={e.id}>
-                <td>{e.voucherNo}</td>
-                <td>{e.category}</td>
-                <td>{e.payee}</td>
-                <td>Rs {e.amount.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
+          <thead><tr><th>Voucher</th><th>Date</th><th>Category</th><th>Payee</th><th>Mode</th><th>Amount</th></tr></thead>
+          <tbody>{rows.map((e) => <tr key={e.id}><td>{e.voucherNo}</td><td>{formatDate(e.date)}</td><td>{e.category}</td><td>{e.payee}</td><td>{e.paymentMode}</td><td>{rs(e.amount)}</td></tr>)}</tbody>
         </table>
-
         <div className="receipt-divider" />
-        <div className="slip-row highlight">
-          <span>Total Operational Outflow:</span>
-          <strong>Rs {totalExpenseAmount.toLocaleString()}</strong>
-        </div>
+        <div className="slip-row highlight"><span>Total operational outflow:</span><strong>{rs(total)}</strong></div>
       </PrintReceiptModal>
     </div>
   )

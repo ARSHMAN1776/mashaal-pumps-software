@@ -20,36 +20,87 @@ import { ReportsView } from './components/pages/ReportsView'
 import { SettingsView } from './components/pages/SettingsView'
 import { OwnerPortalView } from './components/pages/OwnerPortalView'
 import { OwnerFinancialView } from './components/pages/OwnerFinancialView'
+import { PasswordDialog } from './components/common/PasswordDialog'
+import { LegacyCopyBanner } from './components/common/LegacyCopyBanner'
+import { Spinner } from './components/common/kit'
+import { WifiOffIcon } from './components/common/Icons'
+
+const CASHIER_BLOCKED = ['owner-portal', 'owner-financials', 'bank-sheet', 'settings', 'reports', 'omc-ledger', 'staff', 'suppliers']
+
+const Splash: React.FC<{ title: string; children?: React.ReactNode; action?: React.ReactNode }> = ({ title, children, action }) => (
+  <div className="ui-splash">
+    <h2>{title}</h2>
+    {children && <p>{children}</p>}
+    {action}
+  </div>
+)
 
 export const AppContent: React.FC = () => {
-  const { activeSiteId, isSiteLoggedIn, activeModule, activeSiteData, currentUser } = useApp()
+  const [menuOpen, setMenuOpen] = React.useState(false)
+  const {
+    booting, bootError, backendKind, activeSiteId, isSiteLoggedIn, activeModule, activeSiteData, currentUser,
+    dataStatus, dataError, reloadData, online, logout,
+  } = useApp()
 
-  // 1. FIRST: Select Site (Site 1 vs Site 2)
-  if (!activeSiteId) {
-    return <SiteSelectView />
+  if (booting) {
+    return (
+      <div className="ui-splash">
+        <Spinner label="Starting Mashaal Petroleum…" />
+      </div>
+    )
+  }
+  if (bootError) {
+    return (
+      <Splash
+        title="Cannot start the software"
+        action={<button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>Try again</button>}
+      >
+        {bootError}
+      </Splash>
+    )
   }
 
-  // 2. SECOND: Login specifically for the chosen site's manager/staff
-  if (!isSiteLoggedIn) {
-    return <LoginView />
+  // 1. choose the station
+  if (!activeSiteId) return <SiteSelectView />
+
+  // 2. sign in for that station
+  if (!isSiteLoggedIn || !currentUser) return <LoginView />
+
+  // 3. load the station's data
+  if (dataStatus === 'loading' || dataStatus === 'idle') {
+    return (
+      <div className="ui-splash">
+        <Spinner label="Loading station data…" />
+      </div>
+    )
+  }
+  if (dataStatus === 'error') {
+    return (
+      <Splash
+        title="Could not load the station data"
+        action={
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" className="btn btn-primary" onClick={() => void reloadData()}>Try again</button>
+            <button type="button" className="btn btn-outline" onClick={() => void logout()}>Sign out</button>
+          </div>
+        }
+      >
+        {dataError}
+      </Splash>
+    )
   }
 
-  // 3. Inside active site: Render Navbar, Sidebar, and the active module
   const renderModule = () => {
-    const isCashier = currentUser?.role === 'cashier'
-
-    // Cashier role guards: prevent unauthorized access to sensitive views
-    if (isCashier && ['owner-portal', 'owner-financials', 'bank-sheet', 'settings', 'reports', 'omc-ledger', 'staff', 'suppliers'].includes(activeModule)) {
-      return <FuelSalesView />
-    }
+    const isCashier = currentUser.role === 'cashier'
+    if (isCashier && CASHIER_BLOCKED.includes(activeModule)) return <FuelSalesView />
 
     switch (activeModule) {
       case 'owner-portal':
-        return <OwnerPortalView />
+        return currentUser.role === 'owner' ? <OwnerPortalView /> : <DashboardView />
       case 'owner-financials':
-        return <OwnerFinancialView />
+        return currentUser.role === 'owner' ? <OwnerFinancialView /> : <DashboardView />
       case 'dashboard':
-        return currentUser?.role === 'owner' ? <OwnerPortalView /> : <DashboardView />
+        return currentUser.role === 'owner' ? <OwnerPortalView /> : <DashboardView />
       case 'fuel-sales':
         return <FuelSalesView />
       case 'tank-dip':
@@ -77,21 +128,35 @@ export const AppContent: React.FC = () => {
       case 'settings':
         return <SettingsView />
       default:
-        return currentUser?.role === 'owner' ? <OwnerPortalView /> : <DashboardView />
+        return currentUser.role === 'owner' ? <OwnerPortalView /> : <DashboardView />
     }
   }
 
-  const themeClass = activeSiteData?.siteInfo?.brand === 'TOTAL PARCO' || activeSiteId === 'SITE-01' ? 'theme-parco' : 'theme-pso'
+  const themeClass = activeSiteData.siteInfo.brand === 'TOTAL PARCO' ? 'theme-parco' : 'theme-pso'
 
   return (
     <div className={`app-shell-root ${themeClass}`}>
-      <Sidebar />
+      {menuOpen && <div className="ui-menu-backdrop" onClick={() => setMenuOpen(false)} />}
+      <Sidebar open={menuOpen} onNavigate={() => setMenuOpen(false)} />
       <div className="app-workspace-layout">
-        <Navbar />
+        <Navbar onMenu={() => setMenuOpen(true)} />
+        {!online && (
+          <div className="ui-offline-banner" role="alert">
+            <WifiOffIcon size={16} />
+            <span>No internet connection — changes cannot be saved until it returns. Nothing you see here is lost.</span>
+          </div>
+        )}
+        {backendKind === 'memory' && (
+          <div className="ui-offline-banner" style={{ background: '#1d5f94' }}>
+            <span>PREVIEW MODE — sample data in memory only. Nothing is saved to Supabase.</span>
+          </div>
+        )}
         <main className="app-workspace-main">
+          <LegacyCopyBanner />
           {renderModule()}
         </main>
       </div>
+      {currentUser.mustChangePassword && <PasswordDialog forced />}
     </div>
   )
 }

@@ -1,504 +1,502 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import { GasPumpIcon, PlusIcon, PrinterIcon, CheckCircleIcon, XIcon, WhatsAppIcon } from '../common/Icons'
+import type { FuelSaleRecord, Nozzle, ShiftName } from '../../types'
+import { SHIFT_NAMES } from '../../types'
+import { currentShift, formatDate, todayISO } from '../../lib/dates'
+import { rs, rs2 } from '../../lib/money'
+import { GasPumpIcon, PlusIcon, PrinterIcon, CheckCircleIcon, WhatsAppIcon, EditIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
-import type { FuelType } from '../../types'
+import { Modal, FormError } from '../common/Modal'
+import { useConfirm } from '../common/Confirm'
+import { useToast } from '../common/Toast'
+import { useSubmit } from '../common/useSubmit'
+import { CalcStrip, EmptyRow, Field, FilterBar, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
 
-export const FuelSalesView: React.FC = () => {
-  const { activeSiteData, addFuelSale } = useApp()
-  const { nozzles, fuelSales, settings, siteInfo } = activeSiteData
+// ===========================================================================
+// Meter reading dialog
+// ===========================================================================
+const ReadingModal: React.FC<{ nozzleId: string; onClose: () => void; onSaved: (sale: FuelSaleRecord, print: boolean) => void }> = ({ nozzleId, onClose, onSaved }) => {
+  const { activeSiteData, act, currentUser } = useApp()
+  const { nozzles } = activeSiteData
+  const isCashier = currentUser?.role === 'cashier'
+  const usable = nozzles.filter((n) => n.isActive)
+  const first = usable.find((n) => n.id === nozzleId) ?? usable[0]
 
-  const [modalOpen, setModalOpen] = useState(false)
-  const [printOpen, setPrintOpen] = useState(false)
-  const [selectedNozzleId, setSelectedNozzleId] = useState(nozzles[0]?.id || '')
-  const [openingMeter, setOpeningMeter] = useState<number>(0)
-  const [closingMeter, setClosingMeter] = useState<number>(0)
-  const [testingLiters, setTestingLiters] = useState<number>(10)
-  const [cashierName, setCashierName] = useState('Zahid Khan')
+  const [id, setId] = useState(first?.id ?? '')
+  const nozzle = usable.find((n) => n.id === id) ?? first
+  const [date, setDate] = useState(todayISO())
+  const [shift, setShift] = useState<ShiftName>(currentShift())
+  const [opening, setOpening] = useState(String(first?.closingMeter ?? ''))
+  const [closing, setClosing] = useState('')
+  const [testing, setTesting] = useState(String(first?.testingLiters ?? 0))
+  const [attendant, setAttendant] = useState(first?.assignedStaff || currentUser?.name || '')
+  const { busy, error, setError, run } = useSubmit()
 
-  const selectedNozzle = nozzles.find((n) => n.id === selectedNozzleId) || nozzles[0]
-  const fuelRate = settings.rates[selectedNozzle?.fuelType as FuelType] || 276.45
-
-  const netLiters = Math.max(0, (closingMeter > openingMeter ? closingMeter - openingMeter : 0) - testingLiters)
-  const totalAmount = netLiters * fuelRate
-
-  const handleOpenAddModal = (nozzleId?: string) => {
-    const targetNozzle = nozzles.find((n) => n.id === (nozzleId || nozzles[0]?.id)) || nozzles[0]
-    setSelectedNozzleId(targetNozzle.id)
-    setOpeningMeter(targetNozzle.openingMeter)
-    setClosingMeter(targetNozzle.closingMeter)
-    setTestingLiters(targetNozzle.testingLiters || 10)
-    setCashierName(targetNozzle.assignedStaff || 'Zahid Khan')
-    setModalOpen(true)
+  const pick = (n: Nozzle) => {
+    setId(n.id)
+    setOpening(String(n.closingMeter))
+    setClosing('')
+    setTesting(String(n.testingLiters))
+    setAttendant(n.assignedStaff || currentUser?.name || '')
+    setError(null)
   }
 
-  const handleSaveSale = (e: React.FormEvent) => {
+  const o = Number(opening)
+  const c = Number(closing)
+  const t = Number(testing) || 0
+  const gross = Number.isFinite(o) && Number.isFinite(c) && closing !== '' ? Math.max(0, c - o) : 0
+  const net = Math.max(0, gross - t)
+  const rate = nozzle?.ratePerLiter ?? 0
+
+  const submit = (print: boolean) => {
+    if (!nozzle) return
+    void run(
+      (ack) => act.recordFuelSale({ nozzleId: nozzle.id, date, shiftName: shift, openingMeter: o, closingMeter: c, testingLiters: t, cashierName: attendant, acknowledge: ack }),
+      (sale) => onSaved(sale, print),
+    )
+  }
+
+  if (!nozzle) {
+    return (
+      <Modal title="Enter Nozzle Meter Reading" onClose={onClose}>
+        <div className="modal-form-compact">
+          <FormError message="There are no active nozzles. Add a nozzle first." />
+        </div>
+      </Modal>
+    )
+  }
+
+  return (
+    <Modal title="Enter Nozzle Meter Reading" subtitle={`Dispenser #${nozzle.dispenserNo} • Nozzle #${nozzle.nozzleNo} (${nozzle.fuelType})`} onClose={onClose} busy={busy}>
+      <form className="modal-form-compact" onSubmit={(e) => { e.preventDefault(); submit(false) }}>
+        <Field label="Dispenser & nozzle">
+          <select className="form-input" value={id} onChange={(e) => { const n = usable.find((x) => x.id === e.target.value); if (n) pick(n) }}>
+            {usable.map((n) => (
+              <option key={n.id} value={n.id}>Dispenser {n.dispenserNo} — Nozzle {n.nozzleNo} ({n.fuelType}) — Rs {n.ratePerLiter}</option>
+            ))}
+          </select>
+        </Field>
+
+        <Grid2>
+          <Field label="Date" hint={isCashier ? 'Cashiers record today only' : undefined}>
+            <input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={isCashier} required />
+          </Field>
+          <Field label="Shift">
+            <select className="form-input" value={shift} onChange={(e) => setShift(e.target.value as ShiftName)}>
+              {SHIFT_NAMES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </Field>
+        </Grid2>
+
+        <Grid2>
+          <Field label="Opening meter" hint={`Last recorded reading: ${nozzle.closingMeter.toLocaleString()}`}>
+            <input type="number" step="any" className="form-input" value={opening} onChange={(e) => setOpening(e.target.value)} required />
+          </Field>
+          <Field label="Closing meter (dial now)" strong hint="Current number on the dispenser display">
+            <input type="number" step="any" className="form-input" value={closing} onChange={(e) => setClosing(e.target.value)} autoFocus required />
+          </Field>
+        </Grid2>
+
+        <Grid2>
+          <Field label="Calibration testing (liters)" hint="Poured back into the tank — deducted from sales">
+            <input type="number" step="any" min={0} className="form-input" value={testing} onChange={(e) => setTesting(e.target.value)} required />
+          </Field>
+          <Field label="Attendant / cashier">
+            <input type="text" className="form-input" value={attendant} onChange={(e) => setAttendant(e.target.value)} required />
+          </Field>
+        </Grid2>
+
+        <CalcStrip items={[
+          { label: 'Gross liters', value: `${gross.toLocaleString()} L` },
+          { label: 'Testing', value: `- ${t} L`, tone: 'red' },
+          { label: 'Net sold', value: `${net.toLocaleString()} L`, tone: 'green' },
+          { label: 'Rate / L', value: rs2(rate) },
+          { label: 'Sales amount', value: rs(net * rate), tone: 'gold' },
+        ]} />
+
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="btn btn-outline" onClick={() => submit(true)} disabled={busy}>
+            <PrinterIcon size={16} /><span>Save &amp; print slip</span>
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={busy}>
+            <CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : 'Save reading'}</span>
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+// ===========================================================================
+// Add / edit nozzle dialog
+// ===========================================================================
+const NozzleModal: React.FC<{ nozzle?: Nozzle; onClose: () => void }> = ({ nozzle, onClose }) => {
+  const { activeSiteData, act } = useApp()
+  const toast = useToast()
+  const { tanks, nozzles } = activeSiteData
+  const staffNames = activeSiteData.staff.filter((s) => s.isActive).map((s) => s.name)
+  const nextDispenser = nozzles.length ? Math.max(...nozzles.map((n) => n.dispenserNo)) : 1
+
+  const [dispenser, setDispenser] = useState(String(nozzle?.dispenserNo ?? nextDispenser))
+  const [number, setNumber] = useState(String(nozzle?.nozzleNo ?? (nozzles.filter((n) => n.dispenserNo === nextDispenser).length + 1)))
+  const [tankId, setTankId] = useState(nozzle?.tankId ?? tanks[0]?.id ?? '')
+  const [meter, setMeter] = useState(nozzle ? String(nozzle.closingMeter) : '')
+  const [testing, setTesting] = useState(String(nozzle?.testingLiters ?? 10))
+  const [staff, setStaff] = useState(nozzle?.assignedStaff ?? '')
+  const [active, setActive] = useState(nozzle?.isActive ?? true)
+  const { busy, error, run } = useSubmit()
+  const tank = tanks.find((t) => t.id === tankId)
+
+  const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (closingMeter <= openingMeter) {
-      alert('Closing meter must be greater than opening meter.')
-      return
+    if (nozzle) {
+      void run(
+        () => act.updateNozzle(nozzle.id, { dispenserNo: Number(dispenser), nozzleNo: Number(number), tankId, testingLiters: Number(testing), assignedStaff: staff, isActive: active }),
+        () => { toast.success('Nozzle updated.'); onClose() },
+      )
+    } else {
+      void run(
+        () => act.addNozzle({ dispenserNo: Number(dispenser), nozzleNo: Number(number), tankId, initialMeter: Number(meter), testingLiters: Number(testing), assignedStaff: staff }),
+        (n) => { toast.success(`Added Dispenser ${n.dispenserNo} • Nozzle ${n.nozzleNo}.`); onClose() },
+      )
     }
-
-    addFuelSale({
-      date: new Date().toISOString().split('T')[0],
-      shiftId: 'SH-01',
-      nozzleId: selectedNozzle.id,
-      dispenserNo: selectedNozzle.dispenserNo,
-      nozzleNo: selectedNozzle.nozzleNo,
-      fuelType: selectedNozzle.fuelType,
-      openingMeter,
-      closingMeter,
-      testingLiters,
-      netLiters,
-      ratePerLiter: fuelRate,
-      totalAmount,
-      cashierName,
-    })
-
-    setModalOpen(false)
   }
 
-  const totalSoldLiters = fuelSales.reduce((sum, s) => sum + s.netLiters, 0)
-  const totalFuelAmount = fuelSales.reduce((sum, s) => sum + s.totalAmount, 0)
+  return (
+    <Modal title={nozzle ? 'Edit Nozzle' : 'Add New Nozzle'} subtitle={nozzle ? `Dispenser ${nozzle.dispenserNo} • Nozzle ${nozzle.nozzleNo}` : 'Register a new dispenser nozzle and connect it to its underground tank'} onClose={onClose} busy={busy}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Dispenser number">
+            <input type="number" min={1} step={1} className="form-input" value={dispenser} onChange={(e) => setDispenser(e.target.value)} required />
+          </Field>
+          <Field label="Nozzle number (on that dispenser)">
+            <input type="number" min={1} step={1} className="form-input" value={number} onChange={(e) => setNumber(e.target.value)} required />
+          </Field>
+        </Grid2>
+        <Field label="Underground tank it draws from" hint={tank ? `This nozzle will sell ${tank.fuelType} at the station rate.` : 'Add a tank first (Tank Dip & Stock page).'}>
+          <select className="form-input" value={tankId} onChange={(e) => setTankId(e.target.value)} required>
+            {tanks.map((t) => <option key={t.id} value={t.id}>Tank #{t.tankNo} — {t.fuelType} ({t.capacityLiters.toLocaleString()} L)</option>)}
+          </select>
+        </Field>
+        <Grid2>
+          {nozzle ? (
+            <Field label="Current meter reading" hint="Changes only when readings are recorded">
+              <div className="read-only-box"><strong>{nozzle.closingMeter.toLocaleString()}</strong></div>
+            </Field>
+          ) : (
+            <Field label="Meter reading today (starting point)" hint="The number on the dispenser now — the first reading starts here">
+              <input type="number" min={0} step="any" className="form-input" value={meter} onChange={(e) => setMeter(e.target.value)} required />
+            </Field>
+          )}
+          <Field label="Default testing (liters)">
+            <input type="number" min={0} step="any" className="form-input" value={testing} onChange={(e) => setTesting(e.target.value)} required />
+          </Field>
+        </Grid2>
+        <Field label="Assigned attendant">
+          <input type="text" className="form-input" list="nozzle-staff" value={staff} onChange={(e) => setStaff(e.target.value)} placeholder="Pump attendant name" />
+          <datalist id="nozzle-staff">{staffNames.map((n) => <option key={n} value={n} />)}</datalist>
+        </Field>
+        {nozzle && (
+          <label className="ui-checkbox-row">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+            <span>Active — untick to take this nozzle out of service (its history is kept)</span>
+          </label>
+        )}
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}>
+            <CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : nozzle ? 'Save changes' : 'Add nozzle'}</span>
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+// ===========================================================================
+// Page
+// ===========================================================================
+export const FuelSalesView: React.FC = () => {
+  const { activeSiteData, act, currentUser } = useApp()
+  const { nozzles, fuelSales, siteInfo, tanks } = activeSiteData
+  const isManager = currentUser?.role !== 'cashier'
+  const confirm = useConfirm()
+  const toast = useToast()
+
+  const [date, setDate] = useState(todayISO())
+  const [showAll, setShowAll] = useState(false)
+  const [readingFor, setReadingFor] = useState<string | null>(null)
+  const [nozzleForm, setNozzleForm] = useState<{ nozzle?: Nozzle } | null>(null)
+  const [printSheet, setPrintSheet] = useState(false)
+  const [printSale, setPrintSale] = useState<FuelSaleRecord | null>(null)
+
+  const rows = useMemo(() => (showAll ? fuelSales : fuelSales.filter((s) => s.date === date)), [fuelSales, date, showAll])
+  const totalLiters = rows.reduce((a, s) => a + s.netLiters, 0)
+  const totalAmount = rows.reduce((a, s) => a + s.totalAmount, 0)
+  const activeCount = nozzles.filter((n) => n.isActive).length
+  const periodLabel = showAll ? 'all recorded dates' : formatDate(date)
+
+  const removeNozzle = async (n: Nozzle) => {
+    const readings = fuelSales.filter((s) => s.nozzleId === n.id).length
+    const yes = await confirm({
+      title: `Delete Dispenser ${n.dispenserNo} • Nozzle ${n.nozzleNo}?`,
+      message: (
+        <>
+          <p>This removes the nozzle from the station.</p>
+          {readings > 0 ? (
+            <p><strong>{readings} meter reading(s)</strong> already recorded for it stay in the sales history and reports, but tank stock estimates will no longer count them. If you only want to stop using it, edit the nozzle and untick <em>Active</em> instead.</p>
+          ) : (
+            <p>No readings were recorded for it, so nothing else is affected.</p>
+          )}
+        </>
+      ),
+      confirmLabel: 'Delete nozzle',
+      tone: 'danger',
+    })
+    if (!yes) return
+    const r = await act.removeNozzle(n.id)
+    if (r.ok) toast.success(`Nozzle D${n.dispenserNo}-N${n.nozzleNo} deleted.`)
+    else toast.error(r.error)
+  }
+
+  const removeReading = async (s: FuelSaleRecord) => {
+    const yes = await confirm({
+      title: 'Delete this meter reading?',
+      message: `D${s.dispenserNo}-N${s.nozzleNo} on ${formatDate(s.date)}: ${s.netLiters.toLocaleString()} L, ${rs(s.totalAmount)}. The nozzle's meter goes back to the previous reading. This is recorded in the audit trail.`,
+      confirmLabel: 'Delete reading',
+      tone: 'danger',
+    })
+    if (!yes) return
+    const r = await act.removeFuelSale(s.id)
+    if (r.ok) toast.success('Reading deleted.')
+    else toast.error(r.error)
+  }
 
   const handleSendWhatsAppSummary = () => {
     const isParco = siteInfo.brand === 'TOTAL PARCO'
-    const todayStr = new Date().toISOString().split('T')[0]
-
-    let message = ''
-    if (isParco) {
-      message = [
-        `🔴 *TOTAL PARCO - FORECOURT DISPENSER SALES* 🔴`,
-        `⛽ *DAILY SALES & NOZZLE METER SUMMARY*`,
-        `══════════════════════════`,
-        `🏢 *Station:* ${siteInfo.name}`,
-        `📍 *Location:* ${siteInfo.location}`,
-        `📅 *Date:* ${todayStr}`,
-        `══════════════════════════`,
-        `⛽ *DISPENSER NOZZLE BREAKDOWN*`,
-        ...fuelSales.map((s) => `🔹 D${s.dispenserNo}-N${s.nozzleNo} (${s.fuelType}): ${s.netLiters.toLocaleString()} L • Rs. ${Math.round(s.totalAmount).toLocaleString()}`),
-        `══════════════════════════`,
-        `📊 *SHIFT TOTALS*`,
-        `🔹 *Total Fuel Dispensed:* ${totalSoldLiters.toLocaleString()} Liters`,
-        `💰 *GROSS FUEL REVENUE:* Rs. ${Math.round(totalFuelAmount).toLocaleString()} PKR`,
-        `══════════════════════════`,
-        `✍️ *Recorded By:* ${siteInfo.managerName || 'Shift Incharge'}`,
-        `🔐 *System Verification:* TP-NOZZLE-${todayStr}-VERIFIED`,
-        `✅ *Total Parco Pakistan • Energy for a Brighter Tomorrow*`
-      ].join('\n')
-    } else {
-      message = [
-        `🟢 *PAKISTAN STATE OIL (PSO) - FORECOURT SALES* 🟢`,
-        `⛽ *DAILY SALES & NOZZLE METER SUMMARY*`,
-        `══════════════════════════`,
-        `🏢 *Station:* ${siteInfo.name}`,
-        `📍 *Location:* ${siteInfo.location}`,
-        `📅 *Date:* ${todayStr}`,
-        `══════════════════════════`,
-        `⛽ *DISPENSER NOZZLE BREAKDOWN*`,
-        ...fuelSales.map((s) => `🔹 D${s.dispenserNo}-N${s.nozzleNo} (${s.fuelType}): ${s.netLiters.toLocaleString()} L • Rs. ${Math.round(s.totalAmount).toLocaleString()}`),
-        `══════════════════════════`,
-        `📊 *SHIFT TOTALS*`,
-        `🔹 *Total Fuel Dispensed:* ${totalSoldLiters.toLocaleString()} Liters`,
-        `💰 *GROSS FUEL REVENUE:* Rs. ${Math.round(totalFuelAmount).toLocaleString()} PKR`,
-        `══════════════════════════`,
-        `✍️ *Recorded By:* ${siteInfo.managerName || 'Shift Incharge'}`,
-        `🔐 *System Verification:* PSO-NOZZLE-${todayStr}-VERIFIED`,
-        `✅ *Pakistan State Oil (PSO) • Fueling the Nation's Journey*`
-      ].join('\n')
-    }
+    const head = isParco ? `🔴 *TOTAL PARCO - FORECOURT DISPENSER SALES* 🔴` : `🟢 *PAKISTAN STATE OIL (PSO) - FORECOURT SALES* 🟢`
+    const tag = isParco ? 'TP' : 'PSO'
+    const foot = isParco ? `✅ *Total Parco Pakistan • Energy for a Brighter Tomorrow*` : `✅ *Pakistan State Oil (PSO) • Fueling the Nation's Journey*`
+    const message = [
+      head,
+      `⛽ *DAILY SALES & NOZZLE METER SUMMARY*`,
+      `══════════════════════════`,
+      `🏢 *Station:* ${siteInfo.name}`,
+      `📍 *Location:* ${siteInfo.location}`,
+      `📅 *Date:* ${periodLabel}`,
+      `══════════════════════════`,
+      `⛽ *DISPENSER NOZZLE BREAKDOWN*`,
+      ...rows.map((s) => `🔹 D${s.dispenserNo}-N${s.nozzleNo} (${s.fuelType}, ${s.shiftName}): ${s.netLiters.toLocaleString()} L • Rs. ${Math.round(s.totalAmount).toLocaleString()}`),
+      `══════════════════════════`,
+      `📊 *TOTALS*`,
+      `🔹 *Total Fuel Dispensed:* ${totalLiters.toLocaleString()} Liters`,
+      `💰 *GROSS FUEL REVENUE:* Rs. ${Math.round(totalAmount).toLocaleString()} PKR`,
+      `══════════════════════════`,
+      `✍️ *Recorded By:* ${currentUser?.name ?? siteInfo.managerName}`,
+      `🔐 *System Verification:* ${tag}-NOZZLE-${showAll ? 'ALL' : date}-VERIFIED`,
+      foot,
+    ].join('\n')
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank')
   }
 
   return (
     <div className="page-content-wrapper">
-      {/* Page Header */}
-      <div className="page-title-banner">
-        <div>
-          <span className="page-eyebrow">DAILY DISPENSER LOG</span>
-          <h2 className="page-heading">Fuel Sales & Nozzle Readings</h2>
-          <p className="page-sub">
-            Opening and closing meter readings, testing deduction, and net fuel revenue
-          </p>
-        </div>
-        <div className="page-actions">
-          <button
-            type="button"
-            className="btn btn-outline"
-            style={{ color: '#15803d', borderColor: '#86efac', backgroundColor: '#f0fdf4' }}
-            onClick={handleSendWhatsAppSummary}
-            title="Dispatch shift dispenser summary via WhatsApp"
-          >
-            <WhatsAppIcon size={16} color="#15803d" />
-            <span>WhatsApp Summary</span>
-          </button>
-          <button className="btn btn-outline" onClick={() => setPrintOpen(true)}>
-            <PrinterIcon size={16} />
-            <span>Print Nozzle Sheet</span>
-          </button>
-          <button className="btn btn-primary" onClick={() => handleOpenAddModal()}>
-            <PlusIcon size={16} />
-            <span>Enter Meter Reading</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="DAILY DISPENSER LOG"
+        title="Fuel Sales & Nozzle Readings"
+        subtitle="Opening and closing meter readings, testing deduction, and net fuel revenue"
+        actions={
+          <>
+            <button type="button" className="btn btn-outline" style={{ color: '#15803d', borderColor: '#86efac', backgroundColor: '#f0fdf4' }} onClick={handleSendWhatsAppSummary} title="Dispatch the summary via WhatsApp">
+              <WhatsAppIcon size={16} color="#15803d" /><span>WhatsApp Summary</span>
+            </button>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintSheet(true)}>
+              <PrinterIcon size={16} /><span>Print Nozzle Sheet</span>
+            </button>
+            {isManager && (
+              <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setNozzleForm({})}>
+                <PlusIcon size={16} /><span>Add Nozzle</span>
+              </button>
+            )}
+            <button type="button" className="btn btn-primary" onClick={() => setReadingFor('')} disabled={activeCount === 0}>
+              <PlusIcon size={16} /><span>Enter Meter Reading</span>
+            </button>
+          </>
+        }
+      />
 
-      {/* Module Operational Guide */}
       <ModuleGuide
         title="Forecourt Nozzle Meter Readings Guide"
         urduTitle="نوزل میٹر ریڈنگ اور پیمائش کی رہنمائی"
         role="cashier"
         roleLabel="Forecourt Cashier"
-        purpose="Record electronic/mechanical meter readings for each dispenser nozzle, deduct calibration testing liters, and compute net fuel sales revenue."
+        purpose="Record the meter reading of each dispenser nozzle, deduct calibration testing liters, and compute net fuel sales. Managers can add, edit or delete nozzles."
         steps={[
-          {
-            step: 1,
-            title: 'Select Nozzle (نوزل کا انتخاب)',
-            detail: 'Choose the dispenser and nozzle number (Super, Diesel, or Hi-Octane).',
-            urdu: 'ڈسپنسر اور نوزل منتخب کریں تاکہ گزشتہ میٹر ریڈنگ خودکار طور پر آ جائے۔',
-          },
-          {
-            step: 2,
-            title: 'Verify Opening Meter (ابتدائی میٹر ریڈنگ)',
-            detail: 'Check that opening meter matches the closing reading from previous shift.',
-            urdu: 'پچھلی شفٹ کی آخری ریڈنگ کی تصدیق کریں۔',
-          },
-          {
-            step: 3,
-            title: 'Enter Current Closing Meter (موجودہ کلو زنگ میٹر)',
-            detail: 'Input the exact dial number shown on the physical fuel dispenser display.',
-            urdu: 'ڈسپنسر میٹر پر نظر آنے والی موجودہ ریڈنگ درج کریں۔',
-          },
-          {
-            step: 4,
-            title: 'Deduct Testing Liters (پیمائش کین کی کٹوتی)',
-            detail: 'Deduct any 5L or 10L calibration testing poured back into the underground tank.',
-            urdu: 'پیمانہ چیکنگ کے دوران ٹینک میں واپس ڈالا گیا تیل منہا کریں۔',
-          },
+          { step: 1, title: 'Select Nozzle (نوزل کا انتخاب)', detail: 'Choose the dispenser and nozzle. The opening meter is filled with that nozzle\'s last recorded reading.', urdu: 'ڈسپنسر اور نوزل منتخب کریں، پچھلی ریڈنگ خودکار آ جائے گی۔' },
+          { step: 2, title: 'Enter the Closing Meter (موجودہ میٹر)', detail: 'Type the exact number shown on the physical dispenser display.', urdu: 'ڈسپنسر میٹر پر نظر آنے والی موجودہ ریڈنگ درج کریں۔' },
+          { step: 3, title: 'Deduct Testing Liters (پیمائش کین کی کٹوتی)', detail: 'Deduct any 5L or 10L calibration testing poured back into the tank.', urdu: 'ٹینک میں واپس ڈالا گیا ٹیسٹنگ تیل منہا کریں۔' },
+          { step: 4, title: 'Add / Delete Nozzles (نوزل شامل یا حذف کریں)', detail: 'Managers: use "Add Nozzle" for a new dispenser nozzle, or the edit / delete buttons on a nozzle card.', urdu: 'مینیجر نیا نوزل شامل کر سکتا ہے یا کارڈ پر موجود بٹن سے تبدیل / حذف کر سکتا ہے۔' },
         ]}
         criticalChecks={[
-          'Closing meter MUST always be strictly greater than opening meter.',
-          'Always log testing/inspection liters so the cashier is not held responsible for unpaid cash.',
-          'For commercial fleet vehicles purchasing on credit, immediately record a Credit Slip in the Customers module.',
+          'The closing meter must always be greater than the opening meter, and the opening must match the last reading.',
+          'Always log testing liters so the cashier is not held responsible for missing cash.',
+          'For commercial fleet vehicles buying on credit, record a Credit Slip in the Customers module.',
         ]}
       />
 
-      {/* Summary strip */}
-      <div className="executive-kpi-strip">
-        <div className="kpi-cell">
-          <span className="kpi-label">Total Sold Liters Today</span>
-          <strong className="kpi-cell-value">{totalSoldLiters.toLocaleString()} L</strong>
-          <span className="kpi-cell-sub">Across all {nozzles.length} dispensers</span>
+      <FilterBar>
+        <div className="form-group">
+          <label className="form-label">Show readings for</label>
+          <input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => { setDate(e.target.value); setShowAll(false) }} />
         </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Total Fuel Revenue</span>
-          <strong className="kpi-cell-value text-gold">Rs {Math.round(totalFuelAmount).toLocaleString()}</strong>
-          <span className="kpi-cell-sub">Official OGRA tariff applied</span>
-        </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Active Fuel Nozzles</span>
-          <strong className="kpi-cell-value">{nozzles.length} Operational</strong>
-          <span className="kpi-cell-sub">Dispenser pumps calibrated</span>
-        </div>
-      </div>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => { setDate(todayISO()); setShowAll(false) }}>Today</button>
+        <label className="ui-checkbox-row" style={{ margin: 0 }}>
+          <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
+          <span>Show every date</span>
+        </label>
+      </FilterBar>
 
-      {/* Modern Dispensers Overview Grid */}
+      <KpiStrip>
+        <Kpi label={`Liters sold — ${periodLabel}`} value={`${totalLiters.toLocaleString()} L`} sub={`${rows.length} reading(s)`} />
+        <Kpi label="Fuel revenue" value={rs(totalAmount)} tone="gold" sub="Rate in force when each reading was saved" />
+        <Kpi label="Active nozzles" value={`${activeCount} of ${nozzles.length}`} sub={`${tanks.length} underground tank(s)`} />
+      </KpiStrip>
+
       <div className="section-surface">
         <div className="section-surface-header">
           <div>
-            <h3 className="section-title">Dispensers & Nozzle Status</h3>
-            <p className="section-subtitle">Click on any nozzle to update closing meter reading</p>
+            <h3 className="section-title">Dispensers & Nozzles</h3>
+            <p className="section-subtitle">Click a nozzle to enter its next reading{isManager ? ' • edit or delete nozzles with the buttons on each card' : ''}</p>
           </div>
         </div>
 
-        <div className="nozzles-compact-grid">
-          {nozzles.map((nozzle) => {
-            const currentRate = settings.rates[nozzle.fuelType]
-            return (
-              <div
-                key={nozzle.id}
-                className="nozzle-status-item"
-                onClick={() => handleOpenAddModal(nozzle.id)}
-              >
-                <div className="nozzle-badge-header">
-                  <div className="nozzle-name-tag">
-                    <GasPumpIcon size={18} color="#b88d2b" />
-                    <strong>Dispenser {nozzle.dispenserNo} • Nozzle {nozzle.nozzleNo}</strong>
+        {nozzles.length === 0 ? (
+          <div className="ui-empty">No nozzles are set up yet.{isManager ? ' Click "Add Nozzle" to register the first one.' : ' Ask a manager to add them.'}</div>
+        ) : (
+          <div className="nozzles-compact-grid">
+            {nozzles.map((n) => {
+              const tank = tanks.find((t) => t.id === n.tankId)
+              return (
+                <div key={n.id} className="nozzle-status-item" style={n.isActive ? undefined : { opacity: 0.6 }}>
+                  <div className="nozzle-badge-header">
+                    <div className="nozzle-name-tag">
+                      <GasPumpIcon size={18} color="#b88d2b" />
+                      <strong>Dispenser {n.dispenserNo} • Nozzle {n.nozzleNo}</strong>
+                    </div>
+                    <span className="fuel-pill">{n.fuelType}</span>
                   </div>
-                  <span className="fuel-pill">{nozzle.fuelType}</span>
-                </div>
 
-                <div className="nozzle-reading-details">
-                  <div className="reading-row">
-                    <span className="r-label">Opening Meter:</span>
-                    <strong className="r-val">{nozzle.openingMeter.toLocaleString()}</strong>
+                  <div className="nozzle-reading-details">
+                    <div className="reading-row"><span className="r-label">Current meter:</span><strong className="r-val highlight">{n.closingMeter.toLocaleString()}</strong></div>
+                    <div className="reading-row"><span className="r-label">Price / liter:</span><span className="r-val">Rs {n.ratePerLiter}</span></div>
+                    <div className="reading-row"><span className="r-label">Tank:</span><span className="r-val text-muted">{tank ? `#${tank.tankNo}` : '—'}</span></div>
+                    <div className="reading-row"><span className="r-label">Attendant:</span><span className="r-val text-muted">{n.assignedStaff || '—'}</span></div>
                   </div>
-                  <div className="reading-row">
-                    <span className="r-label">Current Meter:</span>
-                    <strong className="r-val highlight">{nozzle.closingMeter.toLocaleString()}</strong>
-                  </div>
-                  <div className="reading-row">
-                    <span className="r-label">Price / Liter:</span>
-                    <span className="r-val">Rs {currentRate}</span>
-                  </div>
-                  <div className="reading-row">
-                    <span className="r-label">Attendant:</span>
-                    <span className="r-val text-muted">{nozzle.assignedStaff}</span>
+
+                  {!n.isActive && <span className="badge badge-neutral" style={{ marginTop: 8 }}>Out of service</span>}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}>
+                    <button type="button" className="btn btn-secondary" style={{ flex: 1 }} disabled={!n.isActive} onClick={() => setReadingFor(n.id)}>Update Reading</button>
+                    {isManager && (
+                      <RowActions>
+                        <IconButton label="Edit nozzle" onClick={() => setNozzleForm({ nozzle: n })}><EditIcon size={14} /></IconButton>
+                        <IconButton label="Delete nozzle" tone="danger" onClick={() => void removeNozzle(n)}><TrashIcon size={14} /></IconButton>
+                      </RowActions>
+                    )}
                   </div>
                 </div>
-
-                <button className="btn btn-secondary btn-block mt-3">Update Reading</button>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Detailed Log Table */}
-      <div className="table-surface">
-        <div className="table-surface-header">
-          <div>
-            <h3 className="surface-heading">Today's Recorded Nozzle Sales</h3>
-            <p className="surface-sub">Calculations showing testing liters deductions and net amount</p>
-          </div>
-        </div>
-
+      <SectionCard title={`Recorded nozzle sales — ${periodLabel}`} subtitle="Calculations showing testing-liter deductions and net amount">
         <div className="table-responsive">
           <table className="clean-table">
             <thead>
               <tr>
-                <th>Nozzle</th>
-                <th>Fuel Product</th>
-                <th>Opening Meter</th>
-                <th>Closing Meter</th>
-                <th>Testing Deduction</th>
-                <th>Net Liters Sold</th>
-                <th>OGRA Rate</th>
-                <th>Total Revenue (PKR)</th>
-                <th>Cashier</th>
+                <th>Date / shift</th><th>Nozzle</th><th>Fuel</th><th>Opening</th><th>Closing</th><th>Testing</th><th>Net liters</th><th>Rate</th>
+                <th className="text-right">Revenue (PKR)</th><th>Attendant</th>{isManager && <th />}
               </tr>
             </thead>
             <tbody>
-              {fuelSales.map((sale) => (
-                <tr key={sale.id}>
-                  <td>
-                    <strong>D{sale.dispenserNo}-N{sale.nozzleNo}</strong>
-                  </td>
-                  <td>
-                    <span className="fuel-pill">{sale.fuelType}</span>
-                  </td>
-                  <td>{sale.openingMeter.toLocaleString()}</td>
-                  <td>{sale.closingMeter.toLocaleString()}</td>
-                  <td>{sale.testingLiters} L</td>
-                  <td>
-                    <strong>{sale.netLiters.toLocaleString()} L</strong>
-                  </td>
-                  <td>Rs {sale.ratePerLiter}</td>
-                  <td className="text-right text-gold">
-                    <strong>Rs {Math.round(sale.totalAmount).toLocaleString()}</strong>
-                  </td>
-                  <td>{sale.cashierName}</td>
+              {rows.length === 0 ? (
+                <EmptyRow colSpan={isManager ? 11 : 10}>No readings recorded for {periodLabel}.</EmptyRow>
+              ) : rows.map((s) => (
+                <tr key={s.id}>
+                  <td className="ui-nowrap"><strong>{formatDate(s.date)}</strong><div className="text-muted text-xs">{s.shiftName}</div></td>
+                  <td><strong>D{s.dispenserNo}-N{s.nozzleNo}</strong></td>
+                  <td><span className="fuel-pill">{s.fuelType}</span></td>
+                  <td>{s.openingMeter.toLocaleString()}</td>
+                  <td>{s.closingMeter.toLocaleString()}</td>
+                  <td>{s.testingLiters} L</td>
+                  <td><strong>{s.netLiters.toLocaleString()} L</strong></td>
+                  <td>Rs {s.ratePerLiter}</td>
+                  <td className="text-right text-gold"><strong>{rs(s.totalAmount)}</strong></td>
+                  <td>{s.cashierName}</td>
+                  {isManager && (
+                    <td>
+                      <RowActions>
+                        <IconButton label="Print slip" onClick={() => setPrintSale(s)}><PrinterIcon size={14} /></IconButton>
+                        <IconButton label="Delete reading" tone="danger" onClick={() => void removeReading(s)}><TrashIcon size={14} /></IconButton>
+                      </RowActions>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </SectionCard>
 
-      {/* Zero-Scroll Compact Entry Modal */}
-      {modalOpen && (
-        <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-          <div className="modal-container compact-zero-scroll" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <h3 className="modal-heading">Enter Nozzle Meter Reading</h3>
-                <span className="modal-sub">
-                  Dispenser #{selectedNozzle?.dispenserNo} • Nozzle #{selectedNozzle?.nozzleNo} ({selectedNozzle?.fuelType})
-                </span>
-              </div>
-              <button className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                <XIcon size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveSale} className="modal-form-compact">
-              {/* Nozzle Selector Row */}
-              <div className="form-group">
-                <label className="form-label">Select Active Dispenser &amp; Nozzle</label>
-                <select
-                  className="form-input"
-                  value={selectedNozzleId}
-                  onChange={(e) => {
-                    const target = nozzles.find((n) => n.id === e.target.value)
-                    if (target) {
-                      setSelectedNozzleId(target.id)
-                      setOpeningMeter(target.closingMeter || target.openingMeter)
-                      setClosingMeter((target.closingMeter || target.openingMeter) + 500)
-                      setTestingLiters(target.testingLiters || 10)
-                      setCashierName(target.assignedStaff || cashierName)
-                    }
-                  }}
-                >
-                  {nozzles.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      Dispenser {n.dispenserNo} — Nozzle {n.nozzleNo} ({n.fuelType}) — Rate: Rs {settings.rates[n.fuelType]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Opening Meter Reading</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={openingMeter}
-                    onChange={(e) => setOpeningMeter(Number(e.target.value))}
-                    required
-                  />
-                  <small className="form-help">Previous shift dial reading</small>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label font-bold text-gold">Closing Meter Reading</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={closingMeter}
-                    onChange={(e) => setClosingMeter(Number(e.target.value))}
-                    required
-                  />
-                  <small className="form-help">Current physical dial reading</small>
-                </div>
-              </div>
-
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Calibration Testing (Liters)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={testingLiters}
-                    onChange={(e) => setTestingLiters(Number(e.target.value))}
-                    required
-                    min={0}
-                  />
-                  <small className="form-help">Deducted from sales (5L/10L can)</small>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Assigned Attendant</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={cashierName}
-                    onChange={(e) => setCashierName(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Inline Calculation Strip (Zero-Scroll) */}
-              <div className="calc-preview-inline-strip">
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Gross Liters:</span>
-                  <span className="calc-pill-val">
-                    {Math.max(0, closingMeter - openingMeter).toLocaleString()} L
-                  </span>
-                </div>
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Testing:</span>
-                  <span className="calc-pill-val text-red">- {testingLiters} L</span>
-                </div>
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Net Sold:</span>
-                  <span className="calc-pill-val text-green">{netLiters.toLocaleString()} L</span>
-                </div>
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Rate/L:</span>
-                  <span className="calc-pill-val">Rs {fuelRate}</span>
-                </div>
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Net Sales Amount:</span>
-                  <span className="calc-pill-val text-gold">
-                    Rs {Math.round(totalAmount).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              {/* Footer Buttons */}
-              <div className="modal-actions-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => {
-                    handleSaveSale({ preventDefault: () => {} } as React.FormEvent)
-                    setPrintOpen(true)
-                  }}
-                >
-                  <PrinterIcon size={16} />
-                  <span>Save &amp; Print Slip</span>
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  <CheckCircleIcon size={16} />
-                  <span>Save Reading</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {readingFor !== null && (
+        <ReadingModal
+          nozzleId={readingFor}
+          onClose={() => setReadingFor(null)}
+          onSaved={(sale, print) => {
+            setReadingFor(null)
+            toast.success(`Saved D${sale.dispenserNo}-N${sale.nozzleNo}: ${sale.netLiters.toLocaleString()} L = ${rs(sale.totalAmount)}`)
+            if (sale.date !== date && !showAll) setDate(sale.date)
+            if (print) setPrintSale(sale)
+          }}
+        />
       )}
+      {nozzleForm && <NozzleModal nozzle={nozzleForm.nozzle} onClose={() => setNozzleForm(null)} />}
 
-      {/* Print Slip */}
-      <PrintReceiptModal
-        isOpen={printOpen}
-        onClose={() => setPrintOpen(false)}
-        title="Nozzle Meter Reading Sheet"
-        stationName={siteInfo.name}
-        stationLocation={siteInfo.location}
-        stationPhone={siteInfo.phone}
-      >
+      <PrintReceiptModal isOpen={printSheet} onClose={() => setPrintSheet(false)} title="Nozzle Meter Reading Sheet" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
+        <div className="slip-meta-grid"><div><strong>Period:</strong> {periodLabel}</div><div><strong>Prepared by:</strong> {currentUser?.name}</div></div>
         <table className="slip-table">
-          <thead>
-            <tr>
-              <th>Dispenser</th>
-              <th>Fuel</th>
-              <th>Opening</th>
-              <th>Closing</th>
-              <th>Testing</th>
-              <th>Net (L)</th>
-              <th>Amount (PKR)</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Nozzle</th><th>Shift</th><th>Fuel</th><th>Opening</th><th>Closing</th><th>Testing</th><th>Net (L)</th><th>Amount (PKR)</th></tr></thead>
           <tbody>
-            {fuelSales.map((s) => (
-              <tr key={s.id}>
-                <td>D{s.dispenserNo}-N{s.nozzleNo}</td>
-                <td>{s.fuelType}</td>
-                <td>{s.openingMeter}</td>
-                <td>{s.closingMeter}</td>
-                <td>{s.testingLiters}L</td>
-                <td>{s.netLiters}L</td>
-                <td>Rs {Math.round(s.totalAmount).toLocaleString()}</td>
-              </tr>
+            {rows.map((s) => (
+              <tr key={s.id}><td>D{s.dispenserNo}-N{s.nozzleNo}</td><td>{s.shiftName}</td><td>{s.fuelType}</td><td>{s.openingMeter}</td><td>{s.closingMeter}</td><td>{s.testingLiters}L</td><td>{s.netLiters}L</td><td>{rs(s.totalAmount)}</td></tr>
             ))}
           </tbody>
         </table>
-
         <div className="receipt-divider" />
-        <div className="slip-row highlight">
-          <span>Total Net Liters:</span>
-          <strong>{totalSoldLiters.toLocaleString()} L</strong>
-        </div>
-        <div className="slip-row highlight">
-          <span>Total Fuel Revenue:</span>
-          <strong>Rs {Math.round(totalFuelAmount).toLocaleString()}</strong>
-        </div>
+        <div className="slip-row highlight"><span>Total net liters:</span><strong>{totalLiters.toLocaleString()} L</strong></div>
+        <div className="slip-row highlight"><span>Total fuel revenue:</span><strong>{rs(totalAmount)}</strong></div>
+      </PrintReceiptModal>
+
+      <PrintReceiptModal isOpen={printSale !== null} onClose={() => setPrintSale(null)} title="Nozzle Meter Reading Slip" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone} defaultMode="thermal">
+        {printSale && (
+          <div className="slip-summary-list">
+            <div className="slip-row"><span>Date / shift:</span><strong>{formatDate(printSale.date)} • {printSale.shiftName}</strong></div>
+            <div className="slip-row"><span>Nozzle:</span><strong>D{printSale.dispenserNo}-N{printSale.nozzleNo} ({printSale.fuelType})</strong></div>
+            <div className="slip-row"><span>Opening meter:</span><span>{printSale.openingMeter.toLocaleString()}</span></div>
+            <div className="slip-row"><span>Closing meter:</span><span>{printSale.closingMeter.toLocaleString()}</span></div>
+            <div className="slip-row"><span>Testing:</span><span>{printSale.testingLiters} L</span></div>
+            <div className="slip-row"><span>Net liters:</span><strong>{printSale.netLiters.toLocaleString()} L</strong></div>
+            <div className="slip-row"><span>Rate / liter:</span><span>{rs2(printSale.ratePerLiter)}</span></div>
+            <div className="receipt-divider" />
+            <div className="slip-row highlight"><span>Sales amount:</span><strong>{rs(printSale.totalAmount)}</strong></div>
+            <div className="slip-row"><span>Attendant:</span><span>{printSale.cashierName}</span></div>
+          </div>
+        )}
       </PrintReceiptModal>
     </div>
   )

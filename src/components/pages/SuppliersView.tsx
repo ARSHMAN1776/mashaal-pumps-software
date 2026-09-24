@@ -1,238 +1,259 @@
 import React, { useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import { PrinterIcon, CheckCircleIcon, XIcon, CashIcon } from '../common/Icons'
+import type { Supplier, SupplierTransaction } from '../../types'
+import { formatDate, todayISO } from '../../lib/dates'
+import { rs } from '../../lib/money'
+import { PrinterIcon, CheckCircleIcon, CashIcon, PlusIcon, EditIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
+import { Modal, FormError } from '../common/Modal'
+import { useConfirm } from '../common/Confirm'
+import { useToast } from '../common/Toast'
+import { useSubmit } from '../common/useSubmit'
+import { CalcStrip, EmptyRow, Field, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard, Tabs } from '../common/kit'
 
-export const SuppliersView: React.FC = () => {
-  const { activeSiteData, paySupplier, addDaybookEntry } = useApp()
-  const { suppliers, siteInfo } = activeSiteData
+const SupplierModal: React.FC<{ supplier?: Supplier; onClose: () => void }> = ({ supplier, onClose }) => {
+  const { act } = useApp()
+  const toast = useToast()
+  const [name, setName] = useState(supplier?.name ?? '')
+  const [company, setCompany] = useState(supplier?.company ?? '')
+  const [category, setCategory] = useState(supplier?.category ?? '')
+  const [phone, setPhone] = useState(supplier?.phone ?? '')
+  const [opening, setOpening] = useState(String(supplier?.openingBalance ?? 0))
+  const [active, setActive] = useState(supplier?.isActive ?? true)
+  const { busy, error, run } = useSubmit()
 
-  const [modalOpen, setModalOpen] = useState(false)
-  const [printOpen, setPrintOpen] = useState(false)
-
-  // Vendor payment
-  const [selectedSupplierId, setSelectedSupplierId] = useState(suppliers[0]?.id || '')
-  const [payAmount, setPayAmount] = useState<number>(25000)
-  const [payNote, setPayNote] = useState('Payment against spare parts invoice')
-
-  const handleSavePayment = (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault()
-
-    // Persist payment to supplier in AppContext & localStorage
-    paySupplier(selectedSupplierId, payAmount)
-
-    // Record cash outflow in station daybook
-    const targetVendor = suppliers.find((s) => s.id === selectedSupplierId)
-    addDaybookEntry({
-      date: new Date().toISOString().split('T')[0],
-      time: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
-      particulars: `Vendor Payment: ${targetVendor?.name || 'Supplier'} — ${payNote}`,
-      category: 'Expense',
-      cashIn: 0,
-      cashOut: payAmount,
-      balanceAfter: 0,
-      referenceNo: `VND-${Date.now().toString().slice(-4)}`,
-      handledBy: siteInfo.managerName,
-    })
-
-    setModalOpen(false)
+    const input = { name, company, category, phone, openingBalance: Number(opening) }
+    if (supplier) void run(() => act.updateSupplier(supplier.id, { ...input, isActive: active }), () => { toast.success('Supplier updated.'); onClose() })
+    else void run(() => act.addSupplier(input), (s) => { toast.success(`Added ${s.name}.`); onClose() })
   }
 
-  const totalSupplierPayables = suppliers.reduce((sum, s) => sum + s.balanceDue, 0)
+  return (
+    <Modal title={supplier ? 'Edit Supplier' : 'Add Supplier / Vendor'} onClose={onClose} busy={busy} width={620}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Vendor name"><input className="form-input" value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></Field>
+          <Field label="Company"><input className="form-input" value={company} onChange={(e) => setCompany(e.target.value)} /></Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Category"><input className="form-input" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Spare parts, generator service" /></Field>
+          <Field label="Phone"><input className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+        </Grid2>
+        <Field label="Opening balance owed to this vendor (PKR)" hint="Bills recorded later are added to it; payments reduce it."><input type="number" step="any" className="form-input" value={opening} onChange={(e) => setOpening(e.target.value)} required /></Field>
+        {supplier && <label className="ui-checkbox-row"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /><span>Active vendor</span></label>}
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : supplier ? 'Save changes' : 'Add supplier'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+const BillModal: React.FC<{ supplierId?: string; onClose: () => void }> = ({ supplierId, onClose }) => {
+  const { activeSiteData, act } = useApp()
+  const toast = useToast()
+  const list = activeSiteData.suppliers.filter((s) => s.isActive)
+  const [id, setId] = useState(supplierId ?? list[0]?.id ?? '')
+  const [amount, setAmount] = useState('')
+  const [ref, setRef] = useState('')
+  const [note, setNote] = useState('')
+  const [date, setDate] = useState(todayISO())
+  const { busy, error, run } = useSubmit()
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    void run(() => act.addSupplierBill({ supplierId: id, amount: Number(amount), referenceNo: ref, note, date }), () => { toast.success('Bill recorded.'); onClose() })
+  }
+
+  return (
+    <Modal title="Record Vendor Bill" subtitle="Adds to the amount owed to the vendor" onClose={onClose} busy={busy} width={580}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Vendor"><select className="form-input" value={id} onChange={(e) => setId(e.target.value)} required>{list.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
+          <Field label="Bill amount (PKR)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Bill / invoice #"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
+          <Field label="Date"><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} required /></Field>
+        </Grid2>
+        <Field label="Details"><input className="form-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Dispenser hose replacement" /></Field>
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy || list.length === 0}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : 'Save bill'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+const PayModal: React.FC<{ supplierId?: string; onClose: () => void }> = ({ supplierId, onClose }) => {
+  const { activeSiteData, act } = useApp()
+  const toast = useToast()
+  const list = activeSiteData.suppliers.filter((s) => s.isActive)
+  const banks = activeSiteData.bankAccounts.filter((b) => b.isActive)
+  const first = list.find((s) => s.id === supplierId) ?? list[0]
+  const [id, setId] = useState(first?.id ?? '')
+  const s = list.find((x) => x.id === id)
+  const [amount, setAmount] = useState(first && first.balanceDue > 0 ? String(first.balanceDue) : '')
+  const [source, setSource] = useState<'Cash' | 'Bank'>('Cash')
+  const [bankId, setBankId] = useState(banks[0]?.id ?? '')
+  const [ref, setRef] = useState('')
+  const [note, setNote] = useState('')
+  const [date, setDate] = useState(todayISO())
+  const { busy, error, run } = useSubmit()
+  const amt = Number(amount) || 0
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    void run((ack) => act.paySupplier({ supplierId: id, amount: Number(amount), source, bankAccountId: source === 'Bank' ? bankId : '', referenceNo: ref, note, date, acknowledge: ack }), () => { toast.success(`Paid ${rs(Number(amount))}.`); onClose() })
+  }
+
+  return (
+    <Modal title="Record Vendor Payment" subtitle="Deducts the vendor balance and posts the cash / bank line" onClose={onClose} busy={busy} width={620}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Vendor"><select className="form-input" value={id} onChange={(e) => { setId(e.target.value); const n = list.find((x) => x.id === e.target.value); if (n && n.balanceDue > 0) setAmount(String(n.balanceDue)) }} required>{list.map((x) => <option key={x.id} value={x.id}>{x.name} — owed {rs(x.balanceDue)}</option>)}</select></Field>
+          <Field label="Payment amount (PKR)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Paid from"><select className="form-input" value={source} onChange={(e) => setSource(e.target.value as 'Cash' | 'Bank')}><option value="Cash">Cash from the safe</option><option value="Bank">Bank account</option></select></Field>
+          {source === 'Bank' ? (
+            <Field label="Bank account"><select className="form-input" value={bankId} onChange={(e) => setBankId(e.target.value)} required>{banks.map((b) => <option key={b.id} value={b.id}>{b.bankName} (Bal {rs(b.currentBalance)})</option>)}</select></Field>
+          ) : (
+            <Field label="Date"><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} required /></Field>
+          )}
+        </Grid2>
+        {source === 'Bank' && <Field label="Date"><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} required /></Field>}
+        <Grid2>
+          <Field label="Reference"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
+          <Field label="Notes"><input className="form-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Payment against spare parts invoice" /></Field>
+        </Grid2>
+        <CalcStrip items={[{ label: 'Owed now', value: rs(s?.balanceDue ?? 0) }, { label: 'This payment', value: `− ${rs(amt)}`, tone: 'green' }, { label: 'Owed after', value: rs((s?.balanceDue ?? 0) - amt), tone: 'gold' }]} />
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy || list.length === 0}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : 'Save payment'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+export const SuppliersView: React.FC = () => {
+  const { activeSiteData, act } = useApp()
+  const { suppliers, supplierTransactions, siteInfo } = activeSiteData
+  const confirm = useConfirm()
+  const toast = useToast()
+  const [tab, setTab] = useState<'vendors' | 'ledger'>('vendors')
+  const [form, setForm] = useState<{ supplier?: Supplier } | null>(null)
+  const [billFor, setBillFor] = useState<string | null>(null)
+  const [payFor, setPayFor] = useState<string | null>(null)
+  const [printOpen, setPrintOpen] = useState(false)
+  const [showInactive, setShowInactive] = useState(false)
+
+  const shown = suppliers.filter((s) => showInactive || s.isActive)
+  const live = suppliers.filter((s) => s.isActive)
+  const payables = live.reduce((s, x) => s + x.balanceDue, 0)
+  const name = (id: string) => suppliers.find((s) => s.id === id)?.name ?? 'Removed vendor'
+
+  const removeSupplier = async (s: Supplier) => {
+    if (!(await confirm({ title: `Remove ${s.name}?`, message: 'A vendor without history is deleted; one with history is deactivated (records kept). The balance must be Rs 0 first.', confirmLabel: 'Remove vendor', tone: 'danger' }))) return
+    const r = await act.removeSupplier(s.id)
+    if (r.ok) toast.success(r.value.mode === 'deleted' ? 'Vendor deleted.' : 'Vendor deactivated — history kept.'); else toast.error(r.error)
+  }
+  const removeTx = async (t: SupplierTransaction) => {
+    if (!(await confirm({ title: `Delete this ${t.type.toLowerCase()}?`, message: `${rs(t.amount)} — ${name(t.supplierId)}, ${formatDate(t.date)}${t.type === 'Payment' ? '. The cash / bank line it created is removed too.' : '.'}`, confirmLabel: 'Delete', tone: 'danger' }))) return
+    const r = await act.removeSupplierTransaction(t.id)
+    if (r.ok) toast.success('Deleted.'); else toast.error(r.error)
+  }
 
   return (
     <div className="page-content-wrapper">
-      <div className="page-title-banner">
-        <div>
-          <span className="page-eyebrow">VENDOR ACCOUNTS</span>
-          <h2 className="page-heading">Suppliers & Vendor Payables</h2>
-          <p className="page-sub">
-            Filter distributors, generator technicians, pump calibrators, and supply invoices
-          </p>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-outline" onClick={() => setPrintOpen(true)}>
-            <PrinterIcon size={16} />
-            <span>Print Vendor Sheet</span>
-          </button>
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
-            <CashIcon size={16} />
-            <span>Make Vendor Payment</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="VENDOR ACCOUNTS"
+        title="Suppliers & Vendor Payables"
+        subtitle="Distributors, generator technicians, pump calibrators: bills, payments and the balance owed"
+        actions={
+          <>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Vendor Sheet</span></button>
+            <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setForm({})}><PlusIcon size={16} /><span>Add Supplier</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setBillFor('')} disabled={live.length === 0}><span>Record Bill</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setPayFor('')} disabled={live.length === 0}><CashIcon size={16} /><span>Make Vendor Payment</span></button>
+          </>
+        }
+      />
 
-      {/* KPI Ribbon */}
-      <div className="executive-kpi-strip">
-        <div className="kpi-cell">
-          <span className="kpi-label">Registered Suppliers</span>
-          <strong className="kpi-cell-value">{suppliers.length} Vendors</strong>
-          <span className="kpi-cell-sub">Contractors & distributors</span>
-        </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Total Outstanding Payables</span>
-          <strong className="kpi-cell-value text-gold">Rs {totalSupplierPayables.toLocaleString()}</strong>
-          <span className="kpi-cell-sub">Pending vendor bills</span>
-        </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Major Vendor</span>
-          <strong className="kpi-cell-value">{suppliers[0]?.name}</strong>
-          <span className="kpi-cell-sub">Primary supplier</span>
-        </div>
-      </div>
+      <KpiStrip>
+        <Kpi label="Registered suppliers" value={`${live.length} vendors`} sub="Contractors & distributors" />
+        <Kpi label="Total payables" value={rs(payables)} tone="gold" sub="Pending vendor bills" />
+        <Kpi label="Payments this month" value={rs(supplierTransactions.filter((t) => t.type === 'Payment' && t.date.startsWith(todayISO().slice(0, 7))).reduce((s, t) => s + t.amount, 0))} tone="green" sub="Paid to vendors" />
+      </KpiStrip>
 
-      {/* Suppliers Table */}
-      <div className="table-surface">
-        <div className="table-surface-header">
-          <div>
-            <h3 className="surface-heading">Station Vendor Directory</h3>
-            <p className="surface-sub">Current payables and contact numbers</p>
+      <Tabs tabs={[{ id: 'vendors', label: 'Vendors', count: shown.length }, { id: 'ledger', label: 'Bills & payments', count: supplierTransactions.length }]} active={tab} onChange={(t) => setTab(t as typeof tab)} />
+
+      {tab === 'vendors' ? (
+        <SectionCard title="Station Vendor Directory" subtitle="Balance = opening balance + bills − payments" actions={<label className="ui-checkbox-row" style={{ margin: 0 }}><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /><span>Show inactive</span></label>}>
+          <div className="table-responsive">
+            <table className="clean-table">
+              <thead><tr><th>Vendor / company</th><th>Category</th><th>Phone</th><th>Balance due</th><th /></tr></thead>
+              <tbody>
+                {shown.length === 0 ? <EmptyRow colSpan={5}>No vendors yet. Click "Add Supplier".</EmptyRow> : shown.map((s) => (
+                  <tr key={s.id} style={s.isActive ? undefined : { opacity: 0.55 }}>
+                    <td><strong>{s.name}</strong><div className="text-muted text-xs">{s.company}{!s.isActive && ' • inactive'}</div></td>
+                    <td><span className="category-tag">{s.category || '—'}</span></td>
+                    <td>{s.phone || '—'}</td>
+                    <td className="text-gold font-bold">{rs(s.balanceDue)}</td>
+                    <td>
+                      <RowActions>
+                        <button type="button" className="btn btn-sm btn-outline" disabled={!s.isActive} onClick={() => setBillFor(s.id)}>+ Bill</button>
+                        <button type="button" className="btn btn-sm btn-outline" disabled={!s.isActive} onClick={() => setPayFor(s.id)}>Pay</button>
+                        <IconButton label="Edit vendor" onClick={() => setForm({ supplier: s })}><EditIcon size={14} /></IconButton>
+                        <IconButton label="Remove vendor" tone="danger" onClick={() => void removeSupplier(s)}><TrashIcon size={14} /></IconButton>
+                      </RowActions>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        <div className="table-responsive">
-          <table className="clean-table">
-            <thead>
-              <tr>
-                <th>Vendor / Company</th>
-                <th>Category</th>
-                <th>Contact Phone</th>
-                <th>Balance Due (PKR)</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {suppliers.map((sup) => (
-                <tr key={sup.id}>
-                  <td>
-                    <strong>{sup.name}</strong>
-                    <div className="text-muted text-xs">{sup.company}</div>
-                  </td>
-                  <td>
-                    <span className="category-tag">{sup.category}</span>
-                  </td>
-                  <td>{sup.phone}</td>
-                  <td className="text-gold font-bold">Rs {sup.balanceDue.toLocaleString()}</td>
-                  <td>
-                    <button
-                      className="btn btn-sm btn-outline"
-                      onClick={() => {
-                        setSelectedSupplierId(sup.id)
-                        setPayAmount(Math.min(sup.balanceDue, 50000))
-                        setModalOpen(true)
-                      }}
-                    >
-                      Pay Vendor
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal: Make Payment */}
-      {modalOpen && (
-        <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <h3 className="modal-heading">Record Vendor Payment</h3>
-                <span className="modal-sub">Deducts payable balance in vendor ledger</span>
-              </div>
-              <button className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                <XIcon size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSavePayment} className="modal-form">
-              <div className="form-group">
-                <label className="form-label">Vendor</label>
-                <select
-                  className="form-input"
-                  value={selectedSupplierId}
-                  onChange={(e) => setSelectedSupplierId(e.target.value)}
-                >
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.company}) — Balance Due: Rs {s.balanceDue.toLocaleString()}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label font-bold text-gold">Payment Amount (PKR)</label>
-                <input
-                  type="number"
-                  className="form-input form-input-lg"
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(Number(e.target.value))}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Payment Description / Notes</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={payNote}
-                  onChange={(e) => setPayNote(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="modal-actions-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  <CheckCircleIcon size={16} />
-                  <span>Save Vendor Payment</span>
-                </button>
-              </div>
-            </form>
+        </SectionCard>
+      ) : (
+        <SectionCard title="Vendor Bills & Payments" subtitle="Newest first">
+          <div className="table-responsive">
+            <table className="clean-table">
+              <thead><tr><th>Date</th><th>Vendor</th><th>Type</th><th>Reference / details</th><th>Bill (+)</th><th>Paid (−)</th><th>Paid from</th><th /></tr></thead>
+              <tbody>
+                {supplierTransactions.length === 0 ? <EmptyRow colSpan={8}>No bills or payments yet.</EmptyRow> : supplierTransactions.map((t) => (
+                  <tr key={t.id}>
+                    <td>{formatDate(t.date)}</td><td><strong>{name(t.supplierId)}</strong></td>
+                    <td><span className={`badge ${t.type === 'Bill' ? 'badge-warning' : 'badge-success'}`}>{t.type}</span></td>
+                    <td>{t.referenceNo && <strong>{t.referenceNo} </strong>}{t.note}</td>
+                    <td className="text-red">{t.type === 'Bill' ? rs(t.amount) : '—'}</td><td className="text-green">{t.type === 'Payment' ? rs(t.amount) : '—'}</td>
+                    <td>{t.paymentSource || '—'}</td>
+                    <td><RowActions><IconButton label="Delete" tone="danger" onClick={() => void removeTx(t)}><TrashIcon size={14} /></IconButton></RowActions></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </SectionCard>
       )}
 
-      {/* Print Slip */}
-      <PrintReceiptModal
-        isOpen={printOpen}
-        onClose={() => setPrintOpen(false)}
-        title="Station Vendor Payables Summary"
-        stationName={siteInfo.name}
-        stationLocation={siteInfo.location}
-        stationPhone={siteInfo.phone}
-      >
-        <table className="slip-table">
-          <thead>
-            <tr>
-              <th>Vendor</th>
-              <th>Category</th>
-              <th>Phone</th>
-              <th>Due (PKR)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {suppliers.map((s) => (
-              <tr key={s.id}>
-                <td>{s.name}</td>
-                <td>{s.category}</td>
-                <td>{s.phone}</td>
-                <td>Rs {s.balanceDue.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {form && <SupplierModal supplier={form.supplier} onClose={() => setForm(null)} />}
+      {billFor !== null && <BillModal supplierId={billFor || undefined} onClose={() => setBillFor(null)} />}
+      {payFor !== null && <PayModal supplierId={payFor || undefined} onClose={() => setPayFor(null)} />}
 
+      <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Station Vendor Payables Summary" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
+        <table className="slip-table">
+          <thead><tr><th>Vendor</th><th>Category</th><th>Phone</th><th>Due</th></tr></thead>
+          <tbody>{live.map((s) => <tr key={s.id}><td>{s.name}</td><td>{s.category}</td><td>{s.phone}</td><td>{rs(s.balanceDue)}</td></tr>)}</tbody>
+        </table>
         <div className="receipt-divider" />
-        <div className="slip-row highlight">
-          <span>Total Vendor Payables:</span>
-          <strong>Rs {totalSupplierPayables.toLocaleString()}</strong>
-        </div>
+        <div className="slip-row highlight"><span>Total vendor payables:</span><strong>{rs(payables)}</strong></div>
       </PrintReceiptModal>
     </div>
   )

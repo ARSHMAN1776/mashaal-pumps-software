@@ -1,950 +1,463 @@
 import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  type ReactNode,
-  type FC,
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type FC, type ReactNode,
 } from 'react'
-import type {
-  User,
-  Customer,
-  FuelSaleRecord,
-  ShiftRecord,
-  TankDipRecord,
-  OmcInvoice,
-  OmcPayment,
-  DaybookEntry,
-  CreditSaleSlip,
-  CustomerRecovery,
-  ExpenseRecord,
-  BankTransaction,
-  StationSettings,
-  TariffRevisionLog,
-  OwnerTransferRecord,
-} from '../types'
-import type { StationData } from '../data/mockData'
-import { loadStationData, saveStationData, validateStationBackup, restoreStationBackup } from '../services/storage'
-import { authenticate, saveSession, getSession, clearSession } from '../services/auth'
-import {
-  checkCloudConnection,
-  fetchStationFromCloud,
-  saveStationToCloud,
-  subscribeToStationChanges,
-  syncRelationalRecord,
-  type CloudStatus,
-} from '../services/supabase'
+import type { AuditEntry, StationData, StationSummary, User, UserRole } from '../types'
+import { checkBackup, exportBackupJson, legacyToRaw, type BackupCheck } from '../data/backup'
+import type { Backend, ManagedUser, RealtimeStatus, SaveUserInput, StationProfilePatch } from '../data/backend'
+import { deriveStation } from '../data/derive'
+import { AppError, fail, friendlyError, ok, type Result } from '../data/errors'
+import type { Op } from '../data/ops'
+import { COLLECTION_KEYS, EMPTY_SETTINGS, applyResults, emptyRaw, type RawStation } from '../data/raw'
+import { createSupabaseBackend } from '../data/supabaseBackend'
+import { todayISO } from '../lib/dates'
+import { clearLegacySessions, clearLegacyStation, hasLegacyStation, readLegacyStation } from '../services/legacyLocal'
+import { isSupabaseConfigured } from '../services/supabase'
+import { bindActions, type ActionCtx, type Actions } from './actions'
 
-// ---------------------------------------------------------------------------
-// Context shape
-// ---------------------------------------------------------------------------
+export type DataStatus = 'idle' | 'loading' | 'ready' | 'error'
 
-interface AppContextType {
-  currentUser: User | null
-  activeSiteId: 'SITE-01' | 'SITE-02' | null
-  isSiteLoggedIn: boolean
-  activeModule: string
-  activeSiteData: StationData
-  allSitesData: { 'SITE-01': StationData; 'SITE-02': StationData }
-  loginError: string | null
-
-  // Auth
-  login: (username: string, password: string, keepSignedIn: boolean) => boolean
-  logout: () => void
-  selectSite: (siteId: 'SITE-01' | 'SITE-02') => void
-  exitSite: () => void
-  setActiveModule: (module: string) => void
-
-  // Fuel sales
-  addFuelSale: (sale: Omit<FuelSaleRecord, 'id'>) => void
-  closeShift: (shift: Omit<ShiftRecord, 'id'>) => void
-
-  // Tank dips
-  addTankDip: (dip: Omit<TankDipRecord, 'id'>) => void
-
-  // OMC
-  addOmcInvoice: (inv: Omit<OmcInvoice, 'id'>) => void
-  addOmcPayment: (pay: Omit<OmcPayment, 'id'>) => void
-
-  // Daybook
-  addDaybookEntry: (entry: Omit<DaybookEntry, 'id'>) => void
-
-  // Customers
-  addCustomer: (customer: Omit<Customer, 'id' | 'siteId'>) => void
-  addCreditSlip: (slip: Omit<CreditSaleSlip, 'id'>) => void
-  addCustomerRecovery: (rec: Omit<CustomerRecovery, 'id'>) => void
-
-  // Expenses
-  addExpense: (exp: Omit<ExpenseRecord, 'id'>) => void
-
-  // Staff
-  updateStaffAdvance: (staffId: string, amount: number) => void
-  updateStaffStatus: (staffId: string, status: 'On Duty' | 'Off Duty' | 'On Leave') => void
-
-  // Lubricants
-  updateLubricantStock: (productId: string, quantitySold: number) => void
-
-  // Bank
-  addBankDeposit: (deposit: {
-    bankId: string
-    amount: number
-    slipNo: string
-    description: string
-  }) => void
-
-  // Suppliers
-  paySupplier: (supplierId: string, amount: number) => void
-
-  // Settings
-  updateSettings: (settings: StationSettings) => void
-
-  // Backup
-  exportBackup: () => void
-  importBackup: (fileContent: string) => { success: boolean; message: string; siteId?: string }
-
-  // OGRA Tariff Wizard
-  applyOgraPriceChange: (params: {
-    newRates: { 'PMG Super': number; 'HSD Diesel': number; 'Hi-Octane': number }
-    effectiveDate: string
-    notificationNo?: string
-    notes?: string
-  }) => TariffRevisionLog | null
-
-  // Owner Transfers & Capital Distributions
-  addOwnerTransfer: (transfer: Omit<OwnerTransferRecord, 'id'>) => void
-
-  // Cloud Sync
-  cloudStatus: CloudStatus
-  refreshCloudSync: () => Promise<void>
+/** Records found in an old browser copy that are not in the database yet. */
+export interface LegacyCopy {
+  missing: number
+  raw: RawStation
 }
 
-// ---------------------------------------------------------------------------
-// Context creation
-// ---------------------------------------------------------------------------
+interface AppContextType {
+  booting: boolean
+  bootError: string | null
+  backendKind: 'supabase' | 'memory'
+
+  stations: StationSummary[]
+  currentUser: User | null
+  activeSiteId: string | null
+  /** signed in AND allowed to use the selected station */
+  isSiteLoggedIn: boolean
+  activeModule: string
+  setActiveModule: (module: string) => void
+
+  /** the selected station's data with balances applied (empty until dataStatus is 'ready') */
+  activeSiteData: StationData
+  dataStatus: DataStatus
+  dataError: string | null
+  reloadData: () => Promise<void>
+  realtime: RealtimeStatus
+  online: boolean
+
+  loginError: string | null
+  loggingIn: boolean
+  login: (username: string, password: string, keepSignedIn: boolean, expectedRole?: UserRole) => Promise<boolean>
+  logout: () => Promise<void>
+  selectSite: (siteId: string) => Promise<void>
+  exitSite: () => void
+  changePassword: (newPassword: string) => Promise<Result<void>>
+
+  /** every business operation (see context/actions) */
+  act: Actions
+
+  updateStationProfile: (patch: StationProfilePatch) => Promise<Result<void>>
+  loadAudit: (limit?: number) => Promise<Result<AuditEntry[]>>
+  listUsers: () => Promise<Result<ManagedUser[]>>
+  saveUser: (input: SaveUserInput) => Promise<Result<void>>
+  deleteUser: (userId: string) => Promise<Result<void>>
+
+  exportBackup: () => void
+  checkBackupFile: (text: string) => BackupCheck
+
+  /** records the previous software left in this browser that never reached the database */
+  legacyCopy: LegacyCopy | null
+  importLegacyCopy: () => Promise<Result<void>>
+  discardLegacyCopy: () => void
+}
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
-// ---------------------------------------------------------------------------
-// Provider
-// ---------------------------------------------------------------------------
+const EMPTY_INFO = {
+  id: '', code: '', name: '', location: '', brand: 'TOTAL PARCO' as const, brandColor: '#967938', phone: '', managerName: '', ntn: '',
+}
+export const EMPTY_STATION_DATA: StationData = deriveStation(emptyRaw(EMPTY_INFO, EMPTY_SETTINGS))
+
+async function createBackend(): Promise<Backend> {
+  if (__PREVIEW__) {
+    const [{ createMemoryBackend }, { buildFixtures }] = await Promise.all([import('../data/memoryBackend'), import('../dev/fixtures')])
+    return createMemoryBackend(buildFixtures())
+  }
+  if (!isSupabaseConfigured) {
+    throw new AppError('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to the .env file and restart the app.')
+  }
+  return createSupabaseBackend()
+}
+
+const homeModule = (user: User) => (user.role === 'owner' ? 'owner-portal' : 'dashboard')
+const missingRecords = (mine: RawStation, other: RawStation): number => {
+  let n = 0
+  for (const key of COLLECTION_KEYS) {
+    const have = new Set((mine[key] as { id: string }[]).map((r) => r.id))
+    for (const r of other[key] as { id: string }[]) if (!have.has(r.id)) n += 1
+  }
+  return n
+}
 
 export const AppProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  // ── Auth / navigation state ────────────────────────────────────────────
+  const backendRef = useRef<Backend | null>(null)
+  const [booting, setBooting] = useState(true)
+  const [bootError, setBootError] = useState<string | null>(null)
+  const [backendKind, setBackendKind] = useState<'supabase' | 'memory'>('supabase')
+
+  const [stations, setStations] = useState<StationSummary[]>([])
   const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [activeSiteId, setActiveSiteId] = useState<'SITE-01' | 'SITE-02' | null>(null)
-  const [isSiteLoggedIn, setIsSiteLoggedIn] = useState<boolean>(false)
-  const [activeModule, setActiveModule] = useState<string>('dashboard')
+  const [activeSiteId, setActiveSiteId] = useState<string | null>(null)
+  const [activeModule, setActiveModule] = useState('dashboard')
   const [loginError, setLoginError] = useState<string | null>(null)
+  const [loggingIn, setLoggingIn] = useState(false)
 
-  // ── Station data (both sites loaded from localStorage) ─────────────────
-  const [stations, setStations] = useState<{ 'SITE-01': StationData; 'SITE-02': StationData }>(
-    () => ({
-      'SITE-01': loadStationData('SITE-01'),
-      'SITE-02': loadStationData('SITE-02'),
-    })
-  )
+  const [raw, setRaw] = useState<RawStation | null>(null)
+  const rawRef = useRef<RawStation | null>(null)
+  const [dataStatus, setDataStatus] = useState<DataStatus>('idle')
+  const [dataError, setDataError] = useState<string | null>(null)
+  const [realtime, setRealtime] = useState<RealtimeStatus>('connecting')
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
+  const [legacyCopy, setLegacyCopy] = useState<LegacyCopy | null>(null)
+  const legacyChecked = useRef<string | null>(null)
+  const lastLoadedAt = useRef(0)
 
-  // ── Cloud status state ──────────────────────────────────────────────────
-  const [cloudStatus, setCloudStatus] = useState<CloudStatus>({
-    connected: false,
-    tableExists: false,
-    lastSyncedAt: null,
-  })
+  const userRef = useRef<User | null>(null)
+  const siteRef = useRef<string | null>(null)
+  userRef.current = currentUser
+  siteRef.current = activeSiteId
 
-  // ── Initial cloud sync and real-time listeners ─────────────────────────
-  const refreshCloudSync = useCallback(async () => {
-    try {
-      const status = await checkCloudConnection()
-      setCloudStatus(status)
-      if (status.connected && status.tableExists) {
-        const [site1Cloud, site2Cloud] = await Promise.all([
-          fetchStationFromCloud('SITE-01'),
-          fetchStationFromCloud('SITE-02'),
-        ])
-        if (site1Cloud || site2Cloud) {
-          setStations((prev) => ({
-            'SITE-01': site1Cloud || prev['SITE-01'],
-            'SITE-02': site2Cloud || prev['SITE-02'],
-          }))
-        }
+  const isSiteLoggedIn = Boolean(currentUser && activeSiteId && currentUser.stationAccess.includes(activeSiteId))
+
+  // ---- derived data (memoised by the identity of the stored facts) ------------
+  const activeSiteData = useMemo(() => (raw ? deriveStation(raw) : EMPTY_STATION_DATA), [raw])
+  const cache = useRef<{ raw: RawStation | null; data: StationData }>({ raw: null, data: EMPTY_STATION_DATA })
+
+  const setRawBoth = useCallback((next: RawStation | null) => {
+    rawRef.current = next
+    setRaw(next)
+  }, [])
+
+  // ---- boot: create the backend, restore the session, list stations ------------
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const be = await createBackend()
+        if (cancelled) return
+        backendRef.current = be
+        setBackendKind(be.kind)
+        clearLegacySessions()
+        const [user, list] = await Promise.all([be.restoreSession(), be.listStations()])
+        if (cancelled) return
+        setStations(list)
+        setCurrentUser(user)
+      } catch (e) {
+        if (!cancelled) setBootError(friendlyError(e))
+      } finally {
+        if (!cancelled) setBooting(false)
       }
-    } catch (err) {
-      console.warn('[CloudSync] Check failed:', err)
+    })()
+    return () => {
+      cancelled = true
     }
   }, [])
 
-  useEffect(() => {
-    refreshCloudSync()
-
-    const unsub1 = subscribeToStationChanges('SITE-01', (cloudData) => {
-      setStations((prev) => ({ ...prev, 'SITE-01': cloudData }))
-      setCloudStatus((prev) => ({ ...prev, lastSyncedAt: new Date().toISOString() }))
-    })
-
-    const unsub2 = subscribeToStationChanges('SITE-02', (cloudData) => {
-      setStations((prev) => ({ ...prev, 'SITE-02': cloudData }))
-      setCloudStatus((prev) => ({ ...prev, lastSyncedAt: new Date().toISOString() }))
-    })
-
-    return () => {
-      unsub1()
-      unsub2()
-    }
-  }, [refreshCloudSync])
-
-  // ── Persist station data locally and to cloud ────────────────────────────
-  useEffect(() => {
-    saveStationData('SITE-01', stations['SITE-01'])
-    saveStationToCloud('SITE-01', stations['SITE-01']).then((saved) => {
-      if (saved) {
-        setCloudStatus((prev) => ({ ...prev, connected: true, tableExists: true, lastSyncedAt: new Date().toISOString() }))
-      }
-    }).catch(() => {})
-  }, [stations['SITE-01']])
-
-  useEffect(() => {
-    saveStationData('SITE-02', stations['SITE-02'])
-    saveStationToCloud('SITE-02', stations['SITE-02']).then((saved) => {
-      if (saved) {
-        setCloudStatus((prev) => ({ ...prev, connected: true, tableExists: true, lastSyncedAt: new Date().toISOString() }))
-      }
-    }).catch(() => {})
-  }, [stations['SITE-02']])
-
-  // ── Computed: active site data ──────────────────────────────────────────
-  const activeSiteData = stations[activeSiteId || 'SITE-01']
-
-  // ── Helper: mutate only the active station ──────────────────────────────
-  const updateActiveStation = useCallback(
-    (updater: (prev: StationData) => StationData) => {
-      if (!activeSiteId) return
-      setStations((prev) => ({
-        ...prev,
-        [activeSiteId]: updater(prev[activeSiteId]),
-      }))
-    },
-    [activeSiteId]
-  )
-
-  // ── Helper: get running daybook balance for active station ──────────────
-  const getDaybookBalance = useCallback(
-    (stationData: StationData): number => {
-      const db = stationData.daybook
-      return db.length > 0 ? db[db.length - 1].balanceAfter : 0
-    },
-    []
-  )
-
-  // =========================================================================
-  // Auth actions
-  // =========================================================================
-
-  /**
-   * Validate credentials and sign the user in.
-   * Returns true on success, false on failure (with loginError set).
-   */
-  const login = useCallback(
-    (username: string, password: string, keepSignedIn: boolean): boolean => {
-      if (!activeSiteId) return false
-
-      const user = authenticate(activeSiteId, username, password)
-      if (!user) {
-        setLoginError('Invalid username or password. Please try again.')
-        return false
-      }
-
-      setLoginError(null)
-      setCurrentUser(user)
-      setIsSiteLoggedIn(true)
-      setActiveModule(user.role === 'owner' ? 'owner-portal' : 'dashboard')
-
-      if (keepSignedIn) {
-        saveSession(activeSiteId, user)
-      } else {
-        clearSession(activeSiteId)
-      }
-
-      return true
-    },
-    [activeSiteId]
-  )
-
-  const logout = useCallback(() => {
-    if (activeSiteId) clearSession(activeSiteId)
+  const resetSession = useCallback(() => {
     setCurrentUser(null)
-    setIsSiteLoggedIn(false)
     setActiveSiteId(null)
     setActiveModule('dashboard')
     setLoginError(null)
-  }, [activeSiteId])
+    setRawBoth(null)
+    setDataStatus('idle')
+    setLegacyCopy(null)
+    legacyChecked.current = null
+  }, [setRawBoth])
 
-  const selectSite = useCallback((siteId: 'SITE-01' | 'SITE-02') => {
-    // Strict Data Isolation: If already logged into a station, cannot switch to another station without logging out
-    if (isSiteLoggedIn && activeSiteId && activeSiteId !== siteId) {
-      console.warn(`[Data Isolation Guard] Cross-access blocked: Cannot switch from ${activeSiteId} to ${siteId} while active session is running.`)
+  // signed out elsewhere (expired token, another tab)
+  useEffect(() => {
+    const be = backendRef.current
+    if (booting || !be) return
+    // only when someone is actually signed in: a refused login also signs out, and must keep showing its error
+    return be.onSignedOut(() => {
+      if (userRef.current) resetSession()
+    })
+  }, [booting, resetSession])
+
+  // ---- load the selected station + live updates --------------------------------
+  const loadStation = useCallback(async (silent: boolean) => {
+    const be = backendRef.current
+    const user = userRef.current
+    const siteId = siteRef.current
+    if (!be || !user || !siteId) return
+    if (!silent) {
+      setDataStatus('loading')
+      setDataError(null)
+    }
+    try {
+      const loaded = await be.loadStation(siteId, user.role)
+      if (siteRef.current !== siteId) return
+      lastLoadedAt.current = Date.now()
+      setRawBoth(loaded)
+      setDataStatus('ready')
+      setDataError(null)
+    } catch (e) {
+      if (siteRef.current !== siteId) return
+      if (!silent) {
+        setDataError(friendlyError(e))
+        setDataStatus('error')
+      }
+    }
+  }, [setRawBoth])
+
+  useEffect(() => {
+    const be = backendRef.current
+    if (!be || !isSiteLoggedIn || !activeSiteId || !currentUser) {
+      setRawBoth(null)
+      setDataStatus('idle')
       return
     }
+    setRealtime('connecting')
+    void loadStation(false)
+    const unsubscribe = be.subscribe(activeSiteId, {
+      onChange: (results) => {
+        if (rawRef.current) setRawBoth(applyResults(rawRef.current, results))
+      },
+      onStatus: setRealtime,
+      onResync: () => void loadStation(true),
+    })
+    return unsubscribe
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSiteLoggedIn, activeSiteId, currentUser?.id, currentUser?.role, loadStation, setRawBoth])
 
-    setActiveSiteId(siteId)
-    setLoginError(null)
-
-    // Check for a saved session — if found, verify site access and restore it
-    const savedUser = getSession(siteId)
-    if (savedUser && savedUser.stationAccess?.includes(siteId)) {
-      setCurrentUser(savedUser)
-      setIsSiteLoggedIn(true)
-      setActiveModule(savedUser.role === 'owner' ? 'owner-portal' : 'dashboard')
-    } else {
-      setCurrentUser(null)
-      setIsSiteLoggedIn(false)
-      setActiveModule('dashboard')
+  // refresh when the tab wakes up or the connection returns
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && rawRef.current && Date.now() - lastLoadedAt.current > 60_000) void loadStation(true)
     }
-  }, [isSiteLoggedIn, activeSiteId])
+    const onOnline = () => {
+      setOnline(true)
+      if (rawRef.current) void loadStation(true)
+    }
+    const onOffline = () => setOnline(false)
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [loadStation])
+
+  // ---- business actions ---------------------------------------------------------
+  const getCtx = useCallback((): ActionCtx => {
+    const be = backendRef.current
+    const user = userRef.current
+    const siteId = siteRef.current
+    const current = rawRef.current
+    if (!be || !user || !siteId || !current) throw new AppError('You are not signed in to a station.')
+    if (cache.current.raw !== current) cache.current = { raw: current, data: deriveStation(current) }
+    return {
+      siteId,
+      user,
+      raw: current,
+      data: cache.current.data,
+      commit: async (ops: Op[]) => {
+        const results = await be.applyOps(siteId, ops)
+        if (rawRef.current && siteRef.current === siteId) setRawBoth(applyResults(rawRef.current, results))
+        return results
+      },
+      nextNo: (kind) => be.nextDocNo(siteId, kind),
+    }
+  }, [setRawBoth])
+
+  const act = useMemo(() => bindActions(getCtx), [getCtx])
+
+  // ---- sign in / out ---------------------------------------------------------------
+  const login = useCallback(async (username: string, password: string, keepSignedIn: boolean, expectedRole?: UserRole) => {
+    const be = backendRef.current
+    if (!be || !siteRef.current) return false
+    setLoggingIn(true)
+    setLoginError(null)
+    try {
+      const user = await be.signIn(username, password, keepSignedIn)
+      const station = stations.find((s) => s.id === siteRef.current)
+      if (!user.stationAccess.includes(siteRef.current)) {
+        await be.signOut()
+        setLoginError(`This account does not have access to ${station?.name ?? siteRef.current}.`)
+        return false
+      }
+      if (expectedRole && user.role !== expectedRole) {
+        await be.signOut()
+        const label = { owner: 'an Owner', manager: 'a Station Manager', cashier: 'a Cashier' }
+        setLoginError(`This is ${label[user.role]} account, but "${expectedRole}" is selected. Choose the matching role and try again.`)
+        return false
+      }
+      setCurrentUser(user)
+      setActiveModule(homeModule(user))
+      return true
+    } catch (e) {
+      setLoginError(friendlyError(e))
+      return false
+    } finally {
+      setLoggingIn(false)
+    }
+  }, [stations])
+
+  const logout = useCallback(async () => {
+    try {
+      await backendRef.current?.signOut()
+    } finally {
+      resetSession()
+    }
+  }, [resetSession])
+
+  const selectSite = useCallback(async (siteId: string) => {
+    setLoginError(null)
+    const user = userRef.current
+    if (user && !user.stationAccess.includes(siteId)) {
+      // a different account is signed in: it must sign out before another station can be opened
+      try {
+        await backendRef.current?.signOut()
+      } catch { /* the token is dropped below either way */ }
+      setCurrentUser(null)
+    } else if (user) {
+      setActiveModule(homeModule(user))
+    }
+    setActiveSiteId(siteId)
+  }, [])
 
   const exitSite = useCallback(() => {
     setActiveSiteId(null)
-    setIsSiteLoggedIn(false)
-    setCurrentUser(null)
-    setActiveModule('dashboard')
     setLoginError(null)
   }, [])
 
-  // =========================================================================
-  // Fuel Sales
-  // =========================================================================
-
-  const addFuelSale = useCallback(
-    (sale: Omit<FuelSaleRecord, 'id'>) => {
-      const id = `FS-${Date.now()}`
-      updateActiveStation((station) => ({
-        ...station,
-        fuelSales: [{ ...sale, id }, ...station.fuelSales],
-      }))
-      if (activeSiteId) {
-        syncRelationalRecord('fuel_sales', {
-          id,
-          site_id: activeSiteId,
-          date: sale.date,
-          shift: sale.shiftId,
-          nozzle_id: sale.nozzleId,
-          dispenser_no: sale.dispenserNo,
-          nozzle_no: sale.nozzleNo,
-          fuel_type: sale.fuelType,
-          opening_meter: sale.openingMeter,
-          closing_meter: sale.closingMeter,
-          testing_liters: sale.testingLiters,
-          liters_sold: sale.netLiters,
-          rate: sale.ratePerLiter,
-          amount: sale.totalAmount,
-          recorded_by: sale.cashierName,
-        })
+  const changePassword = useCallback(async (newPassword: string): Promise<Result<void>> => {
+    const be = backendRef.current
+    if (!be) return fail('Not connected.')
+    if (newPassword.length < 8) return fail('The password must be at least 8 characters.')
+    try {
+      await be.changePassword(newPassword)
+      if (userRef.current?.mustChangePassword) {
+        await be.markPasswordChanged()
+        setCurrentUser((u) => (u ? { ...u, mustChangePassword: false } : u))
       }
-    },
-    [updateActiveStation, activeSiteId]
-  )
-
-  const closeShift = useCallback(
-    (shift: Omit<ShiftRecord, 'id'>) => {
-      updateActiveStation((station) => ({
-        ...station,
-        shifts: [{ ...shift, id: `SH-${Date.now()}` }, ...station.shifts],
-      }))
-    },
-    [updateActiveStation]
-  )
-
-  // =========================================================================
-  // Tank Dips
-  // =========================================================================
-
-  const addTankDip = useCallback(
-    (dip: Omit<TankDipRecord, 'id'>) => {
-      const id = `DIP-${Date.now()}`
-      updateActiveStation((station) => {
-        const updatedTanks = station.tanks.map((t) =>
-          t.id === dip.tankId
-            ? { ...t, currentLiters: dip.closingPhysicalLiters, currentDipMm: dip.closingDipMm, lastUpdated: 'Just now' }
-            : t
-        )
-        return {
-          ...station,
-          tankDips: [{ ...dip, id }, ...station.tankDips],
-          tanks: updatedTanks,
-        }
-      })
-      if (activeSiteId) {
-        syncRelationalRecord('tank_dips', {
-          id,
-          site_id: activeSiteId,
-          date: dip.date,
-          tank_id: dip.tankId,
-          tank_no: dip.tankNo,
-          fuel_type: dip.fuelType,
-          morning_dip_mm: dip.morningDipMm,
-          morning_liters: dip.morningLiters,
-          decanted_liters: dip.decantedLiters,
-          dispensed_liters: dip.dispensedLiters,
-          book_stock_liters: dip.bookStockLiters,
-          closing_dip_mm: dip.closingDipMm,
-          closing_physical_liters: dip.closingPhysicalLiters,
-          variance_liters: dip.varianceLiters,
-          water_dip_mm: dip.waterDipMm,
-          inspector: dip.inspector,
-        })
-      }
-    },
-    [updateActiveStation, activeSiteId]
-  )
-
-  // =========================================================================
-  // OMC Ledger — BUG FIX: addOmcPayment now updates invoice paidAmount + status
-  // =========================================================================
-
-  const addOmcInvoice = useCallback(
-    (inv: Omit<OmcInvoice, 'id'>) => {
-      updateActiveStation((station) => ({
-        ...station,
-        omcInvoices: [{ ...inv, id: `OMC-INV-${Date.now()}` }, ...station.omcInvoices],
-      }))
-    },
-    [updateActiveStation]
-  )
-
-  const addOmcPayment = useCallback(
-    (pay: Omit<OmcPayment, 'id'>) => {
-      updateActiveStation((station) => {
-        // Update the matching invoice's paidAmount and paymentStatus
-        const updatedInvoices = station.omcInvoices.map((inv) => {
-          if (inv.invoiceNo === pay.invoiceNo) {
-            const newPaidAmount = inv.paidAmount + pay.amount
-            const paymentStatus: OmcInvoice['paymentStatus'] =
-              newPaidAmount >= inv.totalAmount
-                ? 'Paid'
-                : newPaidAmount > 0
-                ? 'Partial'
-                : 'Pending'
-            return { ...inv, paidAmount: newPaidAmount, paymentStatus }
-          }
-          return inv
-        })
-
-        return {
-          ...station,
-          omcPayments: [{ ...pay, id: `PAY-${Date.now()}` }, ...station.omcPayments],
-          omcInvoices: updatedInvoices,
-        }
-      })
-    },
-    [updateActiveStation]
-  )
-
-  // =========================================================================
-  // Daybook — BUG FIX: compute balanceAfter from current running balance
-  // =========================================================================
-
-  const addDaybookEntry = useCallback(
-    (entry: Omit<DaybookEntry, 'id'>) => {
-      const id = `DB-${Date.now()}`
-      updateActiveStation((station) => {
-        const runningBalance = getDaybookBalance(station)
-        const balanceAfter =
-          entry.balanceAfter !== 0
-            ? entry.balanceAfter
-            : runningBalance + entry.cashIn - entry.cashOut
-
-        const newEntry: DaybookEntry = {
-          ...entry,
-          id,
-          balanceAfter,
-        }
-        return {
-          ...station,
-          daybook: [...station.daybook, newEntry],
-        }
-      })
-      if (activeSiteId) {
-        syncRelationalRecord('daybook_vouchers', {
-          id,
-          site_id: activeSiteId,
-          date: entry.date,
-          time: entry.time,
-          particulars: entry.particulars,
-          category: entry.category,
-          cash_in: entry.cashIn,
-          cash_out: entry.cashOut,
-          balance_after: entry.balanceAfter,
-          reference_no: entry.referenceNo,
-          handled_by: entry.handledBy,
-        })
-      }
-    },
-    [updateActiveStation, getDaybookBalance, activeSiteId]
-  )
-
-  // =========================================================================
-  // Customers
-  // =========================================================================
-
-  const addCreditSlip = useCallback(
-    (slip: Omit<CreditSaleSlip, 'id'>) => {
-      const id = `CS-${Date.now()}`
-      updateActiveStation((station) => {
-        const updatedCustomers = station.customers.map((c) =>
-          c.id === slip.customerId ? { ...c, currentBalance: c.currentBalance + slip.totalAmount } : c
-        )
-        return {
-          ...station,
-          creditSlips: [{ ...slip, id }, ...station.creditSlips],
-          customers: updatedCustomers,
-        }
-      })
-      if (activeSiteId) {
-        syncRelationalRecord('credit_fuel_slips', {
-          id,
-          slip_no: slip.slipNo,
-          site_id: activeSiteId,
-          date: slip.date,
-          customer_id: slip.customerId,
-          customer_name: slip.customerName,
-          vehicle_no: slip.vehicleNo,
-          driver_name: slip.driverName,
-          fuel_type: slip.fuelType,
-          liters: slip.liters,
-          rate: slip.rate,
-          total_amount: slip.totalAmount,
-          authorized_by: slip.authorizedBy,
-        })
-      }
-    },
-    [updateActiveStation, activeSiteId]
-  )
-
-  const addCustomer = useCallback(
-    (customer: Omit<Customer, 'id' | 'siteId'>) => {
-      const id = `CUST-${Date.now().toString().slice(-4)}`
-      updateActiveStation((station) => {
-        const newCust: Customer = {
-          ...customer,
-          id,
-          siteId: station.siteInfo.id,
-        }
-        return {
-          ...station,
-          customers: [newCust, ...station.customers],
-        }
-      })
-      if (activeSiteId) {
-        syncRelationalRecord('customers', {
-          id,
-          site_id: activeSiteId,
-          name: customer.name,
-          business_name: customer.businessName,
-          phone: customer.phone,
-          vehicle_numbers: customer.vehicleNumbers,
-          credit_limit: customer.creditLimit,
-          current_balance: customer.currentBalance,
-          status: customer.status,
-        })
-      }
-    },
-    [updateActiveStation, activeSiteId]
-  )
-
-  const addCustomerRecovery = useCallback(
-    (rec: Omit<CustomerRecovery, 'id'>) => {
-      const id = `REC-${Date.now()}`
-      updateActiveStation((station) => {
-        const updatedCustomers = station.customers.map((c) =>
-          c.id === rec.customerId
-            ? { ...c, currentBalance: Math.max(0, c.currentBalance - rec.amount) }
-            : c
-        )
-        return {
-          ...station,
-          recoveries: [{ ...rec, id }, ...station.recoveries],
-          customers: updatedCustomers,
-        }
-      })
-      if (activeSiteId) {
-        syncRelationalRecord('customer_recoveries', {
-          id,
-          receipt_no: rec.receiptNo,
-          site_id: activeSiteId,
-          date: rec.date,
-          customer_id: rec.customerId,
-          customer_name: rec.customerName,
-          payment_method: rec.paymentMethod,
-          amount: rec.amount,
-          reference_no: rec.referenceNo,
-          received_by: rec.receivedBy,
-        })
-      }
-    },
-    [updateActiveStation, activeSiteId]
-  )
-
-  // =========================================================================
-  // Expenses
-  // =========================================================================
-
-  const addExpense = useCallback(
-    (exp: Omit<ExpenseRecord, 'id'>) => {
-      updateActiveStation((station) => ({
-        ...station,
-        expenses: [{ ...exp, id: `EXP-${Date.now()}` }, ...station.expenses],
-      }))
-    },
-    [updateActiveStation]
-  )
-
-  // =========================================================================
-  // Staff — NEW: persist advances and status through AppContext
-  // =========================================================================
-
-  const updateStaffAdvance = useCallback(
-    (staffId: string, amount: number) => {
-      updateActiveStation((station) => ({
-        ...station,
-        staff: station.staff.map((s) =>
-          s.id === staffId ? { ...s, currentAdvances: s.currentAdvances + amount } : s
-        ),
-      }))
-    },
-    [updateActiveStation]
-  )
-
-  const updateStaffStatus = useCallback(
-    (staffId: string, status: 'On Duty' | 'Off Duty' | 'On Leave') => {
-      updateActiveStation((station) => ({
-        ...station,
-        staff: station.staff.map((s) => (s.id === staffId ? { ...s, status } : s)),
-      }))
-    },
-    [updateActiveStation]
-  )
-
-  // =========================================================================
-  // Lubricants — NEW: persist stock deductions through AppContext
-  // =========================================================================
-
-  const updateLubricantStock = useCallback(
-    (productId: string, quantitySold: number) => {
-      updateActiveStation((station) => ({
-        ...station,
-        lubricants: station.lubricants.map((p) =>
-          p.id === productId
-            ? { ...p, stockCans: Math.max(0, p.stockCans - quantitySold) }
-            : p
-        ),
-      }))
-    },
-    [updateActiveStation]
-  )
-
-  // =========================================================================
-  // Bank Sheet — NEW: persist cash deposits to bank account + transaction log
-  // =========================================================================
-
-  const addBankDeposit = useCallback(
-    (dep: { bankId: string; amount: number; slipNo: string; description: string }) => {
-      updateActiveStation((station) => {
-        const targetBank = station.bankAccounts.find((b) => b.id === dep.bankId)
-        const balanceAfter = (targetBank?.currentBalance || 0) + dep.amount
-
-        const updatedBanks = station.bankAccounts.map((b) =>
-          b.id === dep.bankId ? { ...b, currentBalance: balanceAfter } : b
-        )
-
-        const newTx: BankTransaction = {
-          id: `BTX-${Date.now()}`,
-          bankId: dep.bankId,
-          date: new Date().toISOString().split('T')[0],
-          type: 'Deposit',
-          amount: dep.amount,
-          depositSlipNo: dep.slipNo,
-          description: dep.description,
-          balanceAfter,
-        }
-
-        return {
-          ...station,
-          bankAccounts: updatedBanks,
-          bankTransactions: [newTx, ...station.bankTransactions],
-        }
-      })
-    },
-    [updateActiveStation]
-  )
-
-  // =========================================================================
-  // Owner Transfers — Transfer station profits to owner's personal bank account
-  // =========================================================================
-
-  const addOwnerTransfer = useCallback(
-    (transfer: Omit<OwnerTransferRecord, 'id'>) => {
-      const id = `OTX-${Date.now()}`
-      updateActiveStation((station) => {
-        let updatedBanks = station.bankAccounts
-        let newBankTxs = station.bankTransactions
-
-        const targetBank = station.bankAccounts.find((b) => b.id === transfer.bankId)
-        if (targetBank) {
-          const balanceAfter = Math.max(0, targetBank.currentBalance - transfer.amount)
-          updatedBanks = station.bankAccounts.map((b) =>
-            b.id === transfer.bankId ? { ...b, currentBalance: balanceAfter } : b
-          )
-          const newTx: BankTransaction = {
-            id: `BTX-${Date.now()}`,
-            bankId: transfer.bankId,
-            date: transfer.date || new Date().toISOString().split('T')[0],
-            type: 'Owner Transfer',
-            amount: transfer.amount,
-            description: `Owner Bank Transfer to ${transfer.bankName} (${transfer.accountNumber})`,
-            balanceAfter,
-          }
-          newBankTxs = [newTx, ...station.bankTransactions]
-        }
-
-        const newTransfer: OwnerTransferRecord = {
-          ...transfer,
-          id,
-        }
-
-        return {
-          ...station,
-          bankAccounts: updatedBanks,
-          bankTransactions: newBankTxs,
-          ownerTransfers: [newTransfer, ...(station.ownerTransfers || [])],
-        }
-      })
-
-      if (activeSiteId) {
-        syncRelationalRecord('owner_transfers', {
-          id,
-          site_id: activeSiteId,
-          date: transfer.date,
-          amount: transfer.amount,
-          bank_id: transfer.bankId,
-          bank_name: transfer.bankName,
-          account_title: transfer.accountTitle,
-          account_number: transfer.accountNumber,
-          reference_no: transfer.referenceNo,
-          status: transfer.status || 'Completed',
-          notes: transfer.notes || '',
-          transferred_by: transfer.transferredBy,
-        })
-      }
-    },
-    [updateActiveStation, activeSiteId]
-  )
-
-  // =========================================================================
-  // Suppliers — NEW: persist vendor payments
-  // =========================================================================
-
-  const paySupplier = useCallback(
-    (supplierId: string, amount: number) => {
-      updateActiveStation((station) => ({
-        ...station,
-        suppliers: station.suppliers.map((s) =>
-          s.id === supplierId ? { ...s, balanceDue: Math.max(0, s.balanceDue - amount) } : s
-        ),
-      }))
-    },
-    [updateActiveStation]
-  )
-
-  // =========================================================================
-  // Settings
-  // =========================================================================
-
-  const updateSettings = useCallback(
-    (settings: StationSettings) => {
-      updateActiveStation((station) => ({ ...station, settings }))
-    },
-    [updateActiveStation]
-  )
-
-  // =========================================================================
-  // Backup Export — NEW: downloads station data as a JSON file
-  // =========================================================================
-
-  const exportBackup = useCallback(() => {
-    if (!activeSiteId) return
-    const data = stations[activeSiteId]
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      siteId: activeSiteId,
-      siteName: data.siteInfo.name,
-      data,
+      return ok(undefined)
+    } catch (e) {
+      return fail(friendlyError(e))
     }
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  }, [])
+
+  // ---- station profile, audit trail, users -------------------------------------------
+  const updateStationProfile = useCallback(async (patch: StationProfilePatch): Promise<Result<void>> => {
+    const be = backendRef.current
+    const siteId = siteRef.current
+    if (!be || !siteId) return fail('Not connected.')
+    try {
+      await be.updateStationProfile(siteId, patch)
+      if (rawRef.current) {
+        const info = { ...rawRef.current.info, ...patch }
+        setRawBoth({ ...rawRef.current, info })
+      }
+      setStations((list) => list.map((s) => (s.id === siteId ? { ...s, ...(patch.name !== undefined && { name: patch.name }), ...(patch.location !== undefined && { location: patch.location }) } : s)))
+      return ok(undefined)
+    } catch (e) {
+      return fail(friendlyError(e))
+    }
+  }, [setRawBoth])
+
+  const loadAudit = useCallback(async (limit = 100): Promise<Result<AuditEntry[]>> => {
+    const be = backendRef.current
+    const siteId = siteRef.current
+    if (!be || !siteId) return fail('Not connected.')
+    try {
+      return ok(await be.loadAudit(siteId, limit))
+    } catch (e) {
+      return fail(friendlyError(e))
+    }
+  }, [])
+
+  const wrap = useCallback(async <T,>(fn: (be: Backend) => Promise<T>): Promise<Result<T>> => {
+    const be = backendRef.current
+    if (!be) return fail('Not connected.')
+    try {
+      return ok(await fn(be))
+    } catch (e) {
+      return fail(friendlyError(e))
+    }
+  }, [])
+  const listUsers = useCallback(() => wrap((be) => be.listUsers()), [wrap])
+  const saveUser = useCallback((input: SaveUserInput) => wrap((be) => be.saveUser(input)), [wrap])
+  const deleteUser = useCallback((userId: string) => wrap((be) => be.deleteUser(userId)), [wrap])
+
+  // ---- backup ------------------------------------------------------------------------
+  const exportBackup = useCallback(() => {
+    const current = rawRef.current
+    if (!current) return
+    const blob = new Blob([exportBackupJson(current)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `mashaal-backup-${activeSiteId}-${new Date().toISOString().split('T')[0]}.json`
+    link.download = `mashaal-backup-${current.info.id}-${todayISO()}.json`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-  }, [activeSiteId, stations])
-
-  // =========================================================================
-  // Backup Import — Restores database from a validated JSON backup file
-  // =========================================================================
-
-  const importBackup = useCallback((fileContent: string) => {
-    const validation = validateStationBackup(fileContent)
-    if (!validation.valid || !validation.data || !validation.siteId) {
-      return { success: false, message: validation.error || 'Invalid backup file structure.' }
-    }
-
-    const targetSiteId = validation.siteId
-    setStations((prev) => ({
-      ...prev,
-      [targetSiteId]: validation.data!,
-    }))
-    restoreStationBackup(targetSiteId, validation.data!)
-
-    return {
-      success: true,
-      siteId: targetSiteId,
-      message: `Successfully restored ${validation.siteName} (${targetSiteId}) database archive.`,
-    }
   }, [])
 
-  // =========================================================================
-  // OGRA Tariff Revision Wizard — Automated Midnight Price Change & Gain/Loss
-  // =========================================================================
+  // ---- rescue records the old software kept only in this browser ------------------------
+  useEffect(() => {
+    if (dataStatus !== 'ready' || !activeSiteId || !currentUser || !rawRef.current) return
+    if (currentUser.role === 'cashier') return
+    const key = `${activeSiteId}:${currentUser.id}`
+    if (legacyChecked.current === key) return
+    legacyChecked.current = key
+    if (!hasLegacyStation(activeSiteId)) return
+    const old = readLegacyStation(activeSiteId)
+    if (!old) {
+      clearLegacyStation(activeSiteId)
+      return
+    }
+    try {
+      const legacyRaw = legacyToRaw(old, activeSiteId)
+      const missing = missingRecords(rawRef.current, legacyRaw)
+      if (missing === 0) clearLegacyStation(activeSiteId)
+      else setLegacyCopy({ missing, raw: legacyRaw })
+    } catch {
+      // unreadable copy: keep it untouched rather than guess
+    }
+  }, [dataStatus, activeSiteId, currentUser])
 
-  const applyOgraPriceChange = useCallback(
-    (params: {
-      newRates: { 'PMG Super': number; 'HSD Diesel': number; 'Hi-Octane': number }
-      effectiveDate: string
-      notificationNo?: string
-      notes?: string
-    }) => {
-      if (!activeSiteId) return null
-      const currentSite = stations[activeSiteId]
-      const oldRates = { ...currentSite.settings.rates }
-      const newRates = params.newRates
+  const importLegacyCopy = useCallback(async (): Promise<Result<void>> => {
+    if (!legacyCopy || !siteRef.current) return fail('Nothing to import.')
+    const r = await act.mergeBackup(legacyCopy.raw)
+    if (r.ok) {
+      clearLegacyStation(siteRef.current)
+      setLegacyCopy(null)
+    }
+    return r
+  }, [act, legacyCopy])
 
-      // Calculate instantaneous stock gain/loss across all underground tanks
-      const tankSnapshots = currentSite.tanks.map((tank) => {
-        const fuelType = tank.fuelType
-        const oldR = oldRates[fuelType] || 0
-        const newR = newRates[fuelType] || oldR
-        const diff = newR - oldR
-        const gainLossAmount = Math.round(tank.currentLiters * diff)
+  const discardLegacyCopy = useCallback(() => {
+    if (siteRef.current) clearLegacyStation(siteRef.current)
+    setLegacyCopy(null)
+  }, [])
 
-        return {
-          tankNo: tank.tankNo,
-          fuelType,
-          litersAtRevision: tank.currentLiters,
-          oldRate: oldR,
-          newRate: newR,
-          rateDiff: diff,
-          gainLossAmount,
-        }
-      })
-
-      const netInventoryGainLoss = tankSnapshots.reduce((sum, t) => sum + t.gainLossAmount, 0)
-
-      const revisionLog: TariffRevisionLog = {
-        id: `REV-${Date.now().toString().slice(-6)}`,
-        date: new Date().toISOString().split('T')[0],
-        effectiveDate: params.effectiveDate || new Date().toISOString(),
-        notificationNo: params.notificationNo || `OGRA/NOTIF/${new Date().toISOString().split('T')[0]}`,
-        oldRates,
-        newRates,
-        tankSnapshots,
-        netInventoryGainLoss,
-        revisedBy: currentUser?.name || 'Authorized Manager',
-        notes: params.notes || 'Fortnightly OGRA price revision applied.',
-      }
-
-      // Update settings rates, nozzle rates, and tariffHistory
-      updateActiveStation((prev) => ({
-        ...prev,
-        settings: {
-          ...prev.settings,
-          rates: newRates,
-        },
-        nozzles: prev.nozzles.map((nozzle) => ({
-          ...nozzle,
-          ratePerLiter: newRates[nozzle.fuelType] ?? nozzle.ratePerLiter,
-        })),
-        tariffHistory: [revisionLog, ...(prev.tariffHistory || [])],
-      }))
-
-      return revisionLog
-    },
-    [activeSiteId, stations, currentUser, updateActiveStation]
-  )
-
-  // =========================================================================
-  // Context value
-  // =========================================================================
-
-  // ── Authorized Station Data Filter (Strict Company Isolation) ───────────
-  const authorizedSitesData = {
-    'SITE-01': (!isSiteLoggedIn || activeSiteId === 'SITE-01' || currentUser?.stationAccess?.includes('SITE-01'))
-      ? stations['SITE-01']
-      : { ...stations['SITE-01'], fuelSales: [], expenses: [], daybook: [], creditSlips: [], recoveries: [], omcInvoices: [], bankTransactions: [], ownerTransfers: [] },
-    'SITE-02': (!isSiteLoggedIn || activeSiteId === 'SITE-02' || currentUser?.stationAccess?.includes('SITE-02'))
-      ? stations['SITE-02']
-      : { ...stations['SITE-02'], fuelSales: [], expenses: [], daybook: [], creditSlips: [], recoveries: [], omcInvoices: [], bankTransactions: [], ownerTransfers: [] },
+  const value: AppContextType = {
+    booting, bootError, backendKind,
+    stations, currentUser, activeSiteId, isSiteLoggedIn, activeModule, setActiveModule,
+    activeSiteData, dataStatus, dataError, reloadData: () => loadStation(false), realtime, online,
+    loginError, loggingIn, login, logout, selectSite, exitSite, changePassword,
+    act,
+    updateStationProfile, loadAudit, listUsers, saveUser, deleteUser,
+    exportBackup, checkBackupFile: checkBackup,
+    legacyCopy, importLegacyCopy, discardLegacyCopy,
   }
 
-  return (
-    <AppContext.Provider
-      value={{
-        currentUser,
-        activeSiteId,
-        isSiteLoggedIn,
-        activeModule,
-        activeSiteData,
-        allSitesData: authorizedSitesData,
-        loginError,
-        login,
-        logout,
-        selectSite,
-        exitSite,
-        setActiveModule,
-        addFuelSale,
-        closeShift,
-        addTankDip,
-        addOmcInvoice,
-        addOmcPayment,
-        addDaybookEntry,
-        addCustomer,
-        addCreditSlip,
-        addCustomerRecovery,
-        addExpense,
-        updateStaffAdvance,
-        updateStaffStatus,
-        updateLubricantStock,
-        addBankDeposit,
-        addOwnerTransfer,
-        paySupplier,
-        updateSettings,
-        exportBackup,
-        importBackup,
-        applyOgraPriceChange,
-        cloudStatus,
-        refreshCloudSync,
-      }}
-    >
-      {children}
-    </AppContext.Provider>
-  )
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
 
 export const useApp = () => {
   const context = useContext(AppContext)
-  if (!context) {
-    throw new Error('useApp must be used within an AppProvider')
-  }
+  if (!context) throw new Error('useApp must be used within an AppProvider')
   return context
 }

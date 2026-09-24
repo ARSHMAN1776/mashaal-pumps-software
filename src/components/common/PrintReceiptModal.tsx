@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import { PrinterIcon, XIcon } from './Icons'
 
@@ -25,24 +25,24 @@ export const PrintReceiptModal: React.FC<PrintReceiptModalProps> = ({
   defaultMode = 'a4',
   children,
 }) => {
-  const { activeSiteData, activeSiteId } = useApp()
+  const { activeSiteData, currentUser } = useApp()
   const [printMode, setPrintMode] = useState<'a4' | 'thermal'>(defaultMode)
+
+  // every time the dialog opens it starts in the layout the caller asked for
+  useEffect(() => {
+    if (isOpen) setPrintMode(defaultMode)
+  }, [isOpen, defaultMode])
 
   if (!isOpen) return null
 
-  const siteInfo = activeSiteData?.siteInfo
-  const isParco =
-    brandOverride === 'TOTAL PARCO'
-      ? true
-      : brandOverride === 'PSO'
-      ? false
-      : siteInfo?.brand === 'TOTAL PARCO' || activeSiteId === 'SITE-01'
+  const siteInfo = activeSiteData.siteInfo
+  const isParco = brandOverride === 'TOTAL PARCO' ? true : brandOverride === 'PSO' ? false : siteInfo.brand === 'TOTAL PARCO'
 
-  const displayStationName = stationName || siteInfo?.name || (isParco ? 'Mashaal Total PARCO Station' : 'Mashaal PSO Station')
-  const displayStationLocation = stationLocation || siteInfo?.location || (isParco ? 'Khanpur Road, Rahim Yar Khan' : 'Raiwind Road, Lahore')
-  const displayStationPhone = stationPhone || siteInfo?.phone || (isParco ? '068-5874211' : '042-35321900')
-  const displayNtn = siteInfo?.ntn || (isParco ? '4192084-7' : '4192084-8')
-  const managerName = siteInfo?.managerName || (isParco ? 'Naveed Akhtar' : 'Chaudhry Tariq Mehmood')
+  const displayStationName = stationName || siteInfo.name
+  const displayStationLocation = stationLocation || siteInfo.location
+  const displayStationPhone = stationPhone || siteInfo.phone
+  const displayNtn = siteInfo.ntn
+  const managerName = currentUser?.name || siteInfo.managerName
 
   const now = new Date()
   const printDateStr = now.toLocaleDateString('en-PK', {

@@ -1,216 +1,378 @@
-import React, { useState, useRef } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp } from '../../context/AppContext'
+import type { ManagedUser } from '../../data/backend'
+import type { BackupCheck } from '../../data/backup'
+import type { AuditEntry, FuelRates, FuelType, UserRole } from '../../types'
+import { FUEL_TYPES } from '../../types'
+import { formatDate, todayISO } from '../../lib/dates'
+import { rs } from '../../lib/money'
 import {
-  CheckCircleIcon,
-  ShieldIcon,
-  FileTextIcon,
-  GasPumpIcon,
-  DropletIcon,
-  ReceiptIcon,
-  AlertCircleIcon,
-  SettingsIcon,
-  TrendingUpIcon,
-  XIcon,
+  CheckCircleIcon, ShieldIcon, FileTextIcon, GasPumpIcon, DropletIcon, ReceiptIcon, AlertCircleIcon, SettingsIcon, TrendingUpIcon,
+  KeyIcon, DownloadIcon, PlusIcon, EditIcon, TrashIcon, RefreshIcon,
 } from '../common/Icons'
-import { validateStationBackup, type BackupValidationResult } from '../../services/storage'
-import { SUPABASE_SETUP_SQL } from '../../services/supabase'
 import { ModuleGuide } from '../common/ModuleGuide'
+import { Modal, FormError } from '../common/Modal'
+import { PasswordDialog } from '../common/PasswordDialog'
+import { useConfirm } from '../common/Confirm'
+import { useToast } from '../common/Toast'
+import { useSubmit } from '../common/useSubmit'
+import { CalcStrip, EmptyRow, Field, Grid2, Grid3, IconButton, Notice, RowActions } from '../common/kit'
 
-export const SettingsView: React.FC = () => {
-  const {
-    activeSiteData,
-    updateSettings,
-    exportBackup,
-    importBackup,
-    applyOgraPriceChange,
-    currentUser,
-    cloudStatus,
-    refreshCloudSync,
-  } = useApp()
-  const { settings, tanks, nozzles, siteInfo, tariffHistory } = activeSiteData
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [showSqlBox, setShowSqlBox] = useState(false)
+const FUEL_LABEL: Record<FuelType, string> = { 'PMG Super': 'PMG Super 92', 'HSD Diesel': 'HSD Diesel', 'Hi-Octane': 'Altron / Hi-Octane' }
+const FUEL_SUB: Record<FuelType, [string, string]> = {
+  'PMG Super': ['Standard Consumer Petrol', 'Motor Gasoline'],
+  'HSD Diesel': ['Heavy Transport & Fleet', 'High Speed Diesel'],
+  'Hi-Octane': ['Luxury & Performance', 'Hi-Octane 97'],
+}
+const FUEL_BADGE: Record<FuelType, { cls: string; color: string }> = {
+  'PMG Super': { cls: 'super', color: '#c2410c' }, 'HSD Diesel': { cls: 'diesel', color: '#15803d' }, 'Hi-Octane': { cls: 'octane', color: '#b91c1c' },
+}
 
-  const [superRate, setSuperRate] = useState<number>(settings.rates['PMG Super'] || 268.36)
-  const [dieselRate, setDieselRate] = useState<number>(settings.rates['HSD Diesel'] || 276.45)
-  const [octaneRate, setOctaneRate] = useState<number>(settings.rates['Hi-Octane'] || 295.50)
+// ===========================================================================
+// OGRA fortnightly revision wizard
+// ===========================================================================
+const OgraModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { activeSiteData, act } = useApp()
+  const toast = useToast()
+  const { settings, tanks, nozzles } = activeSiteData
+  const [rates, setRates] = useState<Record<FuelType, string>>({
+    'PMG Super': String(settings.rates['PMG Super']), 'HSD Diesel': String(settings.rates['HSD Diesel']), 'Hi-Octane': String(settings.rates['Hi-Octane']),
+  })
+  const [effective, setEffective] = useState(`${todayISO()} 00:00`)
+  const [notif, setNotif] = useState(`OGRA/PL/${todayISO().slice(0, 7)}-A`)
+  const [notes, setNotes] = useState('Fortnightly OGRA official price determination')
+  const { busy, error, run } = useSubmit()
 
-  const [stationPhone, setStationPhone] = useState(settings.stationPhone || '068-5874211')
-  const [managerContact, setManagerContact] = useState(settings.managerContact || '0300-6729104')
-  const [receiptHeader, setReceiptHeader] = useState(settings.receiptHeader || `${siteInfo.name}\n${siteInfo.location}`)
-  const [receiptFooter, setReceiptFooter] = useState(settings.receiptFooter || 'Thank you for fueling with Mashaal!\nComputerized Tax Invoice')
-  const [lowStockAlertPct, setLowStockAlertPct] = useState<number>(settings.lowStockAlertPct || 20)
+  const lines = tanks.map((t) => {
+    const oldR = settings.rates[t.fuelType] || 0
+    const newR = Number(rates[t.fuelType]) || 0
+    const diff = Math.round((newR - oldR) * 100) / 100
+    return { tank: t, oldR, newR, diff, gain: Math.round(t.currentLiters * diff) }
+  })
+  const net = lines.reduce((s, l) => s + l.gain, 0)
 
-  const [saveSuccess, setSaveSuccess] = useState(false)
-  const [backupSuccess, setBackupSuccess] = useState(false)
-
-  // ── OGRA Revision Wizard State ───────────────────────────────────────────
-  const [isOgraModalOpen, setIsOgraModalOpen] = useState(false)
-  const [newSuperRate, setNewSuperRate] = useState<number>(settings.rates['PMG Super'] || 268.36)
-  const [newDieselRate, setNewDieselRate] = useState<number>(settings.rates['HSD Diesel'] || 276.45)
-  const [newOctaneRate, setNewOctaneRate] = useState<number>(settings.rates['Hi-Octane'] || 295.50)
-  const [effectiveDate, setEffectiveDate] = useState<string>(
-    `${new Date().toISOString().split('T')[0]} 00:00`
-  )
-  const [notifNo, setNotifNo] = useState<string>(
-    `OGRA/PL/${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-A`
-  )
-  const [revisionNotes, setRevisionNotes] = useState<string>('Fortnightly OGRA official price determination')
-  const [ograSuccessMsg, setOgraSuccessMsg] = useState<string | null>(null)
-
-  // ── Restore Backup State ──────────────────────────────────────────────────
-  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false)
-  const [pendingBackup, setPendingBackup] = useState<{ result: BackupValidationResult; rawText: string } | null>(null)
-  const [restoreSuccess, setRestoreSuccess] = useState<string | null>(null)
-  const [restoreError, setRestoreError] = useState<string | null>(null)
-
-  const isCashier = currentUser?.role === 'cashier'
-
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (isCashier) return
-
-    updateSettings({
-      rates: {
-        'PMG Super': Number(superRate),
-        'HSD Diesel': Number(dieselRate),
-        'Hi-Octane': Number(octaneRate),
-      },
-      stationPhone,
-      managerContact,
-      receiptHeader,
-      receiptFooter,
-      lowStockAlertPct: Number(lowStockAlertPct),
-      cashDifferenceAlertLimit: 500,
-    })
-
-    setSaveSuccess(true)
-    setTimeout(() => setSaveSuccess(false), 3500)
+    const newRates = Object.fromEntries(FUEL_TYPES.map((f) => [f, Number(rates[f])])) as FuelRates
+    void run(
+      () => act.applyOgraPriceChange({ newRates, effectiveDate: effective, notificationNo: notif, notes }),
+      (log) => { toast.success(`OGRA revision active — all ${nozzles.length} nozzles updated. Inventory impact ${log.netInventoryGainLoss >= 0 ? '+' : ''}${rs(log.netInventoryGainLoss)}`); onClose() },
+    )
   }
 
-  const handleBackup = () => {
-    exportBackup()
-    setBackupSuccess(true)
-    setTimeout(() => setBackupSuccess(false), 3500)
+  return (
+    <Modal title="OGRA Fortnightly Price Revision Wizard" subtitle="Applies new official tariffs to every nozzle and calculates the stock gain / loss" onClose={onClose} busy={busy} width={700}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Effective date & time (midnight)"><input className="form-input" value={effective} onChange={(e) => setEffective(e.target.value)} placeholder="YYYY-MM-DD 00:00" required /></Field>
+          <Field label="OGRA notification reference"><input className="form-input" value={notif} onChange={(e) => setNotif(e.target.value)} required /></Field>
+        </Grid2>
+        <Grid3>
+          {FUEL_TYPES.map((f) => (
+            <Field key={f} label={FUEL_LABEL[f]} hint={`Current: Rs. ${settings.rates[f]}`}>
+              <input type="number" min={0.01} step="0.01" className="form-input" value={rates[f]} onChange={(e) => setRates({ ...rates, [f]: e.target.value })} required />
+            </Field>
+          ))}
+        </Grid3>
+        <div style={{ background: '#faf6ee', border: '1px solid #ebd9c8', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <strong style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Underground stock revaluation (latest dip)</strong>
+            <span className={`badge ${net >= 0 ? 'badge-success' : 'badge-danger'}`}>{net >= 0 ? 'Net inventory gain' : 'Net inventory loss'}</span>
+          </div>
+          {lines.map(({ tank, oldR, newR, diff, gain }) => (
+            <div key={tank.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, padding: '2px 0', borderBottom: '1px dashed #e5dcc7' }}>
+              <span><strong>Tank #{tank.tankNo}: {tank.fuelType}</strong> <span style={{ color: '#686256' }}>({tank.currentLiters.toLocaleString()} L @ Rs. {oldR} → Rs. {newR})</span></span>
+              <span style={{ color: diff >= 0 ? '#15803d' : '#b91c1c', fontWeight: 700 }}>{diff >= 0 ? '+' : ''}Rs. {gain.toLocaleString()}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, fontSize: 12.5 }}>
+            <strong>Total net revaluation impact:</strong>
+            <strong style={{ color: net >= 0 ? '#15803d' : '#b91c1c' }}>{net >= 0 ? '+' : ''}Rs. {net.toLocaleString()}</strong>
+          </div>
+        </div>
+        <Field label="Audit remarks"><input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Applying…' : 'Apply OGRA revision & update nozzles'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+// ===========================================================================
+// Users (owner only)
+// ===========================================================================
+const UserModal: React.FC<{ user?: ManagedUser; onClose: () => void; onSaved: () => void }> = ({ user, onClose, onSaved }) => {
+  const { saveUser, stations, currentUser } = useApp()
+  const toast = useToast()
+  const mine = stations.filter((s) => currentUser?.stationAccess.includes(s.id))
+  const [username, setUsername] = useState(user?.username ?? '')
+  const [fullName, setFullName] = useState(user?.fullName ?? '')
+  const [role, setRole] = useState<UserRole>(user?.role ?? 'cashier')
+  const [phone, setPhone] = useState(user?.phone ?? '')
+  const [sites, setSites] = useState<string[]>(user?.sites ?? (mine.length === 1 ? [mine[0].id] : []))
+  const [active, setActive] = useState(user?.isActive ?? true)
+  const [password, setPassword] = useState('')
+  const { busy, error, setError, run } = useSubmit()
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (sites.length === 0) return setError('Select at least one station.')
+    void run(
+      () => saveUser({ username, password: password || undefined, fullName, role, phone, sites, isActive: active }),
+      () => { toast.success(user ? 'User updated.' : `User ${username.toLowerCase()} created — they must choose a new password at first sign-in.`); onSaved(); onClose() },
+    )
   }
 
-  // ── Handle Backup File Selection ─────────────────────────────────────────
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  return (
+    <Modal title={user ? `Edit User — ${user.username}` : 'Add User'} subtitle={user ? 'Change role, stations, status or reset the password' : 'Create a sign-in for a manager or cashier'} onClose={onClose} busy={busy} width={620}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Username" hint="3–40 letters, digits, dot or dash. Used to sign in.">
+            <input className="form-input" value={username} onChange={(e) => setUsername(e.target.value)} disabled={Boolean(user)} autoCapitalize="none" required autoFocus={!user} />
+          </Field>
+          <Field label="Full name"><input className="form-input" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Role">
+            <select className="form-input" value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
+              <option value="cashier">Cashier — records sales, slips, expenses; no edits or deletes</option>
+              <option value="manager">Station Manager — full station access</option>
+              <option value="owner">Owner — everything, including users and restore</option>
+            </select>
+          </Field>
+          <Field label="Phone"><input className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+        </Grid2>
+        <Field label="Stations this user may open">
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            {mine.map((s) => (
+              <label key={s.id} className="ui-checkbox-row" style={{ margin: 0 }}>
+                <input type="checkbox" checked={sites.includes(s.id)} onChange={(e) => setSites(e.target.checked ? [...sites, s.id] : sites.filter((x) => x !== s.id))} />
+                <span>{s.code} — {s.name}</span>
+              </label>
+            ))}
+          </div>
+        </Field>
+        <Grid2>
+          <Field label={user ? 'New password (leave empty to keep)' : 'Temporary password'} hint="At least 8 characters. The user must replace it at first sign-in.">
+            <input type="text" className="form-input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required={!user} autoComplete="off" />
+          </Field>
+          {user && <label className="ui-checkbox-row" style={{ alignSelf: 'end' }}><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /><span>Account active (untick to block sign-in)</span></label>}
+        </Grid2>
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : user ? 'Save changes' : 'Create user'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+const UsersPanel: React.FC = () => {
+  const { listUsers, deleteUser, stations, currentUser } = useApp()
+  const confirm = useConfirm()
+  const toast = useToast()
+  const [users, setUsers] = useState<ManagedUser[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [form, setForm] = useState<{ user?: ManagedUser } | null>(null)
+
+  const load = useCallback(async () => {
+    const r = await listUsers()
+    if (r.ok) { setUsers(r.value); setError(null) } else setError(r.error)
+  }, [listUsers])
+  useEffect(() => { void load() }, [load])
+
+  const code = (id: string) => stations.find((s) => s.id === id)?.code ?? id
+  const remove = async (u: ManagedUser) => {
+    if (!(await confirm({ title: `Delete user ${u.username}?`, message: 'The account is removed permanently and can no longer sign in. Records they created keep their name. To keep the account but block it, edit the user and untick "active".', confirmLabel: 'Delete user', tone: 'danger' }))) return
+    const r = await deleteUser(u.userId)
+    if (r.ok) { toast.success('User deleted.'); void load() } else toast.error(r.error)
+  }
+
+  return (
+    <section className="settings-surface-card">
+      <div className="settings-card-header">
+        <div className="settings-card-header-left">
+          <div className="settings-card-icon-bubble"><KeyIcon size={18} /></div>
+          <div><h2 className="settings-card-title">Users & Sign-in Accounts</h2><p className="settings-card-desc">Who can sign in, with which role, on which stations. Owner only.</p></div>
+        </div>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => setForm({})}><PlusIcon size={14} /><span>Add user</span></button>
+      </div>
+      <div className="settings-card-body" style={{ padding: 0 }}>
+        {error && <div style={{ padding: 16 }}><FormError message={error} /></div>}
+        <div className="table-responsive">
+          <table className="clean-table">
+            <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Stations</th><th>Status</th><th /></tr></thead>
+            <tbody>
+              {users === null ? <EmptyRow colSpan={6}>Loading…</EmptyRow> : users.length === 0 ? <EmptyRow colSpan={6}>No users.</EmptyRow> : users.map((u) => (
+                <tr key={u.userId} style={u.isActive ? undefined : { opacity: 0.55 }}>
+                  <td><strong>{u.username}</strong>{u.userId === currentUser?.id && <span className="ui-tag" style={{ marginLeft: 6 }}>you</span>}</td>
+                  <td>{u.fullName}<div className="text-muted text-xs">{u.phone}</div></td>
+                  <td><span className={`badge ${u.role === 'owner' ? 'badge-gold' : u.role === 'manager' ? 'badge-success' : 'badge-neutral'}`} style={{ textTransform: 'capitalize' }}>{u.role}</span></td>
+                  <td>{u.sites.map(code).join(', ')}</td>
+                  <td>{!u.isActive ? <span className="badge badge-danger">Disabled</span> : u.mustChangePassword ? <span className="badge badge-warning">Must change password</span> : <span className="badge badge-success">Active</span>}</td>
+                  <td><RowActions>
+                    <IconButton label="Edit / reset password" onClick={() => setForm({ user: u })}><EditIcon size={14} /></IconButton>
+                    {u.userId !== currentUser?.id && <IconButton label="Delete user" tone="danger" onClick={() => void remove(u)}><TrashIcon size={14} /></IconButton>}
+                  </RowActions></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {form && <UserModal user={form.user} onClose={() => setForm(null)} onSaved={() => void load()} />}
+    </section>
+  )
+}
+
+// ===========================================================================
+// Audit trail
+// ===========================================================================
+const AuditPanel: React.FC = () => {
+  const { loadAudit } = useApp()
+  const [rows, setRows] = useState<AuditEntry[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = async () => {
+    setBusy(true)
+    const r = await loadAudit(150)
+    setBusy(false)
+    if (r.ok) { setRows(r.value); setError(null) } else setError(r.error)
+  }
+
+  return (
+    <section className="settings-surface-card">
+      <div className="settings-card-header">
+        <div className="settings-card-header-left">
+          <div className="settings-card-icon-bubble"><ShieldIcon size={18} /></div>
+          <div><h2 className="settings-card-title">Audit Trail</h2><p className="settings-card-desc">Who edited or deleted what — customers, slips, receipts, vouchers, tariffs, backups.</p></div>
+        </div>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => void load()} disabled={busy}><RefreshIcon size={14} /><span>{rows ? 'Refresh' : 'Show latest 150'}</span></button>
+      </div>
+      {(rows || error) && (
+        <div className="settings-card-body" style={{ padding: 0 }}>
+          {error && <div style={{ padding: 16 }}><FormError message={error} /></div>}
+          <div className="table-responsive">
+            <table className="clean-table">
+              <thead><tr><th>When</th><th>Who</th><th>Action</th><th>What happened</th></tr></thead>
+              <tbody>
+                {rows && rows.length === 0 ? <EmptyRow colSpan={4}>Nothing recorded yet.</EmptyRow> : rows?.map((a) => (
+                  <tr key={a.id}>
+                    <td className="ui-nowrap">{formatDate(a.at.slice(0, 10))} <span className="text-muted text-xs">{new Date(a.at).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })}</span></td>
+                    <td>{a.actor}</td><td><span className="ui-tag">{a.action}</span></td><td>{a.summary}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+// ===========================================================================
+// Page
+// ===========================================================================
+export const SettingsView: React.FC = () => {
+  const { activeSiteData, act, currentUser, realtime, online, backendKind, exportBackup, checkBackupFile, updateStationProfile } = useApp()
+  const { settings, tanks, nozzles, siteInfo, tariffHistory } = activeSiteData
+  const toast = useToast()
+  const confirm = useConfirm()
+  const isOwner = currentUser?.role === 'owner'
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const [rates, setRates] = useState<Record<FuelType, string>>({ 'PMG Super': String(settings.rates['PMG Super']), 'HSD Diesel': String(settings.rates['HSD Diesel']), 'Hi-Octane': String(settings.rates['Hi-Octane']) })
+  const [margins, setMargins] = useState<Record<FuelType, string>>({ 'PMG Super': String(settings.margins['PMG Super']), 'HSD Diesel': String(settings.margins['HSD Diesel']), 'Hi-Octane': String(settings.margins['Hi-Octane']) })
+  const [phone, setPhone] = useState(settings.stationPhone)
+  const [manager, setManager] = useState(settings.managerContact)
+  const [header, setHeader] = useState(settings.receiptHeader)
+  const [footer, setFooter] = useState(settings.receiptFooter)
+  const [lowPct, setLowPct] = useState(String(settings.lowStockAlertPct))
+  const [cashLimit, setCashLimit] = useState(String(settings.cashDifferenceAlertLimit))
+  const [ogra, setOgra] = useState(false)
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [pending, setPending] = useState<BackupCheck | null>(null)
+  const { busy, error, run } = useSubmit()
+  const [profileName, setProfileName] = useState(siteInfo.name)
+  const [profileLocation, setProfileLocation] = useState(siteInfo.location)
+  const [profileManager, setProfileManager] = useState(siteInfo.managerName)
+  const [profileNtn, setProfileNtn] = useState(siteInfo.ntn)
+  const profile = useSubmit()
+
+  // pick up changes made from another device / the OGRA wizard
+  useEffect(() => {
+    setRates({ 'PMG Super': String(settings.rates['PMG Super']), 'HSD Diesel': String(settings.rates['HSD Diesel']), 'Hi-Octane': String(settings.rates['Hi-Octane']) })
+  }, [settings.rates])
+
+  const sampleAmount = (20 * (Number(rates['PMG Super']) || 0)).toFixed(2)
+
+  const save = (e: React.FormEvent) => {
+    e.preventDefault()
+    void run(
+      () => act.saveSettings({
+        rates: Object.fromEntries(FUEL_TYPES.map((f) => [f, Number(rates[f])])) as FuelRates,
+        margins: Object.fromEntries(FUEL_TYPES.map((f) => [f, Number(margins[f])])) as FuelRates,
+        stationPhone: phone, managerContact: manager, receiptHeader: header, receiptFooter: footer,
+        lowStockAlertPct: Number(lowPct), cashDifferenceAlertLimit: Number(cashLimit),
+      }),
+      () => toast.success(`Configuration saved — new prices are active on all ${nozzles.length} nozzles.`),
+    )
+  }
+
+  const saveProfile = (e: React.FormEvent) => {
+    e.preventDefault()
+    void profile.run(
+      () => updateStationProfile({ name: profileName.trim(), location: profileLocation.trim(), managerName: profileManager.trim(), ntn: profileNtn.trim() }),
+      () => toast.success('Station profile saved.'),
+    )
+  }
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
-
     const reader = new FileReader()
-    reader.onload = (event) => {
-      const rawText = event.target?.result as string
-      const validation = validateStationBackup(rawText)
-      if (!validation.valid) {
-        setRestoreError(validation.error || 'Invalid backup file.')
-        setTimeout(() => setRestoreError(null), 5000)
-      } else {
-        setPendingBackup({ result: validation, rawText })
-        setIsRestoreModalOpen(true)
-      }
+    reader.onload = () => {
+      const check = checkBackupFile(String(reader.result ?? ''))
+      if (!check.valid) toast.error(check.error ?? 'Invalid backup file.')
+      else setPending(check)
     }
     reader.readAsText(file)
-    // Reset file input so user can choose same file again if needed
-    e.target.value = ''
   }
 
-  const handleConfirmRestore = () => {
-    if (!pendingBackup) return
-    const res = importBackup(pendingBackup.rawText)
-    setIsRestoreModalOpen(false)
-    setPendingBackup(null)
-
-    if (res.success) {
-      setRestoreSuccess(res.message)
-      setTimeout(() => setRestoreSuccess(null), 6000)
-    } else {
-      setRestoreError(res.message)
-      setTimeout(() => setRestoreError(null), 6000)
-    }
-  }
-
-  // ── Handle OGRA Revision Wizard Application ──────────────────────────────
-  const handleOpenOgraWizard = () => {
-    setNewSuperRate(superRate)
-    setNewDieselRate(dieselRate)
-    setNewOctaneRate(octaneRate)
-    setIsOgraModalOpen(true)
-  }
-
-  // Compute live preview of inventory gain / loss across all tanks
-  const liveStockGainLoss = tanks.map((tank) => {
-    const oldR = settings.rates[tank.fuelType] || 0
-    const newR =
-      tank.fuelType === 'PMG Super'
-        ? Number(newSuperRate)
-        : tank.fuelType === 'HSD Diesel'
-        ? Number(newDieselRate)
-        : Number(newOctaneRate)
-    const diff = Number((newR - oldR).toFixed(2))
-    const gainLoss = Math.round(tank.currentLiters * diff)
-    return {
-      tank,
-      oldR,
-      newR,
-      diff,
-      gainLoss,
-    }
-  })
-
-  const netGainLossTotal = liveStockGainLoss.reduce((sum, item) => sum + item.gainLoss, 0)
-
-  const handleApplyOgraWizard = (e: React.FormEvent) => {
-    e.preventDefault()
-    const log = applyOgraPriceChange({
-      newRates: {
-        'PMG Super': Number(newSuperRate),
-        'HSD Diesel': Number(newDieselRate),
-        'Hi-Octane': Number(newOctaneRate),
-      },
-      effectiveDate,
-      notificationNo: notifNo,
-      notes: revisionNotes,
+  const restore = async () => {
+    if (!pending?.raw) return
+    const raw = pending.raw
+    const yes = await confirm({
+      title: 'Replace ALL station data?',
+      message: <>This deletes every record of <strong>{siteInfo.name}</strong> and replaces it with the {pending.counts?.records.toLocaleString()} records in the backup file. This cannot be undone — take a fresh backup first if you are unsure.</>,
+      confirmLabel: 'Yes, replace everything',
+      tone: 'danger',
     })
-
-    if (log) {
-      setSuperRate(Number(newSuperRate))
-      setDieselRate(Number(newDieselRate))
-      setOctaneRate(Number(newOctaneRate))
-      setIsOgraModalOpen(false)
-      const sign = log.netInventoryGainLoss >= 0 ? '+' : ''
-      setOgraSuccessMsg(
-        `OGRA revision active! All ${nozzles.length} nozzles updated. Total Inventory Impact: ${sign}Rs. ${log.netInventoryGainLoss.toLocaleString()}`
-      )
-      setTimeout(() => setOgraSuccessMsg(null), 7000)
-    }
+    if (!yes) return
+    const r = await act.restoreBackup(raw)
+    if (r.ok) { toast.success('Backup restored.'); setPending(null) } else toast.error(r.error)
   }
 
-  const sampleQuantity = 20
-  const sampleAmount = (sampleQuantity * superRate).toFixed(2)
+  const sync = !online ? { c: '#dc2626', t: 'Offline' } : backendKind === 'memory' ? { c: '#2563eb', t: 'Preview (sample data)' } : realtime === 'live' ? { c: '#16a34a', t: 'Connected — live sync active' } : { c: '#f59e0b', t: 'Connected — live updates reconnecting' }
 
   return (
     <div className="settings-view-root">
-      {/* 1. Page Header with Station Identity */}
       <div className="settings-header-banner">
         <div>
-          <span className="settings-eyebrow">
-            <SettingsIcon size={14} />
-            CONFIGURATION & OGRA TARIFF
-          </span>
+          <span className="settings-eyebrow"><SettingsIcon size={14} />CONFIGURATION & OGRA TARIFF</span>
           <h1 className="settings-title">Station Settings & Tariff Setup</h1>
-          <p className="settings-subtitle">
-            Update official petroleum prices, station contact identity, POS thermal slip formatting, and tank safety thresholds.
-          </p>
+          <p className="settings-subtitle">Official petroleum prices, dealer margins, station identity, receipt layout, alert thresholds, users and backups.</p>
         </div>
-
         <div className="settings-site-badge-box">
           <span className="settings-site-pill">{siteInfo.code}</span>
-          <div>
-            <strong style={{ display: 'block', fontSize: '13px', color: '#1a1814' }}>{siteInfo.name}</strong>
-            <span style={{ fontSize: '11px', color: '#736b5e' }}>{siteInfo.brand} System Sync</span>
-          </div>
+          <div><strong style={{ display: 'block', fontSize: 13, color: '#1a1814' }}>{siteInfo.name}</strong><span style={{ fontSize: 11, color: '#736b5e' }}>{siteInfo.brand}</span></div>
         </div>
       </div>
 
@@ -218,341 +380,101 @@ export const SettingsView: React.FC = () => {
         title="OGRA Tariffs & Station Configuration SOP"
         urduTitle="اوگرا فیول ریٹس اور اسٹیشن ترتیبات"
         role="owner"
-        roleLabel="Owner / Manager Exclusive"
-        purpose="Set official OGRA retail fuel rates, configure receipt header/footer details, define tank threshold alerts, and manage encrypted database backups."
+        roleLabel="Owner / Manager"
+        purpose="Set fuel prices and dealer margins, apply the fortnightly OGRA revision, keep station identity and slips correct, manage users, and take backups."
         steps={[
-          {
-            step: 1,
-            title: 'Fortnightly OGRA Notification (اوگرا نوٹیفکیشن)',
-            detail: 'Use the official OGRA price determination wizard on the 1st and 16th midnight.',
-            urdu: 'ہر ماہ کی پہلی اور سولہویں تاریخ کی آدھی رات کو اوگرا کا نیا نوٹیفکیشن لاگو کریں۔',
-          },
-          {
-            step: 2,
-            title: 'Live Stock Revaluation (اسٹاک نفع و نقصان)',
-            detail: 'System automatically calculates inventory gain/loss across all underground tanks at midnight.',
-            urdu: 'سسٹم تمام زیر زمین ٹینکوں کے موجودہ پیٹرول اور ڈیزل پر نفع یا نقصان کا خودکار حساب لگائے گا۔',
-          },
-          {
-            step: 3,
-            title: 'Backup & Database Health (بیک اپ اور محفوظ ڈیٹا)',
-            detail: 'Generate regular station snapshots and sync with cloud database.',
-            urdu: 'اسٹیشن کا محفوظ بیک اپ حاصل کریں تاکہ ریکارڈ ہمیشہ محفوظ رہے۔',
-          },
+          { step: 1, title: 'Fortnightly OGRA notification (اوگرا نوٹیفکیشن)', detail: 'Use the OGRA wizard on the 1st and 16th at midnight. Every nozzle takes the new rate.', urdu: 'ہر ماہ کی پہلی اور سولہویں تاریخ کو اوگرا کا نیا نوٹیفکیشن لاگو کریں۔' },
+          { step: 2, title: 'Stock revaluation (اسٹاک نفع و نقصان)', detail: 'The wizard calculates the gain or loss on the fuel currently in each tank.', urdu: 'ٹینکوں میں موجود تیل پر نفع یا نقصان کا خودکار حساب۔' },
+          { step: 3, title: 'Users (صارفین)', detail: 'The owner creates sign-ins and chooses each person\'s role and stations.', urdu: 'مالک صارفین بناتا اور ان کا کردار اور اسٹیشن منتخب کرتا ہے۔' },
+          { step: 4, title: 'Backup (بیک اپ)', detail: 'Download a station backup regularly. The live data is already safe in the cloud database.', urdu: 'وقتاً فوقتاً بیک اپ ڈاؤن لوڈ کریں۔' },
         ]}
         criticalChecks={[
-          'Cashier role is strictly locked out of tariff modifications to prevent rate tampering.',
-          'Always verify notification reference number before publishing rate changes across dispensers.',
+          'Cashiers cannot see this page — only managers and the owner change prices.',
+          'Verify the OGRA notification number before applying a revision.',
+          'Restoring a backup replaces ALL data of the station and is owner-only.',
         ]}
       />
 
-      {/* Dynamic Success & Alert Notifications */}
-      {isCashier && (
-        <div className="alert-ribbon-warning" style={{ background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', padding: '10px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <AlertCircleIcon size={18} color="#b45309" />
-          <span>
-            <strong>View Only Mode:</strong> Cashier role cannot modify fuel tariffs, OGRA pricing, or thermal receipt layout. Log in as Station Manager or Owner to apply changes.
-          </span>
-        </div>
-      )}
-
-      {saveSuccess && (
-        <div className="alert-ribbon-success">
-          <CheckCircleIcon size={18} color="#27ae60" />
-          <span>Configuration saved successfully! New fuel tariffs are now active across all {nozzles.length} nozzles.</span>
-        </div>
-      )}
-
-      {backupSuccess && (
-        <div className="alert-ribbon-success">
-          <ShieldIcon size={18} color="#27ae60" />
-          <span>Encrypted offline system snapshot generated successfully ({siteInfo.code} Database Archive).</span>
-        </div>
-      )}
-
-      {restoreSuccess && (
-        <div className="alert-ribbon-success">
-          <CheckCircleIcon size={18} color="#27ae60" />
-          <span>{restoreSuccess}</span>
-        </div>
-      )}
-
-      {restoreError && (
-        <div className="alert-ribbon-warning" style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', padding: '10px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <AlertCircleIcon size={18} color="#b91c1c" />
-          <span>{restoreError}</span>
-        </div>
-      )}
-
-      {ograSuccessMsg && (
-        <div className="alert-ribbon-success">
-          <TrendingUpIcon size={18} color="#27ae60" />
-          <span>{ograSuccessMsg}</span>
-        </div>
-      )}
-
-      <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
-        {/* =========================================================================
-            SECTION 1: OGRA Petroleum Selling Prices
-            ========================================================================= */}
+      <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
         <section className="settings-surface-card">
           <div className="settings-card-header">
             <div className="settings-card-header-left">
-              <div className="settings-card-icon-bubble">
-                <GasPumpIcon size={18} />
-              </div>
-              <div>
-                <h2 className="settings-card-title">Current Fuel Selling Prices (PKR / Liter)</h2>
-                <p className="settings-card-desc">Changes reflect immediately across all nozzle dispensers, sales calculations, and slip generation.</p>
-              </div>
+              <div className="settings-card-icon-bubble"><GasPumpIcon size={18} /></div>
+              <div><h2 className="settings-card-title">Current Fuel Selling Prices (PKR / Liter)</h2><p className="settings-card-desc">Changes apply immediately to every nozzle, sale calculation and slip.</p></div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              {!isCashier && (
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  onClick={handleOpenOgraWizard}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px' }}
-                >
-                  <TrendingUpIcon size={14} />
-                  <span>OGRA Fortnightly Revision Wizard</span>
-                </button>
-              )}
-              <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#15803d', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '3px 10px', borderRadius: '999px' }}>
-                ● Live Pricing Active
-              </span>
-            </div>
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => setOgra(true)}><TrendingUpIcon size={14} /><span>OGRA Fortnightly Revision Wizard</span></button>
           </div>
-
           <div className="settings-card-body">
             <div className="settings-rates-grid">
-              {/* PMG Super 92 Card */}
-              <div className="fuel-rate-panel">
-                <div className="fuel-rate-badge-row">
-                  <span className="fuel-name-badge super">
-                    <DropletIcon size={12} color="#c2410c" />
-                    PMG Super 92
-                  </span>
-                  <span className="fuel-rate-category">OGRA Regulated</span>
+              {FUEL_TYPES.map((f) => (
+                <div key={f} className="fuel-rate-panel">
+                  <div className="fuel-rate-badge-row">
+                    <span className={`fuel-name-badge ${FUEL_BADGE[f].cls}`}><DropletIcon size={12} color={FUEL_BADGE[f].color} />{FUEL_LABEL[f]}</span>
+                    <span className="fuel-rate-category">OGRA regulated</span>
+                  </div>
+                  <div className="fuel-rate-input-container">
+                    <span className="fuel-rate-currency-tag">Rs</span>
+                    <input type="number" min={0} step="0.01" className="fuel-rate-number-field" value={rates[f]} onChange={(e) => setRates({ ...rates, [f]: e.target.value })} required />
+                    <span className="fuel-rate-unit-tag">/ Litre</span>
+                  </div>
+                  <div className="fuel-rate-panel-footer"><span>{FUEL_SUB[f][0]}</span><strong>{FUEL_SUB[f][1]}</strong></div>
                 </div>
-
-                <div className="fuel-rate-input-container">
-                  <span className="fuel-rate-currency-tag">Rs</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="fuel-rate-number-field"
-                    value={superRate}
-                    onChange={(e) => setSuperRate(parseFloat(e.target.value) || 0)}
-                    required
-                  />
-                  <span className="fuel-rate-unit-tag">/ Litre</span>
-                </div>
-
-                <div className="fuel-rate-panel-footer">
-                  <span>Standard Consumer Petrol</span>
-                  <strong>Motor Gasoline</strong>
-                </div>
-              </div>
-
-              {/* HSD Diesel Card */}
-              <div className="fuel-rate-panel">
-                <div className="fuel-rate-badge-row">
-                  <span className="fuel-name-badge diesel">
-                    <DropletIcon size={12} color="#15803d" />
-                    HSD Diesel
-                  </span>
-                  <span className="fuel-rate-category">Transport Rate</span>
-                </div>
-
-                <div className="fuel-rate-input-container">
-                  <span className="fuel-rate-currency-tag">Rs</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="fuel-rate-number-field"
-                    value={dieselRate}
-                    onChange={(e) => setDieselRate(parseFloat(e.target.value) || 0)}
-                    required
-                  />
-                  <span className="fuel-rate-unit-tag">/ Litre</span>
-                </div>
-
-                <div className="fuel-rate-panel-footer">
-                  <span>Heavy Transport & Fleet</span>
-                  <strong>High Speed Diesel</strong>
-                </div>
-              </div>
-
-              {/* Hi-Octane 97 Card */}
-              <div className="fuel-rate-panel">
-                <div className="fuel-rate-badge-row">
-                  <span className="fuel-name-badge octane">
-                    <DropletIcon size={12} color="#b91c1c" />
-                    Altron / Hi-Octane
-                  </span>
-                  <span className="fuel-rate-category">Premium 97 RON</span>
-                </div>
-
-                <div className="fuel-rate-input-container">
-                  <span className="fuel-rate-currency-tag">Rs</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="fuel-rate-number-field"
-                    value={octaneRate}
-                    onChange={(e) => setOctaneRate(parseFloat(e.target.value) || 0)}
-                    required
-                  />
-                  <span className="fuel-rate-unit-tag">/ Litre</span>
-                </div>
-
-                <div className="fuel-rate-panel-footer">
-                  <span>Luxury & Performance</span>
-                  <strong>Hi-Octane 97</strong>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </section>
 
-        {/* =========================================================================
-            SECTION 2: Station Profile & POS Thermal Slip Branding
-            ========================================================================= */}
         <section className="settings-surface-card">
           <div className="settings-card-header">
             <div className="settings-card-header-left">
-              <div className="settings-card-icon-bubble">
-                <ReceiptIcon size={18} />
-              </div>
-              <div>
-                <h2 className="settings-card-title">Station Profile & Thermal Slip Branding</h2>
-                <p className="settings-card-desc">Official contact numbers, tax receipt headers, and thermal paper layout with live preview.</p>
-              </div>
+              <div className="settings-card-icon-bubble"><TrendingUpIcon size={18} /></div>
+              <div><h2 className="settings-card-title">Dealer Margin per Liter (for profit estimates)</h2><p className="settings-card-desc">Used by the Reports and Owner screens to estimate profit. Set the margin your oil company actually pays you for each fuel.</p></div>
             </div>
-            <span style={{ fontSize: '11.5px', color: '#8c8270' }}>80mm Standard POS Format</span>
           </div>
+          <div className="settings-card-body">
+            <Grid3>
+              {FUEL_TYPES.map((f) => (
+                <Field key={f} label={`${FUEL_LABEL[f]} — Rs per liter`}>
+                  <input type="number" min={0} step="0.01" className="form-input" value={margins[f]} onChange={(e) => setMargins({ ...margins, [f]: e.target.value })} required />
+                </Field>
+              ))}
+            </Grid3>
+          </div>
+        </section>
 
+        <section className="settings-surface-card">
+          <div className="settings-card-header">
+            <div className="settings-card-header-left">
+              <div className="settings-card-icon-bubble"><ReceiptIcon size={18} /></div>
+              <div><h2 className="settings-card-title">Thermal Slip Branding</h2><p className="settings-card-desc">Contact numbers, header and footer for slips, with a live preview.</p></div>
+            </div>
+            <span style={{ fontSize: 11.5, color: '#8c8270' }}>80mm standard POS format</span>
+          </div>
           <div className="settings-card-body">
             <div className="branding-split-layout">
-              {/* Left Column: Form Fields */}
               <div className="branding-inputs-col">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <div className="form-field-group">
-                    <label className="form-field-label">
-                      Station Landline Phone
-                      <span className="label-hint">Official contact</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="form-field-input"
-                      value={stationPhone}
-                      onChange={(e) => setStationPhone(e.target.value)}
-                      placeholder="e.g. 068-5874211"
-                      required
-                    />
-                  </div>
-
-                  <div className="form-field-group">
-                    <label className="form-field-label">
-                      Manager Direct Mobile
-                      <span className="label-hint">Emergency contact</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="form-field-input"
-                      value={managerContact}
-                      onChange={(e) => setManagerContact(e.target.value)}
-                      placeholder="e.g. 0300-6729104"
-                      required
-                    />
-                  </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div className="form-field-group"><label className="form-field-label">Station landline<span className="label-hint">Official contact</span></label><input className="form-field-input" value={phone} onChange={(e) => setPhone(e.target.value)} required /></div>
+                  <div className="form-field-group"><label className="form-field-label">Manager direct mobile<span className="label-hint">Emergency contact</span></label><input className="form-field-input" value={manager} onChange={(e) => setManager(e.target.value)} required /></div>
                 </div>
-
-                <div className="form-field-group">
-                  <label className="form-field-label">
-                    Thermal Slip Header Text
-                    <span className="label-hint">Printed on top of every receipt</span>
-                  </label>
-                  <textarea
-                    className="form-field-textarea"
-                    rows={3}
-                    value={receiptHeader}
-                    onChange={(e) => setReceiptHeader(e.target.value)}
-                    placeholder="Enter station brand, branch name, and complete road address..."
-                    required
-                  />
-                </div>
-
-                <div className="form-field-group">
-                  <label className="form-field-label">
-                    Thermal Slip Footer Note
-                    <span className="label-hint">Closing greeting and terms</span>
-                  </label>
-                  <textarea
-                    className="form-field-textarea"
-                    rows={3}
-                    value={receiptFooter}
-                    onChange={(e) => setReceiptFooter(e.target.value)}
-                    placeholder="Enter customer greeting, software signature, or STRN details..."
-                    required
-                  />
-                </div>
+                <div className="form-field-group"><label className="form-field-label">Slip header<span className="label-hint">Top of every receipt</span></label><textarea className="form-field-textarea" rows={3} value={header} onChange={(e) => setHeader(e.target.value)} required /></div>
+                <div className="form-field-group"><label className="form-field-label">Slip footer<span className="label-hint">Closing greeting and terms</span></label><textarea className="form-field-textarea" rows={3} value={footer} onChange={(e) => setFooter(e.target.value)} required /></div>
               </div>
-
-              {/* Right Column: Live Thermal Receipt Preview */}
               <div className="receipt-preview-wrap">
-                <div className="receipt-preview-banner">
-                  <span>LIVE THERMAL SLIP PREVIEW</span>
-                  <span>ESC/POS</span>
-                </div>
-
+                <div className="receipt-preview-banner"><span>LIVE THERMAL SLIP PREVIEW</span><span>ESC/POS</span></div>
                 <div className="thermal-paper-card">
-                  <div className="thermal-header-center">{receiptHeader}</div>
-                  <div className="thermal-contact-center">
-                    Phone: {stationPhone} | Cell: {managerContact}
-                  </div>
-
+                  <div className="thermal-header-center ui-pre-wrap">{header}</div>
+                  <div className="thermal-contact-center">Phone: {phone} | Cell: {manager}</div>
                   <div className="thermal-dashed-sep" />
-
-                  <div className="thermal-flex-row">
-                    <span>DATE: 17-Sep-2026</span>
-                    <span>TIME: 03:15 PM</span>
-                  </div>
-                  <div className="thermal-flex-row">
-                    <span>INVOICE: #INV-2026-9041</span>
-                    <span>SHIFT: Evening</span>
-                  </div>
-                  <div className="thermal-flex-row">
-                    <span>NOZZLE: #02 (PMG)</span>
-                    <span>PUMP ATTENDANT: Asif</span>
-                  </div>
-
+                  <div className="thermal-flex-row"><span>DATE: {formatDate(todayISO())}</span><span>SHIFT: Morning</span></div>
+                  <div className="thermal-flex-row"><span>NOZZLE: D1-N1 (PMG)</span><span>SAMPLE</span></div>
                   <div className="thermal-dashed-sep" />
-
-                  <div className="thermal-flex-row">
-                    <span>ITEM: PMG Super 92</span>
-                    <span>{sampleQuantity.toFixed(2)} L</span>
-                  </div>
-                  <div className="thermal-flex-row">
-                    <span>RATE: Rs. {superRate.toFixed(2)} / L</span>
-                    <span>Rs. {sampleAmount}</span>
-                  </div>
-
+                  <div className="thermal-flex-row"><span>ITEM: PMG Super 92</span><span>20.00 L</span></div>
+                  <div className="thermal-flex-row"><span>RATE: Rs. {(Number(rates['PMG Super']) || 0).toFixed(2)} / L</span><span>Rs. {sampleAmount}</span></div>
                   <div className="thermal-dashed-sep" />
-
-                  <div className="thermal-flex-row bold-row">
-                    <span>TOTAL AMOUNT:</span>
-                    <span>Rs. {sampleAmount}</span>
-                  </div>
-                  <div className="thermal-flex-row">
-                    <span>PAYMENT METHOD:</span>
-                    <span>CASH</span>
-                  </div>
-
+                  <div className="thermal-flex-row bold-row"><span>TOTAL AMOUNT:</span><span>Rs. {sampleAmount}</span></div>
                   <div className="thermal-dashed-sep" />
-
-                  <div className="thermal-footer-center">{receiptFooter}</div>
+                  <div className="thermal-footer-center ui-pre-wrap">{footer}</div>
                   <div className="thermal-barcode-sim">||| | ||||| || ||| |||| |</div>
                 </div>
               </div>
@@ -560,528 +482,141 @@ export const SettingsView: React.FC = () => {
           </div>
         </section>
 
-        {/* =========================================================================
-            SECTION 3: Inventory Safety & Alert Thresholds
-            ========================================================================= */}
         <section className="settings-surface-card">
           <div className="settings-card-header">
             <div className="settings-card-header-left">
-              <div className="settings-card-icon-bubble">
-                <AlertCircleIcon size={18} />
-              </div>
-              <div>
-                <h2 className="settings-card-title">Inventory Safety & Alert Thresholds</h2>
-                <p className="settings-card-desc">Configured underground tank capacities, dip warning triggers, and dispensing nozzle telemetry.</p>
-              </div>
+              <div className="settings-card-icon-bubble"><AlertCircleIcon size={18} /></div>
+              <div><h2 className="settings-card-title">Alert Thresholds & Infrastructure</h2><p className="settings-card-desc">When the dashboard and tank pages raise warnings.</p></div>
             </div>
-            <span style={{ fontSize: '11.5px', color: '#8c8270' }}>Real-Time Calibration Monitor</span>
           </div>
-
           <div className="settings-card-body">
             <div className="safety-thresholds-grid">
-              {/* Left: Threshold Slider */}
               <div className="threshold-control-card">
-                <label className="form-field-label">
-                  Low Stock Alert Trigger (%)
-                  <span className="label-hint">Adjust safety margin</span>
-                </label>
-
+                <label className="form-field-label">Low stock alert (% of tank capacity)<span className="label-hint">Amber warning below this level</span></label>
                 <div className="threshold-slider-group">
-                  <input
-                    type="range"
-                    min="10"
-                    max="45"
-                    step="1"
-                    className="threshold-slider-field"
-                    value={lowStockAlertPct}
-                    onChange={(e) => setLowStockAlertPct(Number(e.target.value))}
-                  />
-                  <span className="threshold-pct-pill">{lowStockAlertPct}%</span>
+                  <input type="range" min="5" max="50" step="1" className="threshold-slider-field" value={lowPct} onChange={(e) => setLowPct(e.target.value)} />
+                  <span className="threshold-pct-pill">{lowPct}%</span>
                 </div>
-
-                <div className="threshold-hint-box">
-                  <strong>Automatic Safety Trigger:</strong> When physical dip levels fall below{' '}
-                  <strong>{lowStockAlertPct}%</strong> of tank capacity, the dashboard and nozzle registers will automatically highlight amber warning badges to prevent line starvation.
+                <div className="form-field-group" style={{ marginTop: 12 }}>
+                  <label className="form-field-label">Cash-difference alert limit (PKR)<span className="label-hint">A shift cash shortage / excess above this needs an explanation</span></label>
+                  <input type="number" min={0} step="1" className="form-field-input" value={cashLimit} onChange={(e) => setCashLimit(e.target.value)} required />
                 </div>
               </div>
-
-              {/* Right: Active Infrastructure Summary */}
               <div className="infra-summary-card">
-                <span className="infra-header-title">Active Calibrated Infrastructure</span>
-
-                <div className="infra-badge-item">
-                  <span className="infra-item-name">Underground Fuel Tanks</span>
-                  <span className="infra-item-val">{tanks.length} Calibrated Tanks</span>
-                </div>
-
-                <div className="infra-badge-item">
-                  <span className="infra-item-name">Electronic Dispenser Nozzles</span>
-                  <span className="infra-item-val">{nozzles.length} Active Nozzles</span>
-                </div>
-
-                <div className="infra-badge-item">
-                  <span className="infra-item-name">OMC Weights & Measures</span>
-                  <span className="infra-item-val" style={{ color: '#15803d' }}>● Digitally Sealed & Certified</span>
-                </div>
+                <span className="infra-header-title">Active calibrated infrastructure</span>
+                <div className="infra-badge-item"><span className="infra-item-name">Underground fuel tanks</span><span className="infra-item-val">{tanks.length} tanks</span></div>
+                <div className="infra-badge-item"><span className="infra-item-name">Dispenser nozzles</span><span className="infra-item-val">{nozzles.filter((n) => n.isActive).length} active of {nozzles.length}</span></div>
+                <div className="infra-badge-item"><span className="infra-item-name">Manage them in</span><span className="infra-item-val">Fuel Sales & Tank Dip</span></div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* =========================================================================
-            SECTION 4: Supabase Cloud Database & Remote Live Sync
-            ========================================================================= */}
-        <section className="settings-surface-card" style={{ marginTop: '20px' }}>
-          <div className="settings-card-header">
-            <div className="settings-card-header-left">
-              <div className="settings-card-icon-bubble" style={{ backgroundColor: '#ecfdf5', color: '#15803d' }}>
-                <ShieldIcon size={18} />
-              </div>
-              <div>
-                <h2 className="settings-card-title">Supabase Cloud Database &amp; Remote Live Sync</h2>
-                <p className="settings-card-desc">
-                  Serverless PostgreSQL cloud database connected to your Supabase project (Project ID: <code>fjrvayncixrkbeepedre</code>).
-                </p>
-              </div>
-            </div>
-            <span
-              className={`badge ${cloudStatus.connected && cloudStatus.tableExists ? 'badge-success' : cloudStatus.connected ? 'badge-warning' : 'badge-neutral'}`}
-              style={{ fontSize: '12px' }}
-            >
-              {cloudStatus.connected && cloudStatus.tableExists
-                ? '🟢 Cloud Sync Active'
-                : cloudStatus.connected
-                ? '🟡 Setup SQL Needed'
-                : '⚪ Offline / Connecting'}
-            </span>
-          </div>
-
-          <div className="settings-card-body" style={{ padding: '16px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginBottom: '16px' }}>
-              <div style={{ padding: '12px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Cloud Endpoint URL</span>
-                <strong style={{ fontSize: '12.5px', color: '#0f172a', wordBreak: 'break-all' }}>https://fjrvayncixrkbeepedre.supabase.co</strong>
-              </div>
-
-              <div style={{ padding: '12px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Database Engine</span>
-                <strong style={{ fontSize: '12.5px', color: '#0f172a' }}>PostgreSQL 15 (Serverless Cloud)</strong>
-              </div>
-
-              <div style={{ padding: '12px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Multi-Device Real-Time Sync</span>
-                <strong style={{ fontSize: '12.5px', color: '#15803d' }}>Enabled (Websocket Push)</strong>
-              </div>
-            </div>
-
-            {(!cloudStatus.tableExists || showSqlBox) && (
-              <div style={{ padding: '14px 16px', borderRadius: '8px', backgroundColor: '#fefce8', border: '1px solid #fef08a', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#854d0e' }}>
-                    ⚡ 1-Click Database Setup (Run in Supabase SQL Editor):
-                  </span>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline"
-                    onClick={() => {
-                      navigator.clipboard.writeText(SUPABASE_SETUP_SQL)
-                      alert('SQL copied to clipboard! Paste it into Supabase SQL Editor and click RUN.')
-                    }}
-                    style={{ borderColor: '#854d0e', color: '#854d0e' }}
-                  >
-                    📋 Copy Setup SQL
-                  </button>
-                </div>
-                <p style={{ fontSize: '12px', color: '#713f12', margin: '0 0 8px 0' }}>
-                  Open your <strong>Supabase Dashboard ➔ SQL Editor</strong>, paste this code, and press <strong>RUN</strong> to create the stations table:
-                </p>
-                <pre style={{ margin: 0, padding: '12px', borderRadius: '6px', backgroundColor: '#1e293b', color: '#38bdf8', fontSize: '11px', overflowX: 'auto' }}>
-                  {SUPABASE_SETUP_SQL}
-                </pre>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={async () => {
-                  await refreshCloudSync()
-                  alert('Cloud connection checked!')
-                }}
-              >
-                🔄 Refresh Cloud Status
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setShowSqlBox(!showSqlBox)}
-              >
-                {showSqlBox ? 'Hide Setup SQL' : 'View / Copy Setup SQL'}
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* =========================================================================
-            SECTION 5: Action Buttons Footer
-            ========================================================================= */}
+        <FormError message={error} />
         <div className="settings-bottom-actions">
-          <div className="settings-security-assurance">
-            <ShieldIcon size={16} color="#78716c" />
-            <span>Encrypted local database state. Changes persist across application sessions.</span>
-          </div>
-
+          <div className="settings-security-assurance"><ShieldIcon size={16} color="#78716c" /><span>Saved in the Supabase cloud database. Nothing is stored in this browser.</span></div>
           <div className="settings-buttons-cluster">
-            <button type="button" className="btn btn-outline" onClick={handleBackup}>
-              <FileTextIcon size={16} />
-              <span>Generate Station Backup</span>
-            </button>
-            {!isCashier && (
-              <>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept=".json"
-                  style={{ display: 'none' }}
-                  onChange={handleFileSelected}
-                />
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{ borderColor: '#967938', color: '#967938' }}
-                >
-                  <ShieldIcon size={16} />
-                  <span>Restore Database from Backup (.json)</span>
-                </button>
-              </>
-            )}
-            {!isCashier && (
-              <button type="submit" className="btn btn-primary btn-large btn-save-settings">
-                <CheckCircleIcon size={16} />
-                <span>Save Station Configuration</span>
-              </button>
-            )}
+            <button type="submit" className="btn btn-primary btn-large btn-save-settings" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : 'Save Station Configuration'}</span></button>
           </div>
         </div>
       </form>
 
-      {/* =========================================================================
-          AUDIT LOG: Past OGRA Price Revisions & Inventory Revaluations
-          ========================================================================= */}
-      {tariffHistory && tariffHistory.length > 0 && (
-        <section className="settings-surface-card" style={{ marginTop: '20px' }}>
+      <section className="settings-surface-card">
+        <div className="settings-card-header">
+          <div className="settings-card-header-left">
+            <div className="settings-card-icon-bubble"><ShieldIcon size={18} /></div>
+            <div><h2 className="settings-card-title">Station Profile</h2><p className="settings-card-desc">Name, address and tax number printed on documents.</p></div>
+          </div>
+        </div>
+        <div className="settings-card-body">
+          <form onSubmit={saveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Grid2>
+              <Field label="Station name"><input className="form-input" value={profileName} onChange={(e) => setProfileName(e.target.value)} required /></Field>
+              <Field label="Location / address"><input className="form-input" value={profileLocation} onChange={(e) => setProfileLocation(e.target.value)} /></Field>
+            </Grid2>
+            <Grid2>
+              <Field label="Manager name"><input className="form-input" value={profileManager} onChange={(e) => setProfileManager(e.target.value)} /></Field>
+              <Field label="NTN"><input className="form-input" value={profileNtn} onChange={(e) => setProfileNtn(e.target.value)} /></Field>
+            </Grid2>
+            <FormError message={profile.error} />
+            <div><button type="submit" className="btn btn-outline" disabled={profile.busy}>{profile.busy ? 'Saving…' : 'Save station profile'}</button></div>
+          </form>
+        </div>
+      </section>
+
+      {isOwner && <UsersPanel />}
+      <AuditPanel />
+
+      <section className="settings-surface-card">
+        <div className="settings-card-header">
+          <div className="settings-card-header-left">
+            <div className="settings-card-icon-bubble" style={{ backgroundColor: '#ecfdf5', color: '#15803d' }}><ShieldIcon size={18} /></div>
+            <div><h2 className="settings-card-title">My Account, Cloud Database & Backup</h2><p className="settings-card-desc">Signed in as <strong>{currentUser?.name}</strong> ({currentUser?.role}).</p></div>
+          </div>
+          <span className="badge" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#0f172a' }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: sync.c }} />{sync.t}</span>
+        </div>
+        <div className="settings-card-body">
+          <Notice tone="info">All business data lives in the Supabase database and is shared live between devices. The only thing kept in this browser is your sign-in token.</Notice>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-outline" onClick={() => setPasswordOpen(true)}><KeyIcon size={16} /><span>Change my password</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => { exportBackup(); toast.success('Backup file downloaded.') }}><DownloadIcon size={16} /><span>Download station backup</span></button>
+            {isOwner && (
+              <>
+                <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={onFile} />
+                <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938' }} onClick={() => fileRef.current?.click()}><FileTextIcon size={16} /><span>Restore from backup (.json)</span></button>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {tariffHistory.length > 0 && (
+        <section className="settings-surface-card">
           <div className="settings-card-header">
             <div className="settings-card-header-left">
-              <div className="settings-card-icon-bubble">
-                <TrendingUpIcon size={18} />
-              </div>
-              <div>
-                <h2 className="settings-card-title">OGRA Price Revision History &amp; Stock Gain/Loss Log</h2>
-                <p className="settings-card-desc">Audit trail of midnight fortnightly price revisions and financial revaluations of tank stocks.</p>
-              </div>
+              <div className="settings-card-icon-bubble"><TrendingUpIcon size={18} /></div>
+              <div><h2 className="settings-card-title">OGRA Price Revision History & Stock Gain/Loss Log</h2><p className="settings-card-desc">Audit trail of fortnightly price revisions and tank stock revaluations.</p></div>
             </div>
-            <span className="badge badge-neutral">{tariffHistory.length} Revisions Recorded</span>
+            <span className="badge badge-neutral">{tariffHistory.length} revisions</span>
           </div>
-
           <div className="table-responsive">
             <table className="clean-table">
-              <thead>
-                <tr>
-                  <th>Effective Date</th>
-                  <th>Notification #</th>
-                  <th>PMG Super Rate</th>
-                  <th>HSD Diesel Rate</th>
-                  <th>Hi-Octane Rate</th>
-                  <th>Net Inventory Gain / Loss</th>
-                  <th>Authorized By</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Effective</th><th>Notification</th>{FUEL_TYPES.map((f) => <th key={f}>{f}</th>)}<th>Inventory gain / loss</th><th>By</th></tr></thead>
               <tbody>
-                {tariffHistory.map((rev) => {
-                  const isGain = rev.netInventoryGainLoss >= 0
-                  return (
-                    <tr key={rev.id}>
-                      <td>
-                        <strong>{rev.effectiveDate}</strong>
-                        <div className="text-muted text-xs">{rev.date}</div>
-                      </td>
-                      <td>
-                        <span className="badge badge-neutral" style={{ fontSize: '11px' }}>{rev.notificationNo}</span>
-                      </td>
-                      <td>
-                        Rs. {rev.newRates['PMG Super'].toFixed(2)}
-                        <span style={{ fontSize: '11px', color: '#736b5e', display: 'block' }}>
-                          was Rs. {rev.oldRates['PMG Super'].toFixed(2)}
-                        </span>
-                      </td>
-                      <td>
-                        Rs. {rev.newRates['HSD Diesel'].toFixed(2)}
-                        <span style={{ fontSize: '11px', color: '#736b5e', display: 'block' }}>
-                          was Rs. {rev.oldRates['HSD Diesel'].toFixed(2)}
-                        </span>
-                      </td>
-                      <td>
-                        Rs. {rev.newRates['Hi-Octane'].toFixed(2)}
-                        <span style={{ fontSize: '11px', color: '#736b5e', display: 'block' }}>
-                          was Rs. {rev.oldRates['Hi-Octane'].toFixed(2)}
-                        </span>
-                      </td>
-                      <td>
-                        <strong className={isGain ? 'text-green' : 'text-red'} style={{ fontSize: '14px' }}>
-                          {isGain ? '+' : ''}Rs. {rev.netInventoryGainLoss.toLocaleString()}
-                        </strong>
-                        <span style={{ fontSize: '10.5px', color: '#736b5e', display: 'block' }}>
-                          {isGain ? 'Inventory Gain' : 'Inventory Loss'}
-                        </span>
-                      </td>
-                      <td>
-                        <div>{rev.revisedBy}</div>
-                        <span className="text-muted text-xs">{rev.notes}</span>
-                      </td>
-                    </tr>
-                  )
-                })}
+                {tariffHistory.map((rev) => (
+                  <tr key={rev.id}>
+                    <td><strong>{rev.effectiveDate}</strong><div className="text-muted text-xs">{formatDate(rev.date)}</div></td>
+                    <td><span className="badge badge-neutral" style={{ fontSize: 11 }}>{rev.notificationNo}</span></td>
+                    {FUEL_TYPES.map((f) => <td key={f}>Rs. {rev.newRates[f].toFixed(2)}<span style={{ fontSize: 11, color: '#736b5e', display: 'block' }}>was Rs. {rev.oldRates[f].toFixed(2)}</span></td>)}
+                    <td><strong className={rev.netInventoryGainLoss >= 0 ? 'text-green' : 'text-red'}>{rev.netInventoryGainLoss >= 0 ? '+' : ''}{rs(rev.netInventoryGainLoss)}</strong></td>
+                    <td>{rev.revisedBy}<div className="text-muted text-xs">{rev.notes}</div></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </section>
       )}
 
-      {/* =========================================================================
-          MODAL 1: OGRA Fortnightly Revision Wizard
-          ========================================================================= */}
-      {isOgraModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsOgraModalOpen(false)}>
-          <div className="modal-container compact-zero-scroll" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <h3 className="modal-heading" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <TrendingUpIcon size={20} color="#967938" />
-                  OGRA Fortnightly Price Revision Wizard
-                </h3>
-                <span className="modal-sub">
-                  Applies new official tariffs across all nozzles and calculates immediate inventory stock gain/loss.
-                </span>
-              </div>
-              <button className="btn btn-ghost" onClick={() => setIsOgraModalOpen(false)}>
-                <XIcon size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleApplyOgraWizard} className="modal-form-compact">
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Effective Date &amp; Time (Midnight)</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={effectiveDate}
-                    onChange={(e) => setEffectiveDate(e.target.value)}
-                    placeholder="YYYY-MM-DD 00:00"
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">OGRA Notification Reference</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={notifNo}
-                    onChange={(e) => setNotifNo(e.target.value)}
-                    placeholder="e.g. OGRA/PL/2026-09-B"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div style={{ fontSize: '11px', fontWeight: 700, color: '#8c7333', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '4px 0 2px' }}>
-                Enter New Official Rates (PKR / Liter)
-              </div>
-
-              <div className="form-grid-3">
-                <div className="form-group">
-                  <label className="form-label">PMG Super 92</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="form-input"
-                    value={newSuperRate}
-                    onChange={(e) => setNewSuperRate(Number(e.target.value))}
-                    required
-                  />
-                  <span style={{ fontSize: '10.5px', color: '#686256', marginTop: '2px', display: 'block' }}>
-                    Current: Rs. {superRate.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">HSD Diesel</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="form-input"
-                    value={newDieselRate}
-                    onChange={(e) => setNewDieselRate(Number(e.target.value))}
-                    required
-                  />
-                  <span style={{ fontSize: '10.5px', color: '#686256', marginTop: '2px', display: 'block' }}>
-                    Current: Rs. {dieselRate.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Hi-Octane 97</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="form-input"
-                    value={newOctaneRate}
-                    onChange={(e) => setNewOctaneRate(Number(e.target.value))}
-                    required
-                  />
-                  <span style={{ fontSize: '10.5px', color: '#686256', marginTop: '2px', display: 'block' }}>
-                    Current: Rs. {octaneRate.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Real-time Tank Stock Gain / Loss Evaluation Box */}
-              <div style={{ background: '#faf6ee', border: '1px solid #ebd9c8', borderRadius: '8px', padding: '10px 12px', marginTop: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#1a1814', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Underground Tank Stock Revaluation (Live Dip)
-                  </span>
-                  <span className={`badge ${netGainLossTotal >= 0 ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '11px', fontWeight: 700, padding: '2px 6px' }}>
-                    {netGainLossTotal >= 0 ? 'Net Inventory Gain' : 'Net Inventory Loss'}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {liveStockGainLoss.map(({ tank, oldR, newR, diff, gainLoss }) => {
-                    const isPositive = diff >= 0
-                    return (
-                      <div key={tank.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', padding: '2px 0', borderBottom: '1px dashed #e5dcc7' }}>
-                        <div>
-                          <strong>Tank #{tank.tankNo}: {tank.fuelType}</strong>
-                          <span style={{ color: '#686256', marginLeft: '6px' }}>
-                            ({tank.currentLiters.toLocaleString()} L @ Rs. {oldR} → Rs. {newR})
-                          </span>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <span style={{ color: isPositive ? '#15803d' : '#b91c1c', fontWeight: 600 }}>
-                            {isPositive ? '+' : ''}Rs. {diff.toFixed(2)}/L
-                          </span>
-                          <span style={{ marginLeft: '8px', fontWeight: 700, color: isPositive ? '#15803d' : '#b91c1c' }}>
-                            {isPositive ? '+' : ''}Rs. {gainLoss.toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  })}
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', marginTop: '2px', fontSize: '12.5px' }}>
-                    <strong>Total Net Revaluation Impact:</strong>
-                    <strong style={{ fontSize: '14.5px', color: netGainLossTotal >= 0 ? '#15803d' : '#b91c1c' }}>
-                      {netGainLossTotal >= 0 ? '+' : ''}Rs. {netGainLossTotal.toLocaleString()}
-                    </strong>
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-group" style={{ marginTop: '8px' }}>
-                <label className="form-label">Audit Remarks</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={revisionNotes}
-                  onChange={(e) => setRevisionNotes(e.target.value)}
-                  placeholder="e.g. Official OGRA fortnightly revision applied"
-                />
-              </div>
-
-              <div className="modal-actions-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setIsOgraModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  <CheckCircleIcon size={16} />
-                  <span>Apply OGRA Revision &amp; Update Nozzles</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          MODAL 2: Database Restore Confirmation
-          ========================================================================= */}
-      {isRestoreModalOpen && pendingBackup && (
-        <div className="modal-backdrop" onClick={() => setIsRestoreModalOpen(false)}>
-          <div className="modal-container compact-zero-scroll" style={{ maxWidth: '540px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <h3 className="modal-heading" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9a3412' }}>
-                  <ShieldIcon size={20} color="#9a3412" />
-                  Restore Station Database
-                </h3>
-                <span className="modal-sub">
-                  Verify the archive snapshot details before replacing active station records.
-                </span>
-              </div>
-              <button className="btn btn-ghost" onClick={() => setIsRestoreModalOpen(false)}>
-                <XIcon size={18} />
-              </button>
-            </div>
-
-            <div style={{ padding: '16px 20px' }}>
-              <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <AlertCircleIcon size={18} color="#b45309" />
-                  <strong style={{ color: '#92400e', fontSize: '13px' }}>Confirm Database Overwrite</strong>
-                </div>
-                <p style={{ margin: 0, fontSize: '11.5px', color: '#78350f', lineHeight: 1.4 }}>
-                  Restoring will safely load all tanks, sales, fuel slips, customers, daybook cash, and station settings from this backup file.
-                </p>
-              </div>
-
-              <div style={{ background: '#faf6ee', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#686256' }}>Target Station:</span>
-                  <strong>{pendingBackup.result.siteName} ({pendingBackup.result.siteId})</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#686256' }}>Backup Generated:</span>
-                  <span>{new Date(pendingBackup.result.exportedAt || Date.now()).toLocaleString()}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#686256' }}>Underground Tanks:</span>
-                  <span>{pendingBackup.result.data?.tanks.length} Tanks</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#686256' }}>Dispensing Nozzles:</span>
-                  <span>{pendingBackup.result.data?.nozzles.length} Nozzles</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#686256' }}>Credit Fleet Clients:</span>
-                  <span>{pendingBackup.result.data?.customers.length} Accounts</span>
-                </div>
-              </div>
-            </div>
-
+      {ogra && <OgraModal onClose={() => setOgra(false)} />}
+      {passwordOpen && <PasswordDialog onClose={() => setPasswordOpen(false)} />}
+      {pending && (
+        <Modal title="Restore Station Database" subtitle="Check the backup before it replaces the live data" onClose={() => setPending(null)} width={560}>
+          <div className="modal-form-compact">
+            <Notice tone="warning"><div><strong>This replaces every record of this station.</strong> It cannot be undone.</div></Notice>
+            <CalcStrip items={[
+              { label: 'Backup of', value: pending.siteName ?? '—' },
+              { label: 'Made on', value: pending.exportedAt ? new Date(pending.exportedAt).toLocaleString() : 'unknown' },
+              { label: 'Format', value: pending.kind === 'legacy' ? 'Previous software' : 'Current' },
+              { label: 'Records', value: (pending.counts?.records ?? 0).toLocaleString() },
+              { label: 'Tanks / nozzles / customers', value: `${pending.counts?.tanks} / ${pending.counts?.nozzles} / ${pending.counts?.customers}` },
+            ]} />
             <div className="modal-actions-footer">
-              <button type="button" className="btn btn-ghost" onClick={() => setIsRestoreModalOpen(false)}>
-                Cancel
-              </button>
-              <button type="button" className="btn btn-primary" onClick={handleConfirmRestore} style={{ background: '#9a3412', borderColor: '#7c2d12' }}>
-                <CheckCircleIcon size={16} />
-                <span>Confirm &amp; Restore Station Database</span>
-              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => setPending(null)}>Cancel</button>
+              <button type="button" className="btn btn-danger" onClick={() => void restore()}>Replace all data with this backup</button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   )

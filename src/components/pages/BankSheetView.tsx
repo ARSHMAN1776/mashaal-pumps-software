@@ -1,340 +1,290 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import { PlusIcon, PrinterIcon, CheckCircleIcon, XIcon } from '../common/Icons'
+import type { BankAccount, BankTransaction } from '../../types'
+import { BANK_CREDIT_TYPES } from '../../types'
+import { formatDate, todayISO } from '../../lib/dates'
+import { rs } from '../../lib/money'
+import { PlusIcon, PrinterIcon, CheckCircleIcon, EditIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
+import { Modal, FormError } from '../common/Modal'
+import { useConfirm } from '../common/Confirm'
+import { useToast } from '../common/Toast'
+import { useSubmit } from '../common/useSubmit'
+import { CalcStrip, EmptyRow, Field, FilterBar, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
 
-export const BankSheetView: React.FC = () => {
-  const { activeSiteData, addDaybookEntry, addBankDeposit } = useApp()
-  const { bankAccounts, bankTransactions, siteInfo } = activeSiteData
+// ===========================================================================
+// Bank account dialog
+// ===========================================================================
+const AccountModal: React.FC<{ account?: BankAccount; onClose: () => void }> = ({ account, onClose }) => {
+  const { act } = useApp()
+  const toast = useToast()
+  const [bankName, setBankName] = useState(account?.bankName ?? '')
+  const [title, setTitle] = useState(account?.accountTitle ?? '')
+  const [number, setNumber] = useState(account?.accountNumber ?? '')
+  const [branch, setBranch] = useState(account?.branch ?? '')
+  const [opening, setOpening] = useState(String(account?.openingBalance ?? 0))
+  const [active, setActive] = useState(account?.isActive ?? true)
+  const { busy, error, run } = useSubmit()
 
-  const [modalOpen, setModalOpen] = useState(false)
-  const [printOpen, setPrintOpen] = useState(false)
-
-  // Deposit Form
-  const [selectedBankId, setSelectedBankId] = useState(bankAccounts[0]?.id || '')
-  const [depositAmount, setDepositAmount] = useState<number>(300000)
-  const [slipNo, setSlipNo] = useState(`DEP-${Math.floor(100 + Math.random() * 900)}`)
-  const [description, setDescription] = useState('Pump morning shift cash collection deposit')
-
-  const selectedBank = bankAccounts.find((b) => b.id === selectedBankId) || bankAccounts[0]
-  const totalBankBalances = bankAccounts.reduce((sum, b) => sum + b.currentBalance, 0)
-
-  const handleSaveDeposit = (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault()
-
-    // 1. Credit the bank account and add to bank transaction log
-    addBankDeposit({
-      bankId: selectedBank.id,
-      amount: depositAmount,
-      slipNo,
-      description,
-    })
-
-    // 2. Also record in daybook as cash out from safe
-    addDaybookEntry({
-      date: new Date().toISOString().split('T')[0],
-      time: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
-      particulars: `Cash Deposited to ${selectedBank.bankName} (Slip #${slipNo})`,
-      category: 'Bank Deposit',
-      cashIn: 0,
-      cashOut: depositAmount,
-      balanceAfter: 0,
-      referenceNo: slipNo,
-      handledBy: siteInfo.managerName,
-    })
-
-    setModalOpen(false)
+    const input = { bankName, accountTitle: title, accountNumber: number, branch, openingBalance: Number(opening) }
+    if (account) void run(() => act.updateBankAccount(account.id, { ...input, isActive: active }), () => { toast.success('Bank account updated.'); onClose() })
+    else void run(() => act.addBankAccount(input), (a) => { toast.success(`Added ${a.bankName}.`); onClose() })
   }
 
   return (
-    <div className="page-content-wrapper">
-      <div className="page-title-banner">
-        <div>
-          <span className="page-eyebrow">STATION BANKING & LIQUIDITY</span>
-          <h2 className="page-heading">Bank Sheet & Daily Cash Deposits</h2>
-          <p className="page-sub">
-            Station commercial accounts, daily cash deposits from pump collections, and bank transfer reconciliations
-          </p>
+    <Modal title={account ? 'Edit Bank Account' : 'Add Bank Account'} onClose={onClose} busy={busy} width={620}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Bank name"><input className="form-input" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. Habib Bank Limited (HBL)" required autoFocus /></Field>
+          <Field label="Branch"><input className="form-input" value={branch} onChange={(e) => setBranch(e.target.value)} /></Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Account title"><input className="form-input" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+          <Field label="Account number / IBAN"><input className="form-input" value={number} onChange={(e) => setNumber(e.target.value)} required /></Field>
+        </Grid2>
+        <Field label="Opening balance (PKR)" hint="The balance when you started using this software. Deposits and payments are added to it.">
+          <input type="number" step="any" className="form-input" value={opening} onChange={(e) => setOpening(e.target.value)} required />
+        </Field>
+        {account && <label className="ui-checkbox-row"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /><span>Active (untick to stop using this account; history is kept)</span></label>}
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : account ? 'Save changes' : 'Add account'}</span></button>
         </div>
-        <div className="page-actions">
-          <button className="btn btn-outline" onClick={() => setPrintOpen(true)}>
-            <PrinterIcon size={16} />
-            <span>Print Deposit Sheet</span>
-          </button>
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
-            <PlusIcon size={16} />
-            <span>Record Cash Deposit to Bank</span>
-          </button>
-        </div>
-      </div>
+      </form>
+    </Modal>
+  )
+}
 
-      {/* Module Operational Guide */}
+// ===========================================================================
+// Deposit / withdrawal / fee dialog
+// ===========================================================================
+type TxKind = 'deposit' | 'withdraw' | 'fee'
+
+const TxModal: React.FC<{ kind: TxKind; bankId?: string; onClose: () => void }> = ({ kind, bankId, onClose }) => {
+  const { activeSiteData, act } = useApp()
+  const toast = useToast()
+  const banks = activeSiteData.bankAccounts.filter((b) => b.isActive)
+  const cash = activeSiteData.daybook.length ? activeSiteData.daybook[activeSiteData.daybook.length - 1].balanceAfter : 0
+  const [id, setId] = useState(bankId || banks[0]?.id || '')
+  const [amount, setAmount] = useState('')
+  const [slip, setSlip] = useState('')
+  const [description, setDescription] = useState('')
+  const [date, setDate] = useState(todayISO())
+  const [funding, setFunding] = useState<'cash' | 'external'>('cash')
+  const { busy, error, run } = useSubmit()
+  const bank = banks.find((b) => b.id === id)
+  const amt = Number(amount) || 0
+  const credit = kind === 'deposit'
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (kind === 'deposit') {
+      void run((ack) => act.depositToBank({ bankId: id, amount: Number(amount), slipNo: slip, description, date, funding, acknowledge: ack }), () => { toast.success(`Deposit of ${rs(Number(amount))} recorded.`); onClose() })
+    } else if (kind === 'withdraw') {
+      void run((ack) => act.withdrawFromBank({ bankId: id, amount: Number(amount), description, date, acknowledge: ack }), () => { toast.success(`Withdrawal of ${rs(Number(amount))} recorded — added to the safe.`); onClose() })
+    } else {
+      void run(() => act.addBankFee({ bankId: id, amount: Number(amount), description, date }), () => { toast.success('Bank charge recorded.'); onClose() })
+    }
+  }
+
+  const title = kind === 'deposit' ? 'Record Deposit to Bank' : kind === 'withdraw' ? 'Record Cash Withdrawal from Bank' : 'Record Bank Charge'
+
+  return (
+    <Modal title={title} subtitle={kind === 'deposit' ? 'Credits the bank account (and takes cash from the safe for cash deposits)' : kind === 'withdraw' ? 'Debits the bank account and adds the cash to the safe' : 'Debits the bank account'} onClose={onClose} busy={busy} width={620}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Bank account">
+            <select className="form-input" value={id} onChange={(e) => setId(e.target.value)} required>{banks.map((b) => <option key={b.id} value={b.id}>{b.bankName} (Bal: {rs(b.currentBalance)})</option>)}</select>
+          </Field>
+          <Field label="Date"><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} required /></Field>
+        </Grid2>
+        {kind === 'deposit' && (
+          <Grid2>
+            <Field label="Funding">
+              <select className="form-input" value={funding} onChange={(e) => setFunding(e.target.value as 'cash' | 'external')}>
+                <option value="cash">Cash taken from the safe</option>
+                <option value="external">Cheque / online credit (safe not affected)</option>
+              </select>
+            </Field>
+            <Field label="Bank-stamped slip #"><input className="form-input" value={slip} onChange={(e) => setSlip(e.target.value)} required /></Field>
+          </Grid2>
+        )}
+        <Grid2>
+          <Field label="Amount (PKR)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
+          <Field label="Description"><input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={kind === 'deposit' ? 'e.g. Morning shift cash deposit' : kind === 'withdraw' ? 'e.g. Cash for staff salaries' : 'e.g. Monthly service charges'} required={kind !== 'deposit'} /></Field>
+        </Grid2>
+        <CalcStrip items={[
+          { label: 'Bank balance before', value: rs(bank?.currentBalance ?? 0) },
+          { label: credit ? 'Credit' : 'Debit', value: `${credit ? '+' : '−'} ${rs(amt)}`, tone: credit ? 'green' : 'red' },
+          { label: 'Bank balance after', value: rs((bank?.currentBalance ?? 0) + (credit ? amt : -amt)), tone: 'gold' },
+          ...(kind === 'deposit' && funding === 'cash' ? [{ label: 'Safe after', value: rs(cash - amt) }] : kind === 'withdraw' ? [{ label: 'Safe after', value: rs(cash + amt) }] : []),
+        ]} />
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy || banks.length === 0}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : 'Save'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+export const BankSheetView: React.FC = () => {
+  const { activeSiteData, act } = useApp()
+  const { bankAccounts, bankTransactions, siteInfo } = activeSiteData
+  const confirm = useConfirm()
+  const toast = useToast()
+  const [accountForm, setAccountForm] = useState<{ account?: BankAccount } | null>(null)
+  const [txForm, setTxForm] = useState<{ kind: TxKind; bankId?: string } | null>(null)
+  const [printOpen, setPrintOpen] = useState(false)
+  const [bankFilter, setBankFilter] = useState('all')
+
+  const active = bankAccounts.filter((b) => b.isActive)
+  const totalBalances = bankAccounts.reduce((s, b) => s + b.currentBalance, 0)
+  const txs = useMemo(() => bankTransactions.filter((t) => bankFilter === 'all' || t.bankId === bankFilter), [bankTransactions, bankFilter])
+  const bankName = (id: string) => bankAccounts.find((b) => b.id === id)?.bankName ?? 'Removed account'
+  const month = todayISO().slice(0, 7)
+  const monthDeposits = bankTransactions.filter((t) => t.date.startsWith(month) && BANK_CREDIT_TYPES.includes(t.type)).reduce((s, t) => s + t.amount, 0)
+  const monthOmc = bankTransactions.filter((t) => t.date.startsWith(month) && t.type === 'OMC Online Transfer').reduce((s, t) => s + t.amount, 0)
+
+  const removeAccount = async (b: BankAccount) => {
+    const yes = await confirm({ title: `Remove ${b.bankName}?`, message: 'An account without transactions is deleted; one with history is deactivated (history kept). The balance must be Rs 0 first.', confirmLabel: 'Remove account', tone: 'danger' })
+    if (!yes) return
+    const r = await act.removeBankAccount(b.id)
+    if (r.ok) toast.success(r.value.mode === 'deleted' ? 'Bank account deleted.' : 'Bank account deactivated — history kept.'); else toast.error(r.error)
+  }
+  const removeTx = async (t: BankTransaction) => {
+    const yes = await confirm({ title: 'Delete this bank entry?', message: `${t.type} of ${rs(t.amount)} on ${formatDate(t.date)}${t.sourceType === 'bank_deposit' || t.sourceType === 'bank_withdrawal' ? ' — the matching cash-book line is removed too' : ''}. The balance is recalculated.`, confirmLabel: 'Delete entry', tone: 'danger' })
+    if (!yes) return
+    const r = await act.removeBankTransaction(t.id)
+    if (r.ok) toast.success('Bank entry deleted.'); else toast.error(r.error)
+  }
+  const deletable = (t: BankTransaction) => !t.sourceType || t.sourceType === 'bank_deposit' || t.sourceType === 'bank_withdrawal'
+
+  return (
+    <div className="page-content-wrapper">
+      <PageHeader
+        eyebrow="STATION BANKING & LIQUIDITY"
+        title="Bank Sheet & Cash Deposits"
+        subtitle="Station bank accounts, deposits from pump collections, withdrawals and bank charges"
+        actions={
+          <>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Bank Sheet</span></button>
+            <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setAccountForm({})}><PlusIcon size={16} /><span>Add Bank Account</span></button>
+            <button type="button" className="btn btn-secondary" onClick={() => setTxForm({ kind: 'withdraw' })} disabled={active.length === 0}><span>Withdraw to Cash</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setTxForm({ kind: 'deposit' })} disabled={active.length === 0}><PlusIcon size={16} /><span>Record Deposit</span></button>
+          </>
+        }
+      />
+
       <ModuleGuide
         title="Station Commercial Banking & Cash Remittances Guide"
         urduTitle="اسٹیشن کے بینک کھاتہ جات اور کیش جمع کی رہنمائی"
         role="manager"
         roleLabel="Station Manager &amp; Owner"
-        purpose="Manage station commercial bank accounts, log cash deposit slips from daily shift collections, and track bank balances for OMC fuel pay orders."
+        purpose="Keep every station bank account, deposit slip, withdrawal and charge. Balances are always opening balance plus credits minus debits — payments to OMC, vendors and the owner reduce them automatically."
         steps={[
-          {
-            step: 1,
-            title: 'Deposit Physical Cash (بینک میں کیش جمع کروانا)',
-            detail: 'Take cash from safe to the designated commercial bank branch (HBL, MCB, NBP, etc.).',
-            urdu: 'سیف سے نقد رقم لے جا کر بینک میں جمع کروائیں۔',
-          },
-          {
-            step: 2,
-            title: 'Obtain Deposit Slip (بینک مہر شدہ رسید حاصل کریں)',
-            detail: 'Ensure the bank teller provides a signed and stamped physical deposit slip voucher.',
-            urdu: 'بینک کیشیر سے مہر شدہ اور دستخط شدہ ڈپازٹ سلپ لیں۔',
-          },
-          {
-            step: 3,
-            title: 'Record Deposit in System (سسٹم میں اندراج)',
-            detail: 'Select bank account, enter deposited amount, and record stamped slip reference number.',
-            urdu: 'بینک کا انتخاب کر کے سلپ نمبر اور جمع شدہ رقم درج کریں۔',
-          },
-          {
-            step: 4,
-            title: 'Automatic Daybook Deduction (ڈے بک سے خودکار کٹوتی)',
-            detail: 'Saving instantly credits the bank account and creates a cash-out entry in the Daybook.',
-            urdu: 'بینک بیلنس میں اضافہ ہو جائے گا اور ڈے بک سے اتنی رقم منہا ہو جائے گی۔',
-          },
+          { step: 1, title: 'Deposit physical cash (کیش جمع کروانا)', detail: 'Take cash from the safe to the bank and get the stamped deposit slip.', urdu: 'سیف سے نقد رقم لے جا کر بینک میں جمع کروائیں اور مہر شدہ سلپ لیں۔' },
+          { step: 2, title: 'Record the deposit (اندراج)', detail: 'Choose the account, enter the slip number and amount. The safe is reduced and the bank credited in one step.', urdu: 'بینک، سلپ نمبر اور رقم درج کریں۔' },
+          { step: 3, title: 'Cheques & online credits', detail: 'Choose "Cheque / online credit" so the safe is not touched.', urdu: 'چیک یا آن لائن رقم کے لیے سیف متاثر نہیں ہوتا۔' },
+          { step: 4, title: 'Withdrawals & charges (رقم نکلوانا)', detail: 'Cash withdrawn adds to the safe; bank charges reduce the balance.', urdu: 'بینک سے نکلوائی گئی رقم سیف میں شامل ہوتی ہے۔' },
         ]}
         criticalChecks={[
-          'Always verify teller stamp and deposit slip number before completing the transaction.',
-          'Verify sufficient bank liquidity 24 hours prior to issuing OMC tanker fuel supply pay orders.',
+          'Always verify the teller stamp and deposit slip number.',
+          'Keep enough balance for OMC tanker payments 24 hours before delivery.',
+          'Entries created by payments (OMC, expenses, owner transfers) are removed by deleting the payment record.',
         ]}
       />
 
-      {/* Modern Bank Account Cards */}
-      <div className="tanks-meter-row">
-        {bankAccounts.map((bank) => (
-          <div key={bank.id} className="tank-gauge-card">
-            <div className="tank-card-top">
-              <div>
-                <span className="tank-number-tag">{bank.branch}</span>
-                <h4 className="tank-fuel-title">{bank.bankName}</h4>
+      {bankAccounts.length === 0 ? (
+        <div className="ui-empty">No bank accounts yet. Click "Add Bank Account".</div>
+      ) : (
+        <div className="tanks-meter-row">
+          {bankAccounts.map((bank) => (
+            <div key={bank.id} className="tank-gauge-card" style={bank.isActive ? undefined : { opacity: 0.6 }}>
+              <div className="tank-card-top">
+                <div><span className="tank-number-tag">{bank.branch || 'Branch not set'}</span><h4 className="tank-fuel-title">{bank.bankName}</h4></div>
+                <RowActions>
+                  <span className={`badge ${bank.isActive ? 'badge-neutral' : 'badge-warning'}`}>{bank.isActive ? 'Active' : 'Inactive'}</span>
+                  <IconButton label="Edit account" onClick={() => setAccountForm({ account: bank })}><EditIcon size={14} /></IconButton>
+                  <IconButton label="Remove account" tone="danger" onClick={() => void removeAccount(bank)}><TrashIcon size={14} /></IconButton>
+                </RowActions>
               </div>
-              <span className="badge badge-neutral">Active Account</span>
-            </div>
-
-            <div className="bank-card-meta">
-              <div className="meta-row">
-                <span className="text-muted">Title:</span>
-                <strong>{bank.accountTitle}</strong>
+              <div className="bank-card-meta">
+                <div className="meta-row"><span className="text-muted">Title:</span><strong>{bank.accountTitle || '—'}</strong></div>
+                <div className="meta-row"><span className="text-muted">Account #:</span><span className="font-mono">{bank.accountNumber}</span></div>
               </div>
-              <div className="meta-row">
-                <span className="text-muted">Account #:</span>
-                <span className="font-mono">{bank.accountNumber}</span>
+              <div className="tank-stats-row">
+                <div className="tank-stat-item"><span className="stat-label">Available balance</span><strong className={`stat-val ${bank.currentBalance < 0 ? 'text-red' : 'text-gold'}`}>{rs(bank.currentBalance)}</strong></div>
+                <div className="tank-stat-item"><span className="stat-label">Opening balance</span><strong className="stat-val">{rs(bank.openingBalance)}</strong></div>
               </div>
-            </div>
-
-            <div className="tank-stats-row">
-              <div className="tank-stat-item">
-                <span className="stat-label">Available Balance</span>
-                <strong className="stat-val text-gold">Rs {bank.currentBalance.toLocaleString()}</strong>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* KPI Ribbon */}
-      <div className="executive-kpi-strip">
-        <div className="kpi-cell">
-          <span className="kpi-label">Total Station Bank Balances</span>
-          <strong className="kpi-cell-value text-gold">Rs {totalBankBalances.toLocaleString()}</strong>
-          <span className="kpi-cell-sub">Across all {bankAccounts.length} company accounts</span>
-        </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Today's Total Deposits</span>
-          <strong className="kpi-cell-value text-green">
-            Rs {bankTransactions.filter((t) => t.type === 'Deposit').reduce((sum, t) => sum + t.amount, 0).toLocaleString()}
-          </strong>
-          <span className="kpi-cell-sub">Shift cash safely banked</span>
-        </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">OMC Wire Transfers</span>
-          <strong className="kpi-cell-value">
-            Rs {bankTransactions.filter((t) => t.type === 'OMC Online Transfer').reduce((sum, t) => sum + t.amount, 0).toLocaleString()}
-          </strong>
-          <span className="kpi-cell-sub">RTGS payments disbursed</span>
-        </div>
-      </div>
-
-      {/* Transactions Table */}
-      <div className="table-surface">
-        <div className="table-surface-header">
-          <div>
-            <h3 className="surface-heading">Recent Bank Transactions & Deposit Slips</h3>
-            <p className="surface-sub">Logged physical deposit slips and company account movements</p>
-          </div>
-        </div>
-
-        <div className="table-responsive">
-          <table className="clean-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Deposit Slip #</th>
-                <th>Particulars / Description</th>
-                <th>Amount (PKR)</th>
-                <th>Account Balance After</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bankTransactions.map((tx) => (
-                <tr key={tx.id}>
-                  <td>{tx.date}</td>
-                  <td>
-                    <span className={`badge ${tx.type === 'Deposit' ? 'badge-success' : 'badge-neutral'}`}>
-                      {tx.type}
-                    </span>
-                  </td>
-                  <td>
-                    <strong>{tx.depositSlipNo || '—'}</strong>
-                  </td>
-                  <td>{tx.description}</td>
-                  <td className="text-gold font-bold">Rs {tx.amount.toLocaleString()}</td>
-                  <td>Rs {tx.balanceAfter.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Zero-Scroll Compact Deposit Modal */}
-      {modalOpen && (
-        <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-          <div className="modal-container compact-zero-scroll" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <h3 className="modal-heading">Record Cash Deposit to Bank Account</h3>
-                <span className="modal-sub">Deducts cash from safe and credits station bank ledger</span>
-              </div>
-              <button className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                <XIcon size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveDeposit} className="modal-form-compact">
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Deposit Into Bank Account</label>
-                  <select
-                    className="form-input"
-                    value={selectedBankId}
-                    onChange={(e) => setSelectedBankId(e.target.value)}
-                  >
-                    {bankAccounts.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.bankName} (Bal: Rs {b.currentBalance.toLocaleString()})
-                      </option>
-                    ))}
-                  </select>
+              {bank.isActive && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setTxForm({ kind: 'deposit', bankId: bank.id })}>Deposit</button>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setTxForm({ kind: 'withdraw', bankId: bank.id })}>Withdraw</button>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setTxForm({ kind: 'fee', bankId: bank.id })}>Bank charge</button>
                 </div>
-
-                <div className="form-group">
-                  <label className="form-label">Bank Stamped Slip #</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={slipNo}
-                    onChange={(e) => setSlipNo(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label font-bold text-gold">Deposit Amount (PKR)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={depositAmount}
-                    onChange={(e) => setDepositAmount(Number(e.target.value))}
-                    required
-                    min={1}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Deposit Description</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Inline Calculation Strip */}
-              {(() => {
-                const b = bankAccounts.find((acc) => acc.id === selectedBankId) || bankAccounts[0]
-                const balBefore = b?.currentBalance || 0
-                const balAfter = balBefore + depositAmount
-                return (
-                  <div className="calc-preview-inline-strip">
-                    <div className="calc-pill-item">
-                      <span className="calc-pill-label">Bank Balance Before:</span>
-                      <span className="calc-pill-val">Rs. {balBefore.toLocaleString()}</span>
-                    </div>
-                    <div className="calc-pill-item">
-                      <span className="calc-pill-label">Cash Deposited:</span>
-                      <span className="calc-pill-val text-green">+ Rs. {depositAmount.toLocaleString()}</span>
-                    </div>
-                    <div className="calc-pill-item">
-                      <span className="calc-pill-label">New Bank Balance:</span>
-                      <span className="calc-pill-val text-gold">Rs. {balAfter.toLocaleString()}</span>
-                    </div>
-                  </div>
-                )
-              })()}
-
-              <div className="modal-actions-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  <CheckCircleIcon size={16} />
-                  <span>Save Deposit Slip</span>
-                </button>
-              </div>
-            </form>
-          </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Print Slip Modal */}
-      <PrintReceiptModal
-        isOpen={printOpen}
-        onClose={() => setPrintOpen(false)}
-        title="Bank Cash Deposit Summary"
-        stationName={siteInfo.name}
-        stationLocation={siteInfo.location}
-        stationPhone={siteInfo.phone}
-      >
-        <div className="slip-summary-list">
-          <div className="slip-row">
-            <span>Primary Account:</span>
-            <strong>{bankAccounts[0]?.bankName}</strong>
-          </div>
-          <div className="slip-row">
-            <span>Account Title:</span>
-            <span>{bankAccounts[0]?.accountTitle}</span>
-          </div>
-          <div className="slip-row">
-            <span>Total Liquid Bank Balance:</span>
-            <strong className="text-gold">Rs {totalBankBalances.toLocaleString()}</strong>
-          </div>
+      <KpiStrip>
+        <Kpi label="Total bank balances" value={rs(totalBalances)} tone="gold" sub={`Across ${bankAccounts.length} account(s)`} />
+        <Kpi label="Credits this month" value={rs(monthDeposits)} tone="green" sub="Deposits & credits received" />
+        <Kpi label="OMC transfers this month" value={rs(monthOmc)} sub="Paid to the oil company" />
+      </KpiStrip>
+
+      <FilterBar>
+        <div className="form-group">
+          <label className="form-label">Account</label>
+          <select className="form-input" value={bankFilter} onChange={(e) => setBankFilter(e.target.value)}>
+            <option value="all">All accounts</option>{bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.bankName}</option>)}
+          </select>
         </div>
+      </FilterBar>
+
+      <SectionCard title="Bank Transactions & Deposit Slips" subtitle="Newest first">
+        <div className="table-responsive">
+          <table className="clean-table">
+            <thead><tr><th>Date</th><th>Account</th><th>Type</th><th>Slip #</th><th>Particulars</th><th>Credit</th><th>Debit</th><th>Balance after</th><th /></tr></thead>
+            <tbody>
+              {txs.length === 0 ? <EmptyRow colSpan={9}>No bank transactions yet.</EmptyRow> : txs.map((t) => {
+                const isCredit = BANK_CREDIT_TYPES.includes(t.type)
+                return (
+                  <tr key={t.id}>
+                    <td>{formatDate(t.date)}</td>
+                    <td className="text-xs">{bankName(t.bankId)}</td>
+                    <td><span className={`badge ${isCredit ? 'badge-success' : 'badge-neutral'}`}>{t.type}</span></td>
+                    <td><strong>{t.depositSlipNo || '—'}</strong></td>
+                    <td>{t.description}</td>
+                    <td className="text-green font-bold">{isCredit ? rs(t.amount) : '—'}</td>
+                    <td className="text-red font-bold">{!isCredit ? rs(t.amount) : '—'}</td>
+                    <td>{rs(t.balanceAfter)}</td>
+                    <td>{deletable(t) && <RowActions><IconButton label="Delete entry" tone="danger" onClick={() => void removeTx(t)}><TrashIcon size={14} /></IconButton></RowActions>}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
+
+      {accountForm && <AccountModal account={accountForm.account} onClose={() => setAccountForm(null)} />}
+      {txForm && <TxModal kind={txForm.kind} bankId={txForm.bankId} onClose={() => setTxForm(null)} />}
+
+      <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Bank Balances & Deposit Summary" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
+        <table className="slip-table">
+          <thead><tr><th>Bank</th><th>Account</th><th>Balance</th></tr></thead>
+          <tbody>{bankAccounts.map((b) => <tr key={b.id}><td>{b.bankName}</td><td>{b.accountNumber}</td><td>{rs(b.currentBalance)}</td></tr>)}</tbody>
+        </table>
+        <div className="receipt-divider" />
+        <div className="slip-row highlight"><span>Total liquid bank balance:</span><strong>{rs(totalBalances)}</strong></div>
       </PrintReceiptModal>
     </div>
   )

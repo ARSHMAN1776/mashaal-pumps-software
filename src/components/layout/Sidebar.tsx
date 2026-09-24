@@ -1,5 +1,6 @@
 import React from 'react'
 import { useApp } from '../../context/AppContext'
+import { isLowTank } from '../../data/derive'
 import {
   GasPumpIcon,
   GaugeIcon,
@@ -27,13 +28,13 @@ interface NavItemDef {
   badgeColor?: string
 }
 
-export const Sidebar: React.FC = () => {
-  const { activeModule, setActiveModule, activeSiteData, activeSiteId, currentUser, logout } = useApp()
+export const Sidebar: React.FC<{ open?: boolean; onNavigate?: () => void }> = ({ open = false, onNavigate }) => {
+  const { activeModule, setActiveModule, activeSiteData, currentUser, logout } = useApp()
 
-  const isParco = activeSiteData?.siteInfo?.brand === 'TOTAL PARCO' || activeSiteId === 'SITE-01'
+  const isParco = activeSiteData.siteInfo.brand === 'TOTAL PARCO'
   const isOwner = currentUser?.role === 'owner'
   const isCashier = currentUser?.role === 'cashier'
-  const lowStockCount = activeSiteData.tanks.filter((t) => t.currentLiters <= t.minReserveLiters).length
+  const lowStockCount = activeSiteData.tanks.filter((t) => isLowTank(t, activeSiteData.settings.lowStockAlertPct)).length
 
   const ownerSection: { title: string; items: NavItemDef[] } = {
     title: 'Executive Command',
@@ -105,7 +106,7 @@ export const Sidebar: React.FC = () => {
   ]
 
   return (
-    <aside className="sidebar-surface">
+    <aside className={`sidebar-surface ${open ? 'sidebar-open' : ''}`}>
       {/* Brand Logo Header at Top of Sidebar */}
       <div className="sidebar-brand-header">
         {isParco ? (
@@ -146,7 +147,10 @@ export const Sidebar: React.FC = () => {
                   <button
                     key={item.id}
                     className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
-                    onClick={() => setActiveModule(item.id)}
+                    onClick={() => {
+                      setActiveModule(item.id)
+                      onNavigate?.()
+                    }}
                   >
                     <span className="nav-item-icon">{item.icon}</span>
                     <span className="nav-item-label">{item.label}</span>
@@ -168,7 +172,7 @@ export const Sidebar: React.FC = () => {
         <button
           type="button"
           className="sidebar-logout-btn"
-          onClick={() => logout()}
+          onClick={() => void logout()}
           title="Sign Out of Session"
         >
           <span className="logout-icon">

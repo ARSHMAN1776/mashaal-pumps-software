@@ -1,429 +1,211 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import { PlusIcon, PrinterIcon, CheckCircleIcon, XIcon, ShieldIcon } from '../common/Icons'
+import type { DaybookCategory, DaybookEntry } from '../../types'
+import { DAYBOOK_CATEGORIES } from '../../types'
+import { formatDate, todayISO } from '../../lib/dates'
+import { rs } from '../../lib/money'
+import { PlusIcon, PrinterIcon, CheckCircleIcon, ShieldIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
+import { Modal, FormError } from '../common/Modal'
+import { useConfirm } from '../common/Confirm'
+import { useToast } from '../common/Toast'
+import { useSubmit } from '../common/useSubmit'
+import { CalcStrip, EmptyRow, Field, FilterBar, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
+
+const EntryModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { activeSiteData, act, currentUser } = useApp()
+  const toast = useToast()
+  const isCashier = currentUser?.role === 'cashier'
+  const balance = activeSiteData.daybook.length ? activeSiteData.daybook[activeSiteData.daybook.length - 1].balanceAfter : 0
+  const [direction, setDirection] = useState<'IN' | 'OUT'>('IN')
+  const [date, setDate] = useState(todayISO())
+  const [category, setCategory] = useState<DaybookCategory>('Shift Fuel')
+  const [amount, setAmount] = useState('')
+  const [particulars, setParticulars] = useState('')
+  const [ref, setRef] = useState('')
+  const [handledBy, setHandledBy] = useState(currentUser?.name ?? '')
+  const { busy, error, run } = useSubmit()
+  const amt = Number(amount) || 0
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    void run(
+      (ack) => act.addDaybookEntry({ date, particulars, category, direction, amount: Number(amount), referenceNo: ref, handledBy, acknowledge: ack }),
+      () => { toast.success('Cash entry saved.'); onClose() },
+    )
+  }
+
+  return (
+    <Modal title="Add Daybook Cash Transaction" subtitle="Record physical cash moving into or out of the station safe" onClose={onClose} busy={busy} width={640}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Transaction flow">
+            <div className="role-pills-row" style={{ marginTop: 2 }}>
+              <button type="button" className={`role-pill-btn ${direction === 'IN' ? 'active' : ''}`} onClick={() => setDirection('IN')} style={direction === 'IN' ? { backgroundColor: '#15803d', color: '#fff' } : {}}>Cash IN (+)</button>
+              <button type="button" className={`role-pill-btn ${direction === 'OUT' ? 'active' : ''}`} onClick={() => setDirection('OUT')} style={direction === 'OUT' ? { backgroundColor: '#b91c1c', color: '#fff' } : {}}>Cash OUT (−)</button>
+            </div>
+          </Field>
+          <Field label="Voucher date" hint={isCashier ? '🔒 Cashiers record today only' : undefined}>
+            <input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={isCashier} required />
+          </Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Category">
+            <select className="form-input" value={category} onChange={(e) => setCategory(e.target.value as DaybookCategory)}>
+              {DAYBOOK_CATEGORIES.map((c) => <option key={c} value={c}>{c === 'Shift Fuel' ? 'Shift fuel sales handover' : c}</option>)}
+            </select>
+          </Field>
+          <Field label="Cash amount (PKR)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
+        </Grid2>
+        <Field label="Description / particulars"><input className="form-input" value={particulars} onChange={(e) => setParticulars(e.target.value)} placeholder="e.g. Morning shift handover by Zahid Khan" required /></Field>
+        <Grid2>
+          <Field label="Reference / slip #"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="e.g. SH-01, RCP-102" /></Field>
+          <Field label="Handled by"><input className="form-input" value={handledBy} onChange={(e) => setHandledBy(e.target.value)} required /></Field>
+        </Grid2>
+        <CalcStrip items={[
+          { label: 'Current safe cash', value: rs(balance) },
+          { label: direction === 'IN' ? 'Cash coming in' : 'Cash going out', value: `${direction === 'IN' ? '+' : '−'} ${rs(amt)}`, tone: direction === 'IN' ? 'green' : 'red' },
+          { label: 'Projected balance', value: rs(direction === 'IN' ? balance + amt : balance - amt), tone: 'gold' },
+        ]} />
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : 'Save cash entry'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
 
 export const DaybookView: React.FC = () => {
-  const { activeSiteData, addDaybookEntry, currentUser } = useApp()
+  const { activeSiteData, act, currentUser } = useApp()
   const { daybook, siteInfo } = activeSiteData
   const isCashier = currentUser?.role === 'cashier'
+  const confirm = useConfirm()
+  const toast = useToast()
 
   const [modalOpen, setModalOpen] = useState(false)
   const [printOpen, setPrintOpen] = useState(false)
+  const [from, setFrom] = useState(todayISO())
+  const [to, setTo] = useState(todayISO())
+  const [category, setCategory] = useState<'all' | DaybookCategory>('all')
 
-  // Daybook form state
-  const todayStr = new Date().toISOString().split('T')[0]
-  const [entryDate, setEntryDate] = useState(todayStr)
-  const [time] = useState(new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()))
-  const [particulars, setParticulars] = useState('')
-  const [category, setCategory] = useState<any>('Shift Fuel')
-  const [entryType, setEntryType] = useState<'IN' | 'OUT'>('IN')
-  const [amount, setAmount] = useState<number>(50000)
-  const [referenceNo, setReferenceNo] = useState('')
-  const [handledBy, setHandledBy] = useState(siteInfo.managerName)
+  const current = daybook.length ? daybook[daybook.length - 1].balanceAfter : 0
+  const rows = useMemo(() => daybook.filter((e) => (!from || e.date >= from) && (!to || e.date <= to) && (category === 'all' || e.category === category)), [daybook, from, to, category])
+  // safe balance at the start of the selected period = balance after the last entry before it
+  const opening = useMemo(() => {
+    const before = daybook.filter((e) => from && e.date < from)
+    return before.length ? before[before.length - 1].balanceAfter : 0
+  }, [daybook, from])
+  const totalIn = rows.reduce((s, d) => s + d.cashIn, 0)
+  const totalOut = rows.reduce((s, d) => s + d.cashOut, 0)
+  const periodLabel = from && to ? (from === to ? formatDate(from) : `${formatDate(from)} – ${formatDate(to)}`) : 'all dates'
 
-  const currentBalance = daybook.length > 0 ? daybook[daybook.length - 1].balanceAfter : 0
-  const totalCashIn = daybook.reduce((sum, d) => sum + d.cashIn, 0)
-  const totalCashOut = daybook.reduce((sum, d) => sum + d.cashOut, 0)
-
-  const handleSaveEntry = (e: React.FormEvent) => {
-    e.preventDefault()
-    const cashIn = entryType === 'IN' ? amount : 0
-    const cashOut = entryType === 'OUT' ? amount : 0
-    const balanceAfter = currentBalance + cashIn - cashOut
-
-    addDaybookEntry({
-      date: isCashier ? todayStr : entryDate,
-      time,
-      particulars,
-      category,
-      cashIn,
-      cashOut,
-      balanceAfter,
-      referenceNo,
-      handledBy,
-    })
-
-    setModalOpen(false)
-    setParticulars('')
-    setAmount(0)
-    setEntryDate(todayStr)
+  const removeEntry = async (e: DaybookEntry) => {
+    const yes = await confirm({ title: 'Delete this cash entry?', message: `"${e.particulars}" — ${e.cashIn > 0 ? `in ${rs(e.cashIn)}` : `out ${rs(e.cashOut)}`}. The safe balance is recalculated and the deletion is recorded in the audit trail.`, confirmLabel: 'Delete entry', tone: 'danger' })
+    if (!yes) return
+    const r = await act.removeDaybookEntry(e.id)
+    if (r.ok) toast.success('Entry deleted.'); else toast.error(r.error)
   }
 
   return (
     <div className="page-content-wrapper">
-      <div className="page-title-banner">
-        <div>
-          <span className="page-eyebrow">STATION CASHBOOK REGISTER</span>
-          <h2 className="page-heading">Station Daybook (Cash Flow)</h2>
-          <p className="page-sub">
-            Chronological audit of daily shift inflows, customer recoveries, station expenses, and bank deposits
-          </p>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-outline" onClick={() => setPrintOpen(true)}>
-            <PrinterIcon size={16} />
-            <span>Print Daybook</span>
-          </button>
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
-            <PlusIcon size={16} />
-            <span>Add Cash Voucher</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="STATION CASHBOOK REGISTER"
+        title="Station Daybook (Cash Flow)"
+        subtitle="Chronological record of shift inflows, customer recoveries, expenses, advances and bank deposits"
+        actions={
+          <>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Daybook</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setModalOpen(true)}><PlusIcon size={16} /><span>Add Cash Voucher</span></button>
+          </>
+        }
+      />
 
-      {/* Module Operational Guide */}
       <ModuleGuide
         title="Station Daybook (Cash Movement Register) Guide"
         urduTitle="اسٹیشن ڈے بک (روزنامچہ کیش رجسٹر) کی رہنمائی"
         role="manager"
         roleLabel="Station Manager &amp; Head Cashier"
-        purpose="Real-time chronological recording of every rupee entering or leaving station cash safe — cashier shift collections, customer recoveries, daily expenses, and bank deposits."
+        purpose="Every rupee entering or leaving the station safe. Recoveries, expenses, advances, lube sales, bank deposits and OMC cash payments are posted here automatically — use manual vouchers for everything else."
         steps={[
-          {
-            step: 1,
-            title: 'Choose Cash Direction (رقم کی آمد یا خرچ)',
-            detail: 'Select Cash IN (+) for collections and recoveries, or Cash OUT (-) for expenses and bank deposits.',
-            urdu: 'آمد کے لیے کیش ان (+) اور اخراجات یا بینک جمع کے لیے کیش آؤٹ (-) منتخب کریں۔',
-          },
-          {
-            step: 2,
-            title: 'Pick Voucher Category (شعبہ / مد کا انتخاب)',
-            detail: 'Classify as Shift Fuel, Customer Recovery, Bank Deposit, Expense, Staff Advance, or Lube Sale.',
-            urdu: 'صحیح کیٹیگری منتخب کریں تاکہ کھاتہ درست رہے۔',
-          },
-          {
-            step: 3,
-            title: 'Enter Amount & Particulars (رقم اور تفصیل)',
-            detail: 'Input exact rupee amount and note who handed over or received the cash with reference slip number.',
-            urdu: 'رقم اور مکمل تفصیل بمعہ رسید نمبر درج کریں۔',
-          },
-          {
-            step: 4,
-            title: 'Safe Cash Balance Sync (محفوظ کیش کی تصدیق)',
-            detail: 'The running cash in safe balance automatically adjusts immediately upon saving.',
-            urdu: 'واؤچر محفوظ ہوتے ہی سیف میں موجود نقد رقم خودکار طور پر اپ ڈیٹ ہو جائے گی۔',
-          },
+          { step: 1, title: 'Choose cash direction (آمد یا خرچ)', detail: 'Cash IN (+) for collections, Cash OUT (−) for payments.', urdu: 'آمد کے لیے کیش ان اور اخراجات کے لیے کیش آؤٹ منتخب کریں۔' },
+          { step: 2, title: 'Pick the category (مد)', detail: 'Choose Shift fuel handover, Bank deposit, Other, etc. Automatic entries already carry their own category.', urdu: 'صحیح کیٹیگری منتخب کریں۔' },
+          { step: 3, title: 'Enter amount & details (رقم اور تفصیل)', detail: 'Type the exact amount, who handled it and a reference slip number.', urdu: 'رقم اور مکمل تفصیل درج کریں۔' },
+          { step: 4, title: 'Safe balance updates (سیف بیلنس)', detail: 'The running safe balance is recalculated from the entries — it always equals the sum of what is recorded.', urdu: 'سیف میں نقد رقم خودکار طور پر اپ ڈیٹ ہو جاتی ہے۔' },
         ]}
         criticalChecks={[
-          'Physical cash counted in the safe MUST always match the Safe Cash in Hand balance.',
-          'Whenever cash is taken to the bank, immediately log a "Bank Deposit" voucher with bank deposit slip number.',
-          'Cashier shift mode restricts backdating past dates to ensure forecourt honesty.',
+          'Physical cash counted in the safe must always match the Safe Cash in Hand balance.',
+          'Cash taken to the bank is recorded from the Bank Sheet (it also credits the bank account).',
+          'Cashiers can only record today\'s entries; managers can correct or delete manual entries.',
         ]}
       />
 
       {isCashier && (
-        <div
-          style={{
-            padding: '10px 16px',
-            borderRadius: '8px',
-            backgroundColor: '#fefce8',
-            border: '1px solid #fef08a',
-            color: '#854d0e',
-            marginBottom: '16px',
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <ShieldIcon size={16} color="#854d0e" />
-          <span>
-            <strong>Cashier Shift Mode:</strong> Real-time voucher entry is active. Historical daybook backdating and record deletion are restricted by Station Security Policy.
-          </span>
-        </div>
+        <div className="ui-notice ui-notice-warning"><ShieldIcon size={16} /><span><strong>Cashier shift mode:</strong> real-time voucher entry is active. Back-dating and deletion are restricted by station policy.</span></div>
       )}
 
-      {/* KPI Ribbon */}
-      <div className="executive-kpi-strip">
-        <div className="kpi-cell">
-          <span className="kpi-label">Opening Cash in Safe</span>
-          <strong className="kpi-cell-value">Rs {(daybook[0]?.cashIn || 450000).toLocaleString()}</strong>
-          <span className="kpi-cell-sub">Brought forward balance</span>
+      <FilterBar>
+        <div className="form-group"><label className="form-label">From</label><input type="date" className="form-input" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} /></div>
+        <div className="form-group"><label className="form-label">To</label><input type="date" className="form-input" value={to} min={from || undefined} max={todayISO()} onChange={(e) => setTo(e.target.value)} /></div>
+        <div className="form-group">
+          <label className="form-label">Category</label>
+          <select className="form-input" value={category} onChange={(e) => setCategory(e.target.value as 'all' | DaybookCategory)}>
+            <option value="all">All categories</option>{DAYBOOK_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Total Cash Collected (+)</span>
-          <strong className="kpi-cell-value text-green">+ Rs {totalCashIn.toLocaleString()}</strong>
-          <span className="kpi-cell-sub">Sales & customer cash</span>
-        </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Total Cash Disbursed (-)</span>
-          <strong className="kpi-cell-value text-red">- Rs {totalCashOut.toLocaleString()}</strong>
-          <span className="kpi-cell-sub">Expenses & bank deposits</span>
-        </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Current Safe Cash in Hand</span>
-          <strong className="kpi-cell-value text-gold">Rs {currentBalance.toLocaleString()}</strong>
-          <span className="kpi-cell-sub">Available station cash reserve</span>
-        </div>
-      </div>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => { setFrom(todayISO()); setTo(todayISO()); setCategory('all') }}>Today</button>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => { setFrom(''); setTo(''); setCategory('all') }}>All dates</button>
+      </FilterBar>
 
-      {/* Daybook Table */}
-      <div className="table-surface">
-        <div className="table-surface-header">
-          <div>
-            <h3 className="surface-heading">Daily Cash Movement Entries</h3>
-            <p className="surface-sub">Ordered chronologically by transaction timestamp</p>
-          </div>
-        </div>
+      <KpiStrip>
+        <Kpi label="Opening cash (period start)" value={rs(opening)} sub="Brought forward" />
+        <Kpi label="Cash collected (+)" value={`+ ${rs(totalIn)}`} tone="green" sub={periodLabel} />
+        <Kpi label="Cash disbursed (−)" value={`- ${rs(totalOut)}`} tone="red" sub="Expenses, deposits, advances" />
+        <Kpi label="Cash in safe now" value={rs(current)} tone="gold" sub="Available station cash" />
+      </KpiStrip>
 
+      <SectionCard title="Cash Movement Entries" subtitle={`Ordered by date and time of entry — ${periodLabel}`}>
         <div className="table-responsive">
           <table className="clean-table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Particulars / Description</th>
-                <th>Category</th>
-                <th>Ref Slip #</th>
-                <th>Cash In (+)</th>
-                <th>Cash Out (-)</th>
-                <th>Safe Balance</th>
-                <th>Handled By</th>
-                <th>Security / Audit</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Date / time</th><th>Particulars</th><th>Category</th><th>Ref #</th><th>Cash in (+)</th><th>Cash out (−)</th><th>Safe balance</th><th>Handled by</th><th>Record</th></tr></thead>
             <tbody>
-              {daybook.map((entry) => (
-                <tr key={entry.id}>
+              {rows.length === 0 ? <EmptyRow colSpan={9}>No cash entries for {periodLabel}.</EmptyRow> : rows.map((e) => (
+                <tr key={e.id}>
+                  <td className="ui-nowrap"><strong>{e.time}</strong><div className="text-muted text-xs">{formatDate(e.date)}</div></td>
+                  <td><span className="font-semibold">{e.particulars}</span></td>
+                  <td><span className="category-tag">{e.category}</span></td>
+                  <td>{e.referenceNo || '—'}</td>
+                  <td className="text-green font-bold">{e.cashIn > 0 ? `+ ${rs(e.cashIn)}` : '—'}</td>
+                  <td className="text-red font-bold">{e.cashOut > 0 ? `- ${rs(e.cashOut)}` : '—'}</td>
+                  <td className="text-gold font-bold">{rs(e.balanceAfter)}</td>
+                  <td>{e.handledBy}</td>
                   <td>
-                    <strong>{entry.time}</strong>
-                    <div className="text-muted text-xs">{entry.date}</div>
-                  </td>
-                  <td>
-                    <span className="font-semibold">{entry.particulars}</span>
-                  </td>
-                  <td>
-                    <span className="category-tag">{entry.category}</span>
-                  </td>
-                  <td>{entry.referenceNo || '—'}</td>
-                  <td className="text-green font-bold">
-                    {entry.cashIn > 0 ? `+ Rs ${entry.cashIn.toLocaleString()}` : '—'}
-                  </td>
-                  <td className="text-red font-bold">
-                    {entry.cashOut > 0 ? `- Rs ${entry.cashOut.toLocaleString()}` : '—'}
-                  </td>
-                  <td className="text-gold font-bold">
-                    Rs {entry.balanceAfter.toLocaleString()}
-                  </td>
-                  <td>{entry.handledBy}</td>
-                  <td>
-                    <span
-                      className="badge badge-outline"
-                      style={{
-                        fontSize: '11px',
-                        color: '#686256',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                      }}
-                    >
-                      <ShieldIcon size={12} color="#686256" />
-                      <span>Audit Locked</span>
-                    </span>
+                    <RowActions>
+                      <span className="badge badge-outline" style={{ fontSize: 11, color: '#686256', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <ShieldIcon size={12} color="#686256" />{e.sourceType ? 'Auto' : 'Manual'}
+                      </span>
+                      {!isCashier && !e.sourceType && <IconButton label="Delete entry" tone="danger" onClick={() => void removeEntry(e)}><TrashIcon size={14} /></IconButton>}
+                    </RowActions>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </SectionCard>
 
-      {/* Zero-Scroll Compact Add Daybook Voucher Modal */}
-      {modalOpen && (
-        <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-          <div className="modal-container compact-zero-scroll" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '620px' }}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <h3 className="modal-heading">Add Daybook Cash Transaction</h3>
-                <span className="modal-sub">Record physical cash movement into or out of station safe</span>
-              </div>
-              <button className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                <XIcon size={18} />
-              </button>
-            </div>
+      {modalOpen && <EntryModal onClose={() => setModalOpen(false)} />}
 
-            <form onSubmit={handleSaveEntry} className="modal-form-compact">
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Transaction Flow</label>
-                  <div className="role-pills-row" style={{ marginTop: '2px' }}>
-                    <button
-                      type="button"
-                      className={`role-pill-btn ${entryType === 'IN' ? 'active' : ''}`}
-                      onClick={() => setEntryType('IN')}
-                      style={entryType === 'IN' ? { backgroundColor: '#15803d', color: '#fff' } : {}}
-                    >
-                      Cash IN (Collection +)
-                    </button>
-                    <button
-                      type="button"
-                      className={`role-pill-btn ${entryType === 'OUT' ? 'active' : ''}`}
-                      onClick={() => setEntryType('OUT')}
-                      style={entryType === 'OUT' ? { backgroundColor: '#b91c1c', color: '#fff' } : {}}
-                    >
-                      Cash OUT (Payment -)
-                    </button>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>Voucher Date</span>
-                    {isCashier && <span style={{ color: '#b45309', fontSize: '11px' }}>🔒 Locked to Today</span>}
-                  </label>
-                  <input
-                    type="date"
-                    className="form-input"
-                    value={isCashier ? todayStr : entryDate}
-                    onChange={(e) => setEntryDate(e.target.value)}
-                    disabled={isCashier}
-                    style={isCashier ? { backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' } : {}}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Category</label>
-                  <select
-                    className="form-input"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as any)}
-                  >
-                    <option value="Fuel Sales">Daily Fuel Sales Handover</option>
-                    <option value="Customer Recovery">Customer Credit Recovery</option>
-                    <option value="Lube Sale">Lubricant Sale</option>
-                    <option value="Bank Deposit">Bank Cash Deposit</option>
-                    <option value="Expense">Station Operating Expense</option>
-                    <option value="Staff Advance">Staff Salary Advance</option>
-                    <option value="OMC Payment">OMC Settlement</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label font-bold text-gold">Cash Amount (PKR)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
-                    required
-                    min={1}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Description / Particulars</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={particulars}
-                  onChange={(e) => setParticulars(e.target.value)}
-                  placeholder="e.g. Morning Shift Handover by Zahid Khan, HBL Cash Deposit"
-                  required
-                />
-              </div>
-
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Reference / Slip #</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={referenceNo}
-                    onChange={(e) => setReferenceNo(e.target.value)}
-                    placeholder="e.g. SH-01, RCP-102, or DEP-45"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Handled By</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={handledBy}
-                    onChange={(e) => setHandledBy(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Inline Calculation Strip */}
-              <div className="calc-preview-inline-strip">
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Current Safe Cash:</span>
-                  <span className="calc-pill-val">Rs. {currentBalance.toLocaleString()}</span>
-                </div>
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">{entryType === 'IN' ? 'Cash Coming IN:' : 'Cash Going OUT:'}</span>
-                  <span className={`calc-pill-val ${entryType === 'IN' ? 'text-green' : 'text-red'}`}>
-                    {entryType === 'IN' ? `+ Rs. ${amount.toLocaleString()}` : `- Rs. ${amount.toLocaleString()}`}
-                  </span>
-                </div>
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Projected Safe Balance:</span>
-                  <span className="calc-pill-val text-gold">
-                    Rs. {(entryType === 'IN' ? currentBalance + amount : Math.max(0, currentBalance - amount)).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              <div className="modal-actions-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  <CheckCircleIcon size={16} />
-                  <span>Save Cash Entry</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Print Daybook */}
-      <PrintReceiptModal
-        isOpen={printOpen}
-        onClose={() => setPrintOpen(false)}
-        title="Official Station Daily Cash Register (Daybook)"
-        stationName={siteInfo.name}
-        stationLocation={siteInfo.location}
-        stationPhone={siteInfo.phone}
-      >
+      <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Official Station Daily Cash Register (Daybook)" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
+        <div className="slip-meta-grid"><div><strong>Period:</strong> {periodLabel}</div><div><strong>Opening cash:</strong> {rs(opening)}</div></div>
         <table className="slip-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Particulars</th>
-              <th>Ref</th>
-              <th>Cash In</th>
-              <th>Cash Out</th>
-              <th>Balance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {daybook.map((d) => (
-              <tr key={d.id}>
-                <td>{d.time}</td>
-                <td>{d.particulars}</td>
-                <td>{d.referenceNo || '—'}</td>
-                <td>{d.cashIn > 0 ? `Rs ${d.cashIn.toLocaleString()}` : '—'}</td>
-                <td>{d.cashOut > 0 ? `Rs ${d.cashOut.toLocaleString()}` : '—'}</td>
-                <td>Rs {d.balanceAfter.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
+          <thead><tr><th>Date</th><th>Particulars</th><th>Ref</th><th>In</th><th>Out</th><th>Balance</th></tr></thead>
+          <tbody>{rows.map((d) => <tr key={d.id}><td>{formatDate(d.date)} {d.time}</td><td>{d.particulars}</td><td>{d.referenceNo || '—'}</td><td>{d.cashIn > 0 ? rs(d.cashIn) : '—'}</td><td>{d.cashOut > 0 ? rs(d.cashOut) : '—'}</td><td>{rs(d.balanceAfter)}</td></tr>)}</tbody>
         </table>
-
         <div className="receipt-divider" />
-        <div className="slip-row highlight">
-          <span>Closing Physical Safe Balance:</span>
-          <strong>Rs {currentBalance.toLocaleString()}</strong>
-        </div>
+        <div className="slip-row highlight"><span>Closing safe balance:</span><strong>{rs(rows.length ? rows[rows.length - 1].balanceAfter : opening)}</strong></div>
       </PrintReceiptModal>
     </div>
   )

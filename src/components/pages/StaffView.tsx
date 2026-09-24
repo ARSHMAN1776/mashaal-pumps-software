@@ -1,377 +1,341 @@
 import React, { useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import { PrinterIcon, CheckCircleIcon, XIcon, CashIcon } from '../common/Icons'
+import type { SalaryPayment, StaffMember, StaffRole, StaffStatus } from '../../types'
+import { STAFF_ROLES } from '../../types'
+import { formatDate, monthISO, todayISO } from '../../lib/dates'
+import { rs } from '../../lib/money'
+import { PrinterIcon, CheckCircleIcon, CashIcon, PlusIcon, EditIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
-import type { StaffMember } from '../../types'
+import { Modal, FormError } from '../common/Modal'
+import { useConfirm } from '../common/Confirm'
+import { useToast } from '../common/Toast'
+import { useSubmit } from '../common/useSubmit'
+import { CalcStrip, EmptyRow, Field, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard, Tabs } from '../common/kit'
+
+const StaffModal: React.FC<{ member?: StaffMember; onClose: () => void }> = ({ member, onClose }) => {
+  const { act } = useApp()
+  const toast = useToast()
+  const [name, setName] = useState(member?.name ?? '')
+  const [role, setRole] = useState<StaffRole>(member?.role ?? 'Pump Attendant')
+  const [phone, setPhone] = useState(member?.phone ?? '')
+  const [salary, setSalary] = useState(String(member?.monthlySalary ?? ''))
+  const [limit, setLimit] = useState(String(member?.dailyAdvanceLimit ?? 5000))
+  const [joined, setJoined] = useState(member?.joiningDate || todayISO())
+  const [status, setStatus] = useState<StaffStatus>(member?.status ?? 'On Duty')
+  const [active, setActive] = useState(member?.isActive ?? true)
+  const { busy, error, run } = useSubmit()
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const input = { name, role, phone, monthlySalary: Number(salary), dailyAdvanceLimit: Number(limit), joiningDate: joined, status }
+    if (member) void run(() => act.updateStaff(member.id, { ...input, isActive: active }), () => { toast.success('Employee updated.'); onClose() })
+    else void run(() => act.addStaff(input), (s) => { toast.success(`Added ${s.name}.`); onClose() })
+  }
+
+  return (
+    <Modal title={member ? 'Edit Employee' : 'Add Employee'} onClose={onClose} busy={busy} width={620}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Full name"><input className="form-input" value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></Field>
+          <Field label="Role"><select className="form-input" value={role} onChange={(e) => setRole(e.target.value as StaffRole)}>{STAFF_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}</select></Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Phone"><input className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+          <Field label="Joining date"><input type="date" className="form-input" value={joined} max={todayISO()} onChange={(e) => setJoined(e.target.value)} /></Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Monthly salary (PKR)"><input type="number" min={0} step="any" className="form-input" value={salary} onChange={(e) => setSalary(e.target.value)} required /></Field>
+          <Field label="Advance limit per day (PKR)" hint="0 = no daily limit"><input type="number" min={0} step="any" className="form-input" value={limit} onChange={(e) => setLimit(e.target.value)} required /></Field>
+        </Grid2>
+        {member && (
+          <Grid2>
+            <Field label="Duty status"><select className="form-input" value={status} onChange={(e) => setStatus(e.target.value as StaffStatus)}><option>On Duty</option><option>Off Duty</option><option>On Leave</option></select></Field>
+            <label className="ui-checkbox-row" style={{ alignSelf: 'end' }}><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /><span>Active employee</span></label>
+          </Grid2>
+        )}
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : member ? 'Save changes' : 'Add employee'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+const AdvanceModal: React.FC<{ staffId?: string; onClose: () => void }> = ({ staffId, onClose }) => {
+  const { activeSiteData, act } = useApp()
+  const toast = useToast()
+  const list = activeSiteData.staff.filter((s) => s.isActive)
+  const [id, setId] = useState(staffId ?? list[0]?.id ?? '')
+  const [amount, setAmount] = useState('')
+  const [reason, setReason] = useState('')
+  const [date, setDate] = useState(todayISO())
+  const { busy, error, run } = useSubmit()
+  const s = list.find((x) => x.id === id)
+  const amt = Number(amount) || 0
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    void run((ack) => act.issueAdvance({ staffId: id, amount: Number(amount), reason, date, acknowledge: ack }), () => { toast.success(`Advance of ${rs(Number(amount))} issued — deducted from the safe.`); onClose() })
+  }
+
+  return (
+    <Modal title="Issue Salary Advance" subtitle="Paid from the safe and deducted when the salary is paid" onClose={onClose} busy={busy} width={580}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Employee"><select className="form-input" value={id} onChange={(e) => setId(e.target.value)} required>{list.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.role}) — salary {rs(m.monthlySalary)}</option>)}</select></Field>
+          <Field label="Advance amount (PKR)" strong><input type="number" min={1} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Reason"><input className="form-input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Family medical emergency" required /></Field>
+          <Field label="Date"><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} required /></Field>
+        </Grid2>
+        <CalcStrip items={[
+          { label: 'Monthly salary', value: rs(s?.monthlySalary ?? 0) },
+          { label: 'Already drawn', value: rs(s?.currentAdvances ?? 0), tone: 'red' },
+          { label: 'New advance', value: `+ ${rs(amt)}`, tone: 'gold' },
+          { label: 'Net pay after', value: rs(Math.max(0, (s?.monthlySalary ?? 0) - (s?.currentAdvances ?? 0) - amt)), tone: 'green' },
+        ]} />
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy || list.length === 0}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : 'Issue advance'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+const SalaryModal: React.FC<{ staffId?: string; onClose: () => void; onPaid: (p: SalaryPayment) => void }> = ({ staffId, onClose, onPaid }) => {
+  const { activeSiteData, act } = useApp()
+  const toast = useToast()
+  const list = activeSiteData.staff.filter((s) => s.isActive)
+  const [id, setId] = useState(staffId ?? list[0]?.id ?? '')
+  const [period, setPeriod] = useState(monthISO())
+  const [date, setDate] = useState(todayISO())
+  const [notes, setNotes] = useState('')
+  const { busy, error, run } = useSubmit()
+  const s = list.find((x) => x.id === id)
+  const out = s?.currentAdvances ?? 0
+  const deducted = Math.min(out, s?.monthlySalary ?? 0)
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    void run((ack) => act.paySalary({ staffId: id, period, date, notes, acknowledge: ack }), (p) => { toast.success(`Salary paid: ${rs(p.netPaid)} (advances deducted ${rs(p.advancesDeducted)}).`); onPaid(p); onClose() })
+  }
+
+  return (
+    <Modal title="Pay Monthly Salary" subtitle="Deducts unsettled advances and posts the net cash to the daybook" onClose={onClose} busy={busy} width={580}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Employee"><select className="form-input" value={id} onChange={(e) => setId(e.target.value)} required>{list.map((m) => <option key={m.id} value={m.id}>{m.name} — {rs(m.monthlySalary)}</option>)}</select></Field>
+          <Field label="Salary month"><input type="month" className="form-input" value={period} onChange={(e) => setPeriod(e.target.value)} required /></Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Payment date"><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} required /></Field>
+          <Field label="Notes (optional)"><input className="form-input" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        </Grid2>
+        <CalcStrip items={[
+          { label: 'Gross salary', value: rs(s?.monthlySalary ?? 0) },
+          { label: 'Advances deducted', value: `− ${rs(deducted)}`, tone: 'red' },
+          { label: 'Net cash to pay', value: rs((s?.monthlySalary ?? 0) - deducted), tone: 'green' },
+        ]} />
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy || list.length === 0}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : 'Pay salary'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
 
 export const StaffView: React.FC = () => {
-  const { activeSiteData, updateStaffAdvance, updateStaffStatus, addDaybookEntry } = useApp()
-  const { staff, siteInfo } = activeSiteData
+  const { activeSiteData, act } = useApp()
+  const { staff, staffAdvances, salaryPayments, siteInfo } = activeSiteData
+  const confirm = useConfirm()
+  const toast = useToast()
+  const [tab, setTab] = useState<'roster' | 'advances' | 'salaries'>('roster')
+  const [staffForm, setStaffForm] = useState<{ member?: StaffMember } | null>(null)
+  const [advanceFor, setAdvanceFor] = useState<string | null>(null)
+  const [salaryFor, setSalaryFor] = useState<string | null>(null)
+  const [slip, setSlip] = useState<{ member: StaffMember; payment?: SalaryPayment } | null>(null)
+  const [showInactive, setShowInactive] = useState(false)
 
-  // No longer uses local state for staff list — reads directly from AppContext
-  const [advanceModalOpen, setAdvanceModalOpen] = useState(false)
-  const [printOpen, setPrintOpen] = useState(false)
-  const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null)
+  const shown = staff.filter((s) => showInactive || s.isActive)
+  const active = staff.filter((s) => s.isActive)
+  const payroll = active.reduce((a, s) => a + s.monthlySalary, 0)
+  const advances = active.reduce((a, s) => a + s.currentAdvances, 0)
+  const name = (id: string) => staff.find((s) => s.id === id)?.name ?? 'Removed employee'
 
-  // Advance Form
-  const [advanceStaffId, setAdvanceStaffId] = useState(staff[0]?.id || '')
-  const [advanceAmount, setAdvanceAmount] = useState<number>(2000)
-  const [advanceReason, setAdvanceReason] = useState('Emergency family advance')
-
-  const handleToggleDuty = (id: string, currentStatus: StaffMember['status']) => {
-    const nextStatus: StaffMember['status'] =
-      currentStatus === 'On Duty' ? 'Off Duty' : currentStatus === 'Off Duty' ? 'On Leave' : 'On Duty'
-    updateStaffStatus(id, nextStatus)
+  const cycleDuty = async (s: StaffMember) => {
+    const next: StaffStatus = s.status === 'On Duty' ? 'Off Duty' : s.status === 'Off Duty' ? 'On Leave' : 'On Duty'
+    const r = await act.setStaffStatus(s.id, next)
+    if (!r.ok) toast.error(r.error)
   }
-
-  const handleSaveAdvance = (e: React.FormEvent) => {
-    e.preventDefault()
-    const target = staff.find((s) => s.id === advanceStaffId)
-    if (!target) return
-
-    // Persist advance to AppContext (and therefore localStorage)
-    updateStaffAdvance(advanceStaffId, advanceAmount)
-
-    // Also record cash outflow in the station daybook
-    addDaybookEntry({
-      date: new Date().toISOString().split('T')[0],
-      time: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
-      particulars: `Staff Advance: ${target.name} — ${advanceReason}`,
-      category: 'Staff Advance',
-      cashIn: 0,
-      cashOut: advanceAmount,
-      balanceAfter: 0, // auto-computed by addDaybookEntry fix
-      referenceNo: `ADV-${Date.now()}`,
-      handledBy: siteInfo.managerName,
-    })
-
-    setAdvanceModalOpen(false)
+  const removeStaff = async (s: StaffMember) => {
+    const yes = await confirm({ title: `Remove ${s.name}?`, message: 'An employee without payroll history is deleted; one with history is deactivated (records kept). Unsettled advances must be cleared first.', confirmLabel: 'Remove employee', tone: 'danger' })
+    if (!yes) return
+    const r = await act.removeStaff(s.id)
+    if (r.ok) toast.success(r.value.mode === 'deleted' ? 'Employee deleted.' : 'Employee deactivated — payroll history kept.'); else toast.error(r.error)
   }
-
-  const handlePrintSlip = (member: StaffMember) => {
-    setSelectedStaff(member)
-    setPrintOpen(true)
+  const removeAdvance = async (id: string) => {
+    if (!(await confirm({ title: 'Delete this advance?', message: 'The cash-out line in the daybook is removed too.', confirmLabel: 'Delete advance', tone: 'danger' }))) return
+    const r = await act.removeAdvance(id)
+    if (r.ok) toast.success('Advance deleted.'); else toast.error(r.error)
   }
-
-  const totalMonthlyPayroll = staff.reduce((sum, s) => sum + s.monthlySalary, 0)
-  const totalAdvancesTaken = staff.reduce((sum, s) => sum + s.currentAdvances, 0)
+  const removeSalary = async (p: SalaryPayment) => {
+    if (!(await confirm({ title: 'Delete this salary payment?', message: `${name(p.staffId)} — ${p.period}, net ${rs(p.netPaid)}. The advances it settled become outstanding again and the cash line is removed.`, confirmLabel: 'Delete payment', tone: 'danger' }))) return
+    const r = await act.removeSalaryPayment(p.id)
+    if (r.ok) toast.success('Salary payment deleted.'); else toast.error(r.error)
+  }
 
   return (
     <div className="page-content-wrapper">
-      <div className="page-title-banner">
-        <div>
-          <span className="page-eyebrow">WORKFORCE &amp; ATTENDANCE</span>
-          <h2 className="page-heading">Staff Directory &amp; Payroll Advances</h2>
-          <p className="page-sub">
-            Pump attendants, cashiers, shift supervisors, attendance monitoring, and monthly salary slips
-          </p>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-outline" onClick={() => setPrintOpen(true)}>
-            <PrinterIcon size={16} />
-            <span>Print Payroll Summary</span>
-          </button>
-          <button className="btn btn-primary" onClick={() => setAdvanceModalOpen(true)}>
-            <CashIcon size={16} />
-            <span>Issue Salary Advance</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="WORKFORCE & ATTENDANCE"
+        title="Staff Directory & Payroll"
+        subtitle="Pump attendants, cashiers, supervisors, duty status, salary advances and monthly salary payments"
+        actions={
+          <>
+            <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setStaffForm({})}><PlusIcon size={16} /><span>Add Employee</span></button>
+            <button type="button" className="btn btn-secondary" onClick={() => setAdvanceFor('')} disabled={active.length === 0}><CashIcon size={16} /><span>Issue Advance</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setSalaryFor('')} disabled={active.length === 0}><CheckCircleIcon size={16} /><span>Pay Salary</span></button>
+          </>
+        }
+      />
 
-      {/* Module Operational Guide */}
       <ModuleGuide
-        title="Staff Roster, Duty Shifts & Salary Advances Guide"
-        urduTitle="اسٹاف حاضری، شفٹ ڈیوٹی اور ایڈوانس تنخواہ کی رہنمائی"
+        title="Staff Roster, Duty Shifts & Salary Guide"
+        urduTitle="اسٹاف حاضری، شفٹ ڈیوٹی اور تنخواہ کی رہنمائی"
         role="manager"
         roleLabel="Station Manager"
-        purpose="Monitor pump attendants and security guards, toggle daily duty status (On Duty / Off Duty / On Leave), issue salary advances, and deduct advances at month-end payroll settlement."
+        purpose="Keep the staff list, toggle duty status, issue advances from the safe, and pay the monthly salary with advances deducted automatically."
         steps={[
-          {
-            step: 1,
-            title: 'Attendance & Duty Toggle (ڈیوٹی اسٹیٹس تبدیل کریں)',
-            detail: 'Click the duty status button on any staff card to cycle between On Duty, Off Duty, and On Leave.',
-            urdu: 'ملازم کے ڈیوٹی بٹن پر کلک کر کے حاضری لگائیں یا رخصت درج کریں۔',
-          },
-          {
-            step: 2,
-            title: 'Issue Salary Advance (ایڈوانس رقم جاری کریں)',
-            detail: 'Click "Issue Salary Advance", select employee, enter valid reason, and confirm PKR amount.',
-            urdu: 'ایڈوانس رقم اور وجہ درج کر کے منظوری دیں۔',
-          },
-          {
-            step: 3,
-            title: 'Automatic Daybook Outflow (ڈے بک سے کیش کٹوتی)',
-            detail: 'The advance cash is automatically logged as a Daybook cash-out entry from the safe register.',
-            urdu: 'رقم سیف سے ادا ہو کر ڈے بک میں خودکار طور پر درج ہو جائے گی۔',
-          },
-          {
-            step: 4,
-            title: 'Print Monthly Salary Slip (تنخواہ پرچی پرنٹ کریں)',
-            detail: 'Click "Print Pay Slip" on any staff member to view base salary, advances taken, and net pay.',
-            urdu: 'ماہانہ تنخواہ میں سے ایڈوانس منہا کر کے کمپیوٹرائزڈ پرچی پرنٹ کریں۔',
-          },
+          { step: 1, title: 'Duty status (ڈیوٹی اسٹیٹس)', detail: 'Click the status badge to cycle On Duty → Off Duty → On Leave. It is saved for everyone.', urdu: 'ڈیوٹی بٹن پر کلک کر کے حاضری لگائیں۔' },
+          { step: 2, title: 'Issue advance (ایڈوانس)', detail: 'Enter the amount and reason. The limit per day and the salary are checked. Cash leaves the safe automatically.', urdu: 'ایڈوانس رقم اور وجہ درج کریں، رقم ڈے بک سے کٹ جائے گی۔' },
+          { step: 3, title: 'Pay salary (تنخواہ)', detail: 'Choose the month. Unsettled advances are deducted and the net cash is posted to the daybook.', urdu: 'ماہانہ تنخواہ میں سے ایڈوانس خودکار منہا ہو جاتا ہے۔' },
+          { step: 4, title: 'Correct mistakes (درستگی)', detail: 'Advances and salary payments can be deleted; everything they posted is reversed.', urdu: 'غلط اندراج حذف کریں، تمام اثرات واپس ہو جائیں گے۔' },
         ]}
         criticalChecks={[
-          'Ensure employee advances do not exceed the established policy limit for that role.',
-          'Always obtain physical thumb impression or signature on the printed advance voucher.',
+          'Advances must not exceed the policy limit for that role.',
+          'Obtain a signature or thumb impression on the printed advance / pay slip.',
         ]}
       />
 
-      {/* KPI Ribbon */}
-      <div className="executive-kpi-strip">
-        <div className="kpi-cell">
-          <span className="kpi-label">Active Station Staff</span>
-          <strong className="kpi-cell-value">{staff.length} Employees</strong>
-          <span className="kpi-cell-sub">{staff.filter((s) => s.status === 'On Duty').length} Currently On Duty</span>
-        </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Total Monthly Payroll</span>
-          <strong className="kpi-cell-value">Rs {totalMonthlyPayroll.toLocaleString()}</strong>
-          <span className="kpi-cell-sub">Base monthly salaries</span>
-        </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Current Advances Outstanding</span>
-          <strong className="kpi-cell-value text-gold">Rs {totalAdvancesTaken.toLocaleString()}</strong>
-          <span className="kpi-cell-sub">To be deducted at month-end</span>
-        </div>
-        <div className="kpi-cell">
-          <span className="kpi-label">Net Payable Payroll</span>
-          <strong className="kpi-cell-value text-green">
-            Rs {(totalMonthlyPayroll - totalAdvancesTaken).toLocaleString()}
-          </strong>
-          <span className="kpi-cell-sub">Net disbursement after advance</span>
-        </div>
-      </div>
+      <KpiStrip>
+        <Kpi label="Active staff" value={`${active.length} employees`} sub={`${active.filter((s) => s.status === 'On Duty').length} on duty now`} />
+        <Kpi label="Monthly payroll" value={rs(payroll)} sub="Base salaries" />
+        <Kpi label="Unsettled advances" value={rs(advances)} tone="gold" sub="Deducted at salary payment" />
+        <Kpi label="Net payable payroll" value={rs(payroll - advances)} tone="green" sub="After advances" />
+      </KpiStrip>
 
-      {/* Staff Table */}
-      <div className="table-surface">
-        <div className="table-surface-header">
-          <div>
-            <h3 className="surface-heading">Station Staff Roster</h3>
-            <p className="surface-sub">Click attendance badge to toggle duty status (On Duty / Off Duty / On Leave)</p>
+      <Tabs
+        tabs={[{ id: 'roster', label: 'Staff roster', count: shown.length }, { id: 'advances', label: 'Advances', count: staffAdvances.length }, { id: 'salaries', label: 'Salary payments', count: salaryPayments.length }]}
+        active={tab}
+        onChange={(t) => setTab(t as typeof tab)}
+      />
+
+      {tab === 'roster' && (
+        <SectionCard title="Station Staff Roster" subtitle="Click the duty badge to change status" actions={<label className="ui-checkbox-row" style={{ margin: 0 }}><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /><span>Show deactivated</span></label>}>
+          <div className="table-responsive">
+            <table className="clean-table">
+              <thead><tr><th>Employee</th><th>Role</th><th>Phone</th><th>Duty</th><th>Salary</th><th>Advances</th><th>Net payable</th><th /></tr></thead>
+              <tbody>
+                {shown.length === 0 ? <EmptyRow colSpan={8}>No staff yet. Click "Add Employee".</EmptyRow> : shown.map((m) => (
+                  <tr key={m.id} style={m.isActive ? undefined : { opacity: 0.55 }}>
+                    <td><strong>{m.name}</strong><div className="text-muted text-xs">Joined {m.joiningDate ? formatDate(m.joiningDate) : '—'}{!m.isActive && ' • deactivated'}</div></td>
+                    <td><span className="category-tag">{m.role}</span></td>
+                    <td>{m.phone || '—'}</td>
+                    <td>
+                      <button type="button" className={`badge ${m.status === 'On Duty' ? 'badge-success' : m.status === 'Off Duty' ? 'badge-neutral' : 'badge-warning'}`} onClick={() => void cycleDuty(m)} disabled={!m.isActive} style={{ cursor: 'pointer' }} title="Click to change">{m.status}</button>
+                    </td>
+                    <td>{rs(m.monthlySalary)}</td>
+                    <td className="text-red font-bold">{m.currentAdvances > 0 ? `- ${rs(m.currentAdvances)}` : 'Rs 0'}</td>
+                    <td className="text-gold font-bold">{rs(m.monthlySalary - m.currentAdvances)}</td>
+                    <td>
+                      <RowActions>
+                        <button type="button" className="btn btn-outline ui-mini-btn" disabled={!m.isActive} onClick={() => setAdvanceFor(m.id)}>Advance</button>
+                        <button type="button" className="btn btn-outline ui-mini-btn" disabled={!m.isActive} onClick={() => setSalaryFor(m.id)}>Pay salary</button>
+                        <IconButton label="Print pay slip" onClick={() => setSlip({ member: m })}><PrinterIcon size={14} /></IconButton>
+                        <IconButton label="Edit employee" onClick={() => setStaffForm({ member: m })}><EditIcon size={14} /></IconButton>
+                        <IconButton label="Remove employee" tone="danger" onClick={() => void removeStaff(m)}><TrashIcon size={14} /></IconButton>
+                      </RowActions>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        <div className="table-responsive">
-          <table className="clean-table">
-            <thead>
-              <tr>
-                <th>Employee Name</th>
-                <th>Role</th>
-                <th>Phone</th>
-                <th>Duty Status</th>
-                <th>Monthly Base Salary</th>
-                <th>Advances Taken</th>
-                <th>Net Payable</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {staff.map((member) => (
-                <tr key={member.id}>
-                  <td>
-                    <strong>{member.name}</strong>
-                    <div className="text-muted text-xs">Joined: {member.joiningDate}</div>
-                  </td>
-                  <td>
-                    <span className="category-tag">{member.role}</span>
-                  </td>
-                  <td>{member.phone}</td>
-                  <td>
-                    <button
-                      className={`badge ${
-                        member.status === 'On Duty'
-                          ? 'badge-success'
-                          : member.status === 'Off Duty'
-                          ? 'badge-neutral'
-                          : 'badge-warning'
-                      }`}
-                      onClick={() => handleToggleDuty(member.id, member.status)}
-                      title="Click to toggle status"
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {member.status}
-                    </button>
-                  </td>
-                  <td>Rs {member.monthlySalary.toLocaleString()}</td>
-                  <td className="text-red font-bold">
-                    {member.currentAdvances > 0 ? `- Rs ${member.currentAdvances.toLocaleString()}` : 'Rs 0'}
-                  </td>
-                  <td className="text-gold font-bold">
-                    Rs {(member.monthlySalary - member.currentAdvances).toLocaleString()}
-                  </td>
-                  <td>
-                    <button className="btn btn-sm btn-outline" onClick={() => handlePrintSlip(member)}>
-                      <PrinterIcon size={14} /> Pay Slip
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Zero-Scroll Compact Advance Modal */}
-      {advanceModalOpen && (
-        <div className="modal-backdrop" onClick={() => setAdvanceModalOpen(false)}>
-          <div className="modal-container compact-zero-scroll" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '580px' }}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <h3 className="modal-heading">Issue Staff Salary Advance</h3>
-                <span className="modal-sub">Deducts from safe cash and logs against monthly payroll</span>
-              </div>
-              <button className="btn btn-ghost" onClick={() => setAdvanceModalOpen(false)}>
-                <XIcon size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveAdvance} className="modal-form-compact">
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Select Staff Member</label>
-                  <select
-                    className="form-input"
-                    value={advanceStaffId}
-                    onChange={(e) => setAdvanceStaffId(e.target.value)}
-                  >
-                    {staff.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.role}) — Salary: Rs {s.monthlySalary.toLocaleString()}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label font-bold text-gold">Advance Amount (PKR)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={advanceAmount}
-                    onChange={(e) => setAdvanceAmount(Number(e.target.value))}
-                    required
-                    min={100}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Advance Reason / Emergency</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={advanceReason}
-                  onChange={(e) => setAdvanceReason(e.target.value)}
-                  placeholder="e.g. Family medical emergency or Eid festival advance"
-                  required
-                />
-              </div>
-
-              {/* Inline Calculation Strip */}
-              {(() => {
-                const s = staff.find((m) => m.id === advanceStaffId) || staff[0]
-                const salary = s?.monthlySalary || 0
-                const curAdv = s?.currentAdvances || 0
-                const rem = Math.max(0, salary - (curAdv + advanceAmount))
-                return (
-                  <div className="calc-preview-inline-strip">
-                    <div className="calc-pill-item">
-                      <span className="calc-pill-label">Monthly Salary:</span>
-                      <span className="calc-pill-val">Rs. {salary.toLocaleString()}</span>
-                    </div>
-                    <div className="calc-pill-item">
-                      <span className="calc-pill-label">Already Drawn:</span>
-                      <span className="calc-pill-val text-red">Rs. {curAdv.toLocaleString()}</span>
-                    </div>
-                    <div className="calc-pill-item">
-                      <span className="calc-pill-label">New Advance:</span>
-                      <span className="calc-pill-val text-gold">+ Rs. {advanceAmount.toLocaleString()}</span>
-                    </div>
-                    <div className="calc-pill-item">
-                      <span className="calc-pill-label">Remaining Net Pay:</span>
-                      <span className="calc-pill-val text-green">Rs. {rem.toLocaleString()}</span>
-                    </div>
-                  </div>
-                )
-              })()}
-
-              <div className="modal-actions-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setAdvanceModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  <CheckCircleIcon size={16} />
-                  <span>Issue Advance Slip</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        </SectionCard>
       )}
 
-      {/* Pay Slip Modal */}
-      <PrintReceiptModal
-        isOpen={printOpen}
-        onClose={() => setPrintOpen(false)}
-        title="Staff Monthly Salary &amp; Advance Slip"
-        stationName={siteInfo.name}
-        stationLocation={siteInfo.location}
-        stationPhone={siteInfo.phone}
-      >
-        <div className="slip-meta-grid">
-          <div>
-            <strong>Staff:</strong> {selectedStaff?.name || staff[0]?.name}
+      {tab === 'advances' && (
+        <SectionCard title="Salary Advances" subtitle="Newest first">
+          <div className="table-responsive">
+            <table className="clean-table">
+              <thead><tr><th>Date</th><th>Employee</th><th>Reason</th><th>Amount</th><th>Status</th><th>Issued by</th><th /></tr></thead>
+              <tbody>
+                {staffAdvances.length === 0 ? <EmptyRow colSpan={7}>No advances recorded.</EmptyRow> : staffAdvances.map((a) => (
+                  <tr key={a.id}>
+                    <td>{formatDate(a.date)}</td><td><strong>{name(a.staffId)}</strong></td><td>{a.reason}</td><td className="text-red font-bold">{rs(a.amount)}</td>
+                    <td><span className={`badge ${a.status === 'Outstanding' ? 'badge-warning' : 'badge-success'}`}>{a.status}{a.settledOn ? ` ${formatDate(a.settledOn)}` : ''}</span></td>
+                    <td>{a.recordedBy}</td>
+                    <td>{a.status === 'Outstanding' && <RowActions><IconButton label="Delete advance" tone="danger" onClick={() => void removeAdvance(a.id)}><TrashIcon size={14} /></IconButton></RowActions>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div>
-            <strong>Role:</strong> {selectedStaff?.role || staff[0]?.role}
-          </div>
-          <div>
-            <strong>Month:</strong> {new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}
-          </div>
-          <div>
-            <strong>Contact:</strong> {selectedStaff?.phone || staff[0]?.phone}
-          </div>
-        </div>
+        </SectionCard>
+      )}
 
-        <div className="receipt-divider" />
+      {tab === 'salaries' && (
+        <SectionCard title="Salary Payments" subtitle="Newest first">
+          <div className="table-responsive">
+            <table className="clean-table">
+              <thead><tr><th>Paid on</th><th>Employee</th><th>Month</th><th>Gross</th><th>Advances</th><th>Net paid</th><th>Paid by</th><th /></tr></thead>
+              <tbody>
+                {salaryPayments.length === 0 ? <EmptyRow colSpan={8}>No salaries paid yet.</EmptyRow> : salaryPayments.map((p) => (
+                  <tr key={p.id}>
+                    <td>{formatDate(p.date)}</td><td><strong>{name(p.staffId)}</strong></td><td>{p.period}</td><td>{rs(p.grossSalary)}</td>
+                    <td className="text-red">{p.advancesDeducted > 0 ? `- ${rs(p.advancesDeducted)}` : '—'}</td><td className="text-green font-bold">{rs(p.netPaid)}</td><td>{p.paidBy}</td>
+                    <td><RowActions>
+                      <IconButton label="Print pay slip" onClick={() => { const m = staff.find((s) => s.id === p.staffId); if (m) setSlip({ member: m, payment: p }) }}><PrinterIcon size={14} /></IconButton>
+                      <IconButton label="Delete salary payment" tone="danger" onClick={() => void removeSalary(p)}><TrashIcon size={14} /></IconButton>
+                    </RowActions></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </SectionCard>
+      )}
 
-        <div className="slip-summary-list">
-          <div className="slip-row">
-            <span>Base Monthly Salary:</span>
-            <strong>Rs {(selectedStaff?.monthlySalary || staff[0]?.monthlySalary || 0).toLocaleString()}</strong>
-          </div>
-          <div className="slip-row">
-            <span>Salary Advances Deducted:</span>
-            <span className="text-red">
-              - Rs {(selectedStaff?.currentAdvances || staff[0]?.currentAdvances || 0).toLocaleString()}
-            </span>
-          </div>
-          <div className="receipt-divider" />
-          <div className="slip-row highlight">
-            <span>Net Payable Balance:</span>
-            <strong>
-              Rs{' '}
-              {(
-                (selectedStaff?.monthlySalary || staff[0]?.monthlySalary || 0) -
-                (selectedStaff?.currentAdvances || staff[0]?.currentAdvances || 0)
-              ).toLocaleString()}
-            </strong>
-          </div>
-        </div>
+      {staffForm && <StaffModal member={staffForm.member} onClose={() => setStaffForm(null)} />}
+      {advanceFor !== null && <AdvanceModal staffId={advanceFor || undefined} onClose={() => setAdvanceFor(null)} />}
+      {salaryFor !== null && <SalaryModal staffId={salaryFor || undefined} onClose={() => setSalaryFor(null)} onPaid={(p) => { const m = staff.find((s) => s.id === p.staffId); if (m) setSlip({ member: m, payment: p }) }} />}
 
-        <div className="receipt-divider" />
-        <div className="slip-signatures">
-          <div>
-            <div className="sig-line" />
-            <span>Employee Signature</span>
-          </div>
-          <div>
-            <div className="sig-line" />
-            <span>Station Manager</span>
-          </div>
-        </div>
+      <PrintReceiptModal isOpen={slip !== null} onClose={() => setSlip(null)} title="Staff Monthly Salary & Advance Slip" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
+        {slip && (
+          <>
+            <div className="slip-meta-grid">
+              <div><strong>Staff:</strong> {slip.member.name}</div><div><strong>Role:</strong> {slip.member.role}</div>
+              <div><strong>Month:</strong> {slip.payment?.period ?? monthISO()}</div><div><strong>Contact:</strong> {slip.member.phone || '—'}</div>
+            </div>
+            <div className="receipt-divider" />
+            <div className="slip-summary-list">
+              <div className="slip-row"><span>Base monthly salary:</span><strong>{rs(slip.payment?.grossSalary ?? slip.member.monthlySalary)}</strong></div>
+              <div className="slip-row"><span>Advances deducted:</span><span className="text-red">- {rs(slip.payment?.advancesDeducted ?? slip.member.currentAdvances)}</span></div>
+              <div className="receipt-divider" />
+              <div className="slip-row highlight"><span>{slip.payment ? 'Net paid:' : 'Net payable:'}</span><strong>{rs(slip.payment?.netPaid ?? slip.member.monthlySalary - slip.member.currentAdvances)}</strong></div>
+            </div>
+            <div className="receipt-divider" />
+            <div className="slip-signatures"><div><div className="sig-line" /><span>Employee signature</span></div><div><div className="sig-line" /><span>Station manager</span></div></div>
+          </>
+        )}
       </PrintReceiptModal>
     </div>
   )

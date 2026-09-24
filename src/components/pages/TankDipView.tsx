@@ -1,465 +1,311 @@
 import React, { useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import { PlusIcon, PrinterIcon, CheckCircleIcon, XIcon } from '../common/Icons'
+import type { FuelType, Tank, TankDipRecord } from '../../types'
+import { FUEL_TYPES } from '../../types'
+import { isLowTank, movementsSinceLastDip } from '../../data/derive'
+import { formatDate, todayISO } from '../../lib/dates'
+import { round2 } from '../../lib/money'
+import { PlusIcon, PrinterIcon, CheckCircleIcon, EditIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
+import { Modal, FormError } from '../common/Modal'
+import { useConfirm } from '../common/Confirm'
+import { useToast } from '../common/Toast'
+import { useSubmit } from '../common/useSubmit'
+import { CalcStrip, EmptyRow, Field, Grid2, Grid3, IconButton, PageHeader, RowActions, SectionCard } from '../common/kit'
 
-export const TankDipView: React.FC = () => {
-  const { activeSiteData, addTankDip } = useApp()
-  const { tanks, tankDips, siteInfo } = activeSiteData
+const num = (n: number) => Math.round(n).toLocaleString('en-US')
 
-  const [modalOpen, setModalOpen] = useState(false)
-  const [printOpen, setPrintOpen] = useState(false)
+// ===========================================================================
+// Dip dialog
+// ===========================================================================
+const DipModal: React.FC<{ tankId: string; onClose: () => void }> = ({ tankId, onClose }) => {
+  const { activeSiteData, act, currentUser } = useApp()
+  const toast = useToast()
+  const { tanks } = activeSiteData
+  const isCashier = currentUser?.role === 'cashier'
+  const first = tanks.find((t) => t.id === tankId) ?? tanks[0]
 
-  // Dip Form State
-  const [selectedTankId, setSelectedTankId] = useState(tanks[0]?.id || '')
-  const [morningDipMm, setMorningDipMm] = useState(1890)
-  const [morningLiters, setMorningLiters] = useState(33890)
-  const [decantedLiters, setDecantedLiters] = useState(0)
-  const [dispensedLiters, setDispensedLiters] = useState(2690)
-  const [closingDipMm, setClosingDipMm] = useState(1840)
-  const [closingPhysicalLiters, setClosingPhysicalLiters] = useState(31200)
-  const [waterDipMm, setWaterDipMm] = useState(0)
-  const [inspector, setInspector] = useState(siteInfo.managerName)
+  const init = (t: Tank | undefined) => {
+    const m = t ? movementsSinceLastDip(activeSiteData, t.id) : { decanted: 0, dispensed: 0 }
+    return { morningMm: String(t?.currentDipMm ?? 0), morningL: String(t?.currentLiters ?? 0), decanted: String(m.decanted), dispensed: String(m.dispensed) }
+  }
+  const start = init(first)
+  const [id, setId] = useState(first?.id ?? '')
+  const tank = tanks.find((t) => t.id === id) ?? first
+  const [date, setDate] = useState(todayISO())
+  const [morningMm, setMorningMm] = useState(start.morningMm)
+  const [morningL, setMorningL] = useState(start.morningL)
+  const [decanted, setDecanted] = useState(start.decanted)
+  const [dispensed, setDispensed] = useState(start.dispensed)
+  const [closingMm, setClosingMm] = useState('')
+  const [closingL, setClosingL] = useState('')
+  const [water, setWater] = useState('0')
+  const [inspector, setInspector] = useState(currentUser?.name ?? '')
+  const { busy, error, setError, run } = useSubmit()
 
-  const selectedTank = tanks.find((t) => t.id === selectedTankId) || tanks[0]
-
-  const bookStockLiters = morningLiters + decantedLiters - dispensedLiters
-  const varianceLiters = closingPhysicalLiters - bookStockLiters
-
-  const handleOpenAddModal = (tankId?: string) => {
-    if (tankId) {
-      const t = tanks.find((tk) => tk.id === tankId)
-      if (t) {
-        setSelectedTankId(t.id)
-        setMorningDipMm(t.currentDipMm)
-        setMorningLiters(t.currentLiters)
-        setClosingDipMm(t.currentDipMm)
-        setClosingPhysicalLiters(t.currentLiters)
-      }
-    }
-    setModalOpen(true)
+  const pick = (t: Tank) => {
+    setId(t.id)
+    const s = init(t)
+    setMorningMm(s.morningMm); setMorningL(s.morningL); setDecanted(s.decanted); setDispensed(s.dispensed)
+    setClosingMm(''); setClosingL(''); setError(null)
   }
 
-  const handleSaveDip = (e: React.FormEvent) => {
+  const book = round2(Number(morningL) + Number(decanted) - Number(dispensed))
+  const physical = Number(closingL)
+  const variance = closingL === '' ? 0 : round2(physical - book)
+  const tolerance = tank ? tank.capacityLiters * 0.005 : 0
+  const waterAlarm = Number(water) > 0
+
+  if (!tank) return null
+
+  const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    addTankDip({
-      date: new Date().toISOString().split('T')[0],
-      tankId: selectedTank.id,
-      tankNo: selectedTank.tankNo,
-      fuelType: selectedTank.fuelType,
-      morningDipMm,
-      morningLiters,
-      decantedLiters,
-      dispensedLiters,
-      bookStockLiters,
-      closingDipMm,
-      closingPhysicalLiters,
-      varianceLiters,
-      waterDipMm,
-      inspector,
-    })
-    setModalOpen(false)
+    void run(
+      (ack) => act.recordDip({
+        tankId: tank.id, date, morningDipMm: Number(morningMm), morningLiters: Number(morningL), decantedLiters: Number(decanted),
+        dispensedLiters: Number(dispensed), closingDipMm: Number(closingMm), closingPhysicalLiters: physical, waterDipMm: Number(water),
+        inspector, acknowledge: ack,
+      }),
+      (dip) => { toast.success(`Dip saved for Tank #${dip.tankNo}: physical ${num(dip.closingPhysicalLiters)} L, variance ${dip.varianceLiters > 0 ? '+' : ''}${dip.varianceLiters} L`); onClose() },
+    )
+  }
+
+  return (
+    <Modal title="Record Tank Physical Dip" subtitle="Morning reading, deliveries, sales and the measured closing stock" onClose={onClose} busy={busy} width={700}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Underground tank">
+            <select className="form-input" value={id} onChange={(e) => { const t = tanks.find((x) => x.id === e.target.value); if (t) pick(t) }}>
+              {tanks.map((t) => <option key={t.id} value={t.id}>Tank #{t.tankNo} — {t.fuelType} (capacity {num(t.capacityLiters)} L)</option>)}
+            </select>
+          </Field>
+          <Field label="Inspecting officer"><input className="form-input" value={inspector} onChange={(e) => setInspector(e.target.value)} required /></Field>
+        </Grid2>
+        <Grid3>
+          <Field label="Date" hint={isCashier ? 'Today only' : undefined}><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={isCashier} required /></Field>
+          <Field label="Morning dip (mm)" hint="Last recorded level"><input type="number" min={0} step="any" className="form-input" value={morningMm} onChange={(e) => setMorningMm(e.target.value)} required /></Field>
+          <Field label="Morning volume (L)"><input type="number" min={0} step="any" className="form-input" value={morningL} onChange={(e) => setMorningL(e.target.value)} required /></Field>
+        </Grid3>
+        <Grid2>
+          <Field label="Decanted from OMC (+ L)" hint="Filled from recorded tanker deliveries to this tank"><input type="number" min={0} step="any" className="form-input" value={decanted} onChange={(e) => setDecanted(e.target.value)} /></Field>
+          <Field label="Dispensed via nozzles (− L)" hint="Filled from meter readings since the last dip"><input type="number" min={0} step="any" className="form-input" value={dispensed} onChange={(e) => setDispensed(e.target.value)} required /></Field>
+        </Grid2>
+        <Grid3>
+          <Field label="Closing dip (mm)" strong><input type="number" min={0} step="any" className="form-input" value={closingMm} onChange={(e) => setClosingMm(e.target.value)} required autoFocus /></Field>
+          <Field label="Physical volume (L)" strong><input type="number" min={0} step="any" className="form-input" value={closingL} onChange={(e) => setClosingL(e.target.value)} required /></Field>
+          <Field label="Water paste (mm)" hint="0 mm = clear"><input type="number" min={0} step="any" className="form-input" value={water} onChange={(e) => setWater(e.target.value)} /></Field>
+        </Grid3>
+        <CalcStrip items={[
+          { label: 'Book stock', value: `${num(book)} L` },
+          { label: 'Physical', value: closingL === '' ? '—' : `${num(physical)} L`, tone: 'gold' },
+          { label: 'Variance', value: closingL === '' ? '—' : variance === 0 ? '0 L (balanced)' : `${variance > 0 ? 'Gain +' : 'Loss '}${Math.abs(variance)} L`, tone: variance < 0 ? 'red' : variance > 0 ? 'green' : undefined },
+          { label: 'Tolerance ±0.5%', value: `±${num(tolerance)} L` },
+        ]} />
+        {closingL !== '' && Math.abs(variance) > tolerance && <div className="ui-notice ui-notice-warning">The variance is outside the normal ±0.5% tolerance. Re-check the dip before saving.</div>}
+        {waterAlarm && <div className="ui-notice ui-notice-danger"><strong>Water detected!</strong> STOP dispensing from this tank immediately and inform the manager.</div>}
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : 'Save dip audit'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+// ===========================================================================
+// Add / edit tank dialog
+// ===========================================================================
+const TankModal: React.FC<{ tank?: Tank; onClose: () => void }> = ({ tank, onClose }) => {
+  const { activeSiteData, act } = useApp()
+  const toast = useToast()
+  const nextNo = activeSiteData.tanks.length ? Math.max(...activeSiteData.tanks.map((t) => t.tankNo)) + 1 : 1
+  const [tankNo, setTankNo] = useState(String(tank?.tankNo ?? nextNo))
+  const [fuel, setFuel] = useState<FuelType>(tank?.fuelType ?? 'HSD Diesel')
+  const [capacity, setCapacity] = useState(String(tank?.capacityLiters ?? ''))
+  const [reserve, setReserve] = useState(String(tank?.minReserveLiters ?? ''))
+  const [initialL, setInitialL] = useState(String(tank?.initialLiters ?? 0))
+  const [initialMm, setInitialMm] = useState(String(tank?.initialDipMm ?? 0))
+  const { busy, error, run } = useSubmit()
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const input = { tankNo: Number(tankNo), fuelType: fuel, capacityLiters: Number(capacity), minReserveLiters: Number(reserve), initialLiters: Number(initialL), initialDipMm: Number(initialMm) }
+    if (tank) void run(() => act.updateTank(tank.id, input), () => { toast.success('Tank updated.'); onClose() })
+    else void run(() => act.addTank(input), (t) => { toast.success(`Added Tank #${t.tankNo}.`); onClose() })
+  }
+
+  return (
+    <Modal title={tank ? `Edit Tank #${tank.tankNo}` : 'Add Underground Tank'} onClose={onClose} busy={busy} width={620}>
+      <form className="modal-form-compact" onSubmit={submit}>
+        <Grid2>
+          <Field label="Tank number"><input type="number" min={1} step={1} className="form-input" value={tankNo} onChange={(e) => setTankNo(e.target.value)} required /></Field>
+          <Field label="Fuel product">
+            <select className="form-input" value={fuel} onChange={(e) => setFuel(e.target.value as FuelType)}>{FUEL_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}</select>
+          </Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Capacity (liters)"><input type="number" min={1} step="any" className="form-input" value={capacity} onChange={(e) => setCapacity(e.target.value)} required /></Field>
+          <Field label="Minimum reserve (liters)" hint="Below this the low-stock alert shows"><input type="number" min={0} step="any" className="form-input" value={reserve} onChange={(e) => setReserve(e.target.value)} required /></Field>
+        </Grid2>
+        <Grid2>
+          <Field label="Opening stock (liters)" hint={tank ? 'Used until the first dip is recorded' : 'Fuel in the tank today'}><input type="number" min={0} step="any" className="form-input" value={initialL} onChange={(e) => setInitialL(e.target.value)} required /></Field>
+          <Field label="Opening dip (mm)"><input type="number" min={0} step="any" className="form-input" value={initialMm} onChange={(e) => setInitialMm(e.target.value)} required /></Field>
+        </Grid2>
+        <FormError message={error} />
+        <div className="modal-actions-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : tank ? 'Save changes' : 'Add tank'}</span></button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+// ===========================================================================
+// Page
+// ===========================================================================
+export const TankDipView: React.FC = () => {
+  const { activeSiteData, act, currentUser } = useApp()
+  const { tanks, tankDips, siteInfo, nozzles, settings } = activeSiteData
+  const isManager = currentUser?.role !== 'cashier'
+  const confirm = useConfirm()
+  const toast = useToast()
+  const [dipFor, setDipFor] = useState<string | null>(null)
+  const [tankForm, setTankForm] = useState<{ tank?: Tank } | null>(null)
+  const [printOpen, setPrintOpen] = useState(false)
+
+  const removeTank = async (t: Tank) => {
+    const yes = await confirm({ title: `Delete Tank #${t.tankNo}?`, message: `${t.fuelType} tank of ${num(t.capacityLiters)} L. It can only be deleted while no nozzle, dip record or delivery uses it.`, confirmLabel: 'Delete tank', tone: 'danger' })
+    if (!yes) return
+    const r = await act.removeTank(t.id)
+    if (r.ok) toast.success(`Tank #${t.tankNo} deleted.`)
+    else toast.error(r.error)
+  }
+  const removeDip = async (d: TankDipRecord) => {
+    const yes = await confirm({ title: 'Delete this dip record?', message: `Tank #${d.tankNo}, ${formatDate(d.date)} — physical ${num(d.closingPhysicalLiters)} L. The tank level goes back to its previous dip. This is recorded in the audit trail.`, confirmLabel: 'Delete dip', tone: 'danger' })
+    if (!yes) return
+    const r = await act.removeDip(d.id)
+    if (r.ok) toast.success('Dip record deleted.')
+    else toast.error(r.error)
   }
 
   return (
     <div className="page-content-wrapper">
-      <div className="page-title-banner">
-        <div>
-          <span className="page-eyebrow">PHYSICAL INVENTORY AUDIT</span>
-          <h2 className="page-heading">Tank Dip & Physical Stock</h2>
-          <p className="page-sub">
-            Dip rod calibration, decanted volumes, daily meter sales, and book vs physical stock variance
-          </p>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-outline" onClick={() => setPrintOpen(true)}>
-            <PrinterIcon size={16} />
-            <span>Print Dip Audit Sheet</span>
-          </button>
-          <button className="btn btn-primary" onClick={() => handleOpenAddModal()}>
-            <PlusIcon size={16} />
-            <span>Record Daily Dip</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="PHYSICAL INVENTORY AUDIT"
+        title="Tank Dip & Physical Stock"
+        subtitle="Dip rod calibration, decanted volumes, daily meter sales, and book vs physical stock variance"
+        actions={
+          <>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Dip Audit Sheet</span></button>
+            {isManager && <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setTankForm({})}><PlusIcon size={16} /><span>Add Tank</span></button>}
+            <button type="button" className="btn btn-primary" onClick={() => setDipFor('')} disabled={tanks.length === 0}><PlusIcon size={16} /><span>Record Daily Dip</span></button>
+          </>
+        }
+      />
 
-      {/* Module Operational Guide */}
       <ModuleGuide
         title="Underground Tank Dip & Stock Calibration"
         urduTitle="زیر زمین ٹینک پیمائش (ڈپ) اور اسٹاک آڈٹ"
         role="manager"
         roleLabel="Station Manager"
-        purpose="Measure underground fuel levels with brass dip rod, detect bottom water contamination using water-finding paste, and audit theoretical book stock vs physical stick readings."
+        purpose="Measure underground fuel levels with the brass dip rod, detect bottom water with water-finding paste, and compare book stock with the physical reading."
         steps={[
-          {
-            step: 1,
-            title: 'Take Morning Dip (صبح کی پیمائش)',
-            detail: 'Insert clean brass dip rod into sounding pipe. Read millimeter level and record equivalent liters.',
-            urdu: 'پیتل کی ڈپ راڈ ٹینک میں ڈال کر ملی میٹر اور لیٹر ریڈنگ نوٹ کریں۔',
-          },
-          {
-            step: 2,
-            title: 'Record Decanted Tanker Fuel (ڈیکینٹنگ)',
-            detail: 'If an OMC bowser / tank lorry arrived, record invoice volume decanted into underground tank.',
-            urdu: 'اگر سپلائی کا تیل آیا ہے تو ٹینکر سے خالی کروائے گئے لیٹر درج کریں۔',
-          },
-          {
-            step: 3,
-            title: 'Water Paste Test (پانی کی جانچ)',
-            detail: 'Apply Kolor Kut water finding paste to bottom 100mm of rod. Confirm 0 mm water indication.',
-            urdu: 'راڈ کے نچلے حصے پر واٹر پیسٹ لگائیں تاکہ ٹینک میں پانی نہ ہونے کی تصدیق ہو۔',
-          },
-          {
-            step: 4,
-            title: 'Compute Variance (نقصان یا بچت کا آڈٹ)',
-            detail: 'Closing physical stock is compared with book stock. Any temperature/evaporation variance is logged.',
-            urdu: 'بُک اسٹاک اور فزیکل اسٹاک کا موازنہ کر کے کمی یا بیشی چیک کریں۔',
-          },
+          { step: 1, title: 'Take the dip (پیمائش)', detail: 'Insert the clean brass rod into the sounding pipe; note the millimeter level and the volume it equals.', urdu: 'ڈپ راڈ ڈال کر ملی میٹر اور لیٹر ریڈنگ نوٹ کریں۔' },
+          { step: 2, title: 'Deliveries and sales are pre-filled (خودکار)', detail: 'Tanker deliveries recorded in the OMC module and nozzle sales since the last dip are filled in for you.', urdu: 'ٹینکر کی سپلائی اور نوزل کی فروخت خودکار بھر جاتی ہے۔' },
+          { step: 3, title: 'Water paste test (پانی کی جانچ)', detail: 'Apply water paste to the bottom 100 mm of the rod. 0 mm means clear.', urdu: 'واٹر پیسٹ سے ٹینک میں پانی کی جانچ کریں۔' },
+          { step: 4, title: 'Compare variance (نقصان یا بچت)', detail: 'Physical stock is compared with book stock; anything beyond ±0.5% needs an explanation.', urdu: 'بُک اسٹاک اور فزیکل اسٹاک کا موازنہ کریں۔' },
         ]}
         criticalChecks={[
-          'Water paste turning dark pink / red indicates water contamination — STOP fuel dispensing immediately!',
-          'Standard allowable temperature & evaporation variance is ±0.5% of total tank volume.',
-          'Allow tanker fuel to settle for 15 minutes before taking final decanting dip reading.',
+          'Water paste turning dark pink / red means water contamination — STOP dispensing immediately!',
+          'Normal temperature & evaporation variance is within ±0.5% of tank volume.',
+          'Let tanker fuel settle for 15 minutes before taking the post-delivery dip.',
         ]}
       />
 
-      {/* Fluid Tank Cards - Modern Gauges */}
-      <div className="tanks-meter-row">
-        {tanks.map((tank) => {
-          const fillPct = Math.round((tank.currentLiters / tank.capacityLiters) * 100)
-          const isLow = tank.currentLiters <= tank.minReserveLiters
-
-          return (
-            <div key={tank.id} className={`tank-gauge-card ${isLow ? 'low-stock-glow' : ''}`}>
-              <div className="tank-card-top">
-                <div>
-                  <span className="tank-number-tag">Underground Tank #{tank.tankNo}</span>
-                  <h4 className="tank-fuel-title">{tank.fuelType}</h4>
+      {tanks.length === 0 ? (
+        <div className="ui-empty">No tanks are set up yet.{isManager ? ' Click "Add Tank" to register the first underground tank.' : ''}</div>
+      ) : (
+        <div className="tanks-meter-row">
+          {tanks.map((tank) => {
+            const fillPct = Math.round((tank.currentLiters / tank.capacityLiters) * 100)
+            const isLow = isLowTank(tank, settings.lowStockAlertPct)
+            const attached = nozzles.filter((n) => n.tankId === tank.id).length
+            return (
+              <div key={tank.id} className={`tank-gauge-card ${isLow ? 'low-stock-glow' : ''}`}>
+                <div className="tank-card-top">
+                  <div>
+                    <span className="tank-number-tag">Underground Tank #{tank.tankNo}</span>
+                    <h4 className="tank-fuel-title">{tank.fuelType}</h4>
+                  </div>
+                  <RowActions>
+                    <button type="button" className="btn btn-sm btn-outline" onClick={() => setDipFor(tank.id)}>Log Dip</button>
+                    {isManager && <IconButton label="Edit tank" onClick={() => setTankForm({ tank })}><EditIcon size={14} /></IconButton>}
+                    {isManager && <IconButton label="Delete tank" tone="danger" onClick={() => void removeTank(tank)}><TrashIcon size={14} /></IconButton>}
+                  </RowActions>
                 </div>
-                <button className="btn btn-sm btn-outline" onClick={() => handleOpenAddModal(tank.id)}>
-                  Log Dip
-                </button>
-              </div>
-
-              <div className="tank-progress-track">
-                <div
-                  className={`tank-progress-fill ${isLow ? 'fill-low' : 'fill-good'}`}
-                  style={{ width: `${Math.min(100, fillPct)}%` }}
-                />
-              </div>
-
-              <div className="tank-stats-row">
-                <div className="tank-stat-item">
-                  <span className="stat-label">Stock Liters</span>
-                  <strong className="stat-val">{tank.currentLiters.toLocaleString()} L</strong>
-                </div>
-                <div className="tank-stat-item">
-                  <span className="stat-label">Physical Dip</span>
-                  <strong className="stat-val">{tank.currentDipMm} mm</strong>
-                </div>
-                <div className="tank-stat-item">
-                  <span className="stat-label">Capacity</span>
-                  <strong className="stat-val">{tank.capacityLiters.toLocaleString()} L</strong>
-                </div>
-                <div className="tank-stat-item">
-                  <span className="stat-label">Water Dip</span>
-                  <strong className="stat-val text-green">0 mm (Clear)</strong>
+                <div className="tank-progress-track"><div className={`tank-progress-fill ${isLow ? 'fill-low' : 'fill-good'}`} style={{ width: `${Math.max(0, Math.min(100, fillPct))}%` }} /></div>
+                <div className="tank-stats-row">
+                  <div className="tank-stat-item"><span className="stat-label">Measured stock</span><strong className="stat-val">{num(tank.currentLiters)} L</strong></div>
+                  <div className="tank-stat-item"><span className="stat-label">Estimated now</span><strong className="stat-val">{num(tank.estimatedBookLiters)} L</strong></div>
+                  <div className="tank-stat-item"><span className="stat-label">Physical dip</span><strong className="stat-val">{tank.currentDipMm} mm</strong></div>
+                  <div className="tank-stat-item"><span className="stat-label">Capacity</span><strong className="stat-val">{num(tank.capacityLiters)} L</strong></div>
+                  <div className="tank-stat-item"><span className="stat-label">Water dip</span><strong className={`stat-val ${tank.waterDipMm > 0 ? 'text-red' : 'text-green'}`}>{tank.waterDipMm > 0 ? `${tank.waterDipMm} mm — WATER!` : '0 mm (clear)'}</strong></div>
+                  <div className="tank-stat-item"><span className="stat-label">Nozzles</span><strong className="stat-val">{attached} • last dip {tank.lastUpdated || 'never'}</strong></div>
                 </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Dip Log Table */}
-      <div className="table-surface">
-        <div className="table-surface-header">
-          <div>
-            <h3 className="surface-heading">Historical Tank Dip Records</h3>
-            <p className="surface-sub">Comparison of theoretical book stock vs measured physical stick readings</p>
-          </div>
+            )
+          })}
         </div>
+      )}
 
+      <SectionCard title="Historical Tank Dip Records" subtitle="Comparison of book stock and measured stick readings — newest first">
         <div className="table-responsive">
           <table className="clean-table">
             <thead>
-              <tr>
-                <th>Date & Tank</th>
-                <th>Fuel</th>
-                <th>Morning Dip</th>
-                <th>Decanted (L)</th>
-                <th>Sales (L)</th>
-                <th>Expected Book Stock</th>
-                <th>Closing Physical Dip</th>
-                <th>Variance (Gain/Loss)</th>
-                <th>Water Dip</th>
-                <th>Inspector</th>
-              </tr>
+              <tr><th>Date & tank</th><th>Fuel</th><th>Morning dip</th><th>Decanted</th><th>Sales</th><th>Book stock</th><th>Closing dip</th><th>Variance</th><th>Water</th><th>Inspector</th>{isManager && <th />}</tr>
             </thead>
             <tbody>
-              {tankDips.map((d) => (
+              {tankDips.length === 0 ? <EmptyRow colSpan={isManager ? 11 : 10}>No dip records yet.</EmptyRow> : tankDips.map((d) => (
                 <tr key={d.id}>
+                  <td><strong>Tank #{d.tankNo}</strong><div className="text-muted text-xs">{formatDate(d.date)}</div></td>
+                  <td><span className="fuel-pill">{d.fuelType}</span></td>
+                  <td><strong>{d.morningDipMm} mm</strong><div className="text-muted text-xs">{num(d.morningLiters)} L</div></td>
+                  <td>{d.decantedLiters > 0 ? `+${num(d.decantedLiters)} L` : '—'}</td>
+                  <td>-{num(d.dispensedLiters)} L</td>
+                  <td>{num(d.bookStockLiters)} L</td>
+                  <td><strong>{d.closingDipMm} mm</strong><div className="text-muted text-xs">{num(d.closingPhysicalLiters)} L</div></td>
                   <td>
-                    <strong>Tank #{d.tankNo}</strong>
-                    <div className="text-muted text-xs">{d.date}</div>
+                    {d.varianceLiters < 0 ? <span className="badge badge-danger">Loss: {Math.abs(d.varianceLiters)} L</span>
+                      : d.varianceLiters > 0 ? <span className="badge badge-success">Gain: +{d.varianceLiters} L</span>
+                      : <span className="badge badge-neutral">0 L (exact)</span>}
                   </td>
-                  <td>
-                    <span className="fuel-pill">{d.fuelType}</span>
-                  </td>
-                  <td>
-                    <strong>{d.morningDipMm} mm</strong>
-                    <div className="text-muted text-xs">{d.morningLiters.toLocaleString()} L</div>
-                  </td>
-                  <td>{d.decantedLiters > 0 ? `+${d.decantedLiters.toLocaleString()} L` : '—'}</td>
-                  <td>-{d.dispensedLiters.toLocaleString()} L</td>
-                  <td>{d.bookStockLiters.toLocaleString()} L</td>
-                  <td>
-                    <strong>{d.closingDipMm} mm</strong>
-                    <div className="text-muted text-xs">{d.closingPhysicalLiters.toLocaleString()} L</div>
-                  </td>
-                  <td>
-                    {d.varianceLiters < 0 ? (
-                      <span className="badge badge-danger">Loss: {Math.abs(d.varianceLiters)} L</span>
-                    ) : d.varianceLiters > 0 ? (
-                      <span className="badge badge-success">Gain: +{d.varianceLiters} L</span>
-                    ) : (
-                      <span className="badge badge-neutral">0 L (Exact)</span>
-                    )}
-                  </td>
-                  <td>
-                    <span className="text-green font-bold">{d.waterDipMm} mm</span>
-                  </td>
+                  <td><span className={d.waterDipMm > 0 ? 'text-red font-bold' : 'text-green font-bold'}>{d.waterDipMm} mm</span></td>
                   <td>{d.inspector}</td>
+                  {isManager && <td><RowActions><IconButton label="Delete dip record" tone="danger" onClick={() => void removeDip(d)}><TrashIcon size={14} /></IconButton></RowActions></td>}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </SectionCard>
 
-      {/* Zero-Scroll Compact Add Dip Modal */}
-      {modalOpen && (
-        <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-          <div className="modal-container compact-zero-scroll" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <h3 className="modal-heading">Record Tank Physical Dip (mm)</h3>
-                <span className="modal-sub">
-                  Calibrate morning dip, sales, decanting and calculate stock variance
-                </span>
-              </div>
-              <button className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                <XIcon size={18} />
-              </button>
-            </div>
+      {dipFor !== null && <DipModal tankId={dipFor} onClose={() => setDipFor(null)} />}
+      {tankForm && <TankModal tank={tankForm.tank} onClose={() => setTankForm(null)} />}
 
-            <form onSubmit={handleSaveDip} className="modal-form-compact">
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Select Underground Tank</label>
-                  <select
-                    className="form-input"
-                    value={selectedTankId}
-                    onChange={(e) => {
-                      const t = tanks.find((tk) => tk.id === e.target.value)
-                      if (t) {
-                        setSelectedTankId(t.id)
-                        setMorningDipMm(t.currentDipMm)
-                        setMorningLiters(t.currentLiters)
-                        setClosingDipMm(t.currentDipMm)
-                        setClosingPhysicalLiters(t.currentLiters)
-                      }
-                    }}
-                  >
-                    {tanks.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        Tank #{t.tankNo} — {t.fuelType} (Capacity: {t.capacityLiters.toLocaleString()} L)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Inspecting Officer</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={inspector}
-                    onChange={(e) => setInspector(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Morning Dip Stick (mm)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={morningDipMm}
-                    onChange={(e) => setMorningDipMm(Number(e.target.value))}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Morning Equivalent Volume (L)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={morningLiters}
-                    onChange={(e) => setMorningLiters(Number(e.target.value))}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-grid-2">
-                <div className="form-group">
-                  <label className="form-label">Decanted from OMC Bowser (+ L)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={decantedLiters}
-                    onChange={(e) => setDecantedLiters(Number(e.target.value))}
-                  />
-                  <small className="form-help">Enter 0 if no fuel tanker arrived</small>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Dispensed via Nozzles (- L)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={dispensedLiters}
-                    onChange={(e) => setDispensedLiters(Number(e.target.value))}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-grid-3">
-                <div className="form-group">
-                  <label className="form-label font-bold">Closing Dip (mm)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={closingDipMm}
-                    onChange={(e) => setClosingDipMm(Number(e.target.value))}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label font-bold text-gold">Physical Volume (L)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={closingPhysicalLiters}
-                    onChange={(e) => setClosingPhysicalLiters(Number(e.target.value))}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Water Paste (mm)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={waterDipMm}
-                    onChange={(e) => setWaterDipMm(Number(e.target.value))}
-                  />
-                  <small className="form-help">0 mm = Clear (Safe)</small>
-                </div>
-              </div>
-
-              {/* Inline Calculation Strip */}
-              <div className="calc-preview-inline-strip">
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Book Stock:</span>
-                  <span className="calc-pill-val">{bookStockLiters.toLocaleString()} L</span>
-                </div>
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Physical Dip:</span>
-                  <span className="calc-pill-val text-gold">{closingPhysicalLiters.toLocaleString()} L</span>
-                </div>
-                <div className="calc-pill-item">
-                  <span className="calc-pill-label">Dip Variance:</span>
-                  <span
-                    className={`calc-pill-val ${
-                      varianceLiters < 0 ? 'text-red' : varianceLiters > 0 ? 'text-green' : ''
-                    }`}
-                  >
-                    {varianceLiters < 0
-                      ? `Loss: ${Math.abs(varianceLiters)} L`
-                      : varianceLiters > 0
-                      ? `Gain: +${varianceLiters} L`
-                      : '0 L (Balanced)'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="modal-actions-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  <CheckCircleIcon size={16} />
-                  <span>Save Dip Audit</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Print Audit Sheet */}
-      <PrintReceiptModal
-        isOpen={printOpen}
-        onClose={() => setPrintOpen(false)}
-        title="Daily Tank Dip & Stock Calibration Audit"
-        stationName={siteInfo.name}
-        stationLocation={siteInfo.location}
-        stationPhone={siteInfo.phone}
-      >
+      <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Daily Tank Dip & Stock Calibration Audit" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
         <table className="slip-table">
-          <thead>
-            <tr>
-              <th>Tank</th>
-              <th>Fuel</th>
-              <th>Morning (mm)</th>
-              <th>Decanted</th>
-              <th>Sales</th>
-              <th>Book Stock</th>
-              <th>Closing (mm)</th>
-              <th>Variance</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Date</th><th>Tank</th><th>Fuel</th><th>Morning (mm)</th><th>Decanted</th><th>Sales</th><th>Book</th><th>Closing (mm)</th><th>Physical</th><th>Variance</th></tr></thead>
           <tbody>
             {tankDips.map((d) => (
-              <tr key={d.id}>
-                <td>Tank #{d.tankNo}</td>
-                <td>{d.fuelType}</td>
-                <td>{d.morningDipMm}mm</td>
-                <td>{d.decantedLiters}L</td>
-                <td>{d.dispensedLiters}L</td>
-                <td>{d.bookStockLiters}L</td>
-                <td>{d.closingDipMm}mm</td>
-                <td>{d.varianceLiters}L</td>
-              </tr>
+              <tr key={d.id}><td>{formatDate(d.date)}</td><td>#{d.tankNo}</td><td>{d.fuelType}</td><td>{d.morningDipMm}</td><td>{d.decantedLiters}L</td><td>{d.dispensedLiters}L</td><td>{d.bookStockLiters}L</td><td>{d.closingDipMm}</td><td>{d.closingPhysicalLiters}L</td><td>{d.varianceLiters}L</td></tr>
             ))}
           </tbody>
         </table>
-
         <div className="receipt-divider" />
-        <div className="slip-signatures">
-          <div>
-            <div className="sig-line" />
-            <span>Dip Inspector</span>
-          </div>
-          <div>
-            <div className="sig-line" />
-            <span>Station Manager</span>
-          </div>
-        </div>
+        <div className="slip-signatures"><div><div className="sig-line" /><span>Dip inspector</span></div><div><div className="sig-line" /><span>Station manager</span></div></div>
       </PrintReceiptModal>
     </div>
   )
