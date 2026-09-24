@@ -56,3 +56,7 @@ export type Result<T = void> =
 export const ok = <T>(value: T): Result<T> => ({ ok: true, value })
 export const okVoid = (): Result<void> => ({ ok: true, value: undefined })
 export const fail = (error: string, code?: string): Result<never> => ({ ok: false, error, code })
+
+/** Shown when an edit is refused because someone else saved the same record while the window was open. */
+export const STALE_MESSAGE =
+  'This record was changed by someone else while you had it open. Nothing was saved. Close this window, open the record again to see their change, then redo yours.'

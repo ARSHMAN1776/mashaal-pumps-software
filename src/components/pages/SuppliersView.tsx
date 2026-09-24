@@ -12,6 +12,7 @@ import { useSubmit } from '../common/useSubmit'
 import { CalcStrip, EmptyRow, Field, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard, Tabs } from '../common/kit'
 
 const SupplierModal: React.FC<{ supplier?: Supplier; onClose: () => void }> = ({ supplier, onClose }) => {
+  const [version] = useState(supplier?.updatedAt) // the record's version when this window was opened
   const { act } = useApp()
   const toast = useToast()
   const [name, setName] = useState(supplier?.name ?? '')
@@ -25,7 +26,7 @@ const SupplierModal: React.FC<{ supplier?: Supplier; onClose: () => void }> = ({
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const input = { name, company, category, phone, openingBalance: Number(opening) }
-    if (supplier) void run(() => act.updateSupplier(supplier.id, { ...input, isActive: active }), () => { toast.success('Supplier updated.'); onClose() })
+    if (supplier) void run(() => act.updateSupplier(supplier.id, { ...input, isActive: active, version }), () => { toast.success('Supplier updated.'); onClose() })
     else void run(() => act.addSupplier(input), (s) => { toast.success(`Added ${s.name}.`); onClose() })
   }
 

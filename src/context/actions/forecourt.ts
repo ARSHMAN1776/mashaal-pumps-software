@@ -8,7 +8,7 @@ import { newId } from '../../lib/ids'
 import { round2 } from '../../lib/money'
 import { todayISO } from '../../lib/dates'
 import {
-  EPS, auditOp, checkDate, clean, fmt, guard, isNonNegative, isPositive, money, needManager, run, type ActionCtx,
+  EPS, auditOp, checkDate, checkVersion, clean, fmt, guard, isNonNegative, isPositive, money, needManager, run, type ActionCtx,
 } from './core'
 
 // ===========================================================================
@@ -21,6 +21,7 @@ export interface TankInput {
   minReserveLiters: number
   initialLiters: number
   initialDipMm: number
+  version?: string
 }
 
 function validateTank(c: ActionCtx, i: TankInput, selfId?: string): Result<never> | null {
@@ -62,6 +63,8 @@ export function updateTank(c: ActionCtx, id: string, i: TankInput): Promise<Resu
     if (denied) return denied
     const tank = c.raw.tanks.find((t) => t.id === id)
     if (!tank) return fail('Tank not found.')
+    const stale = checkVersion(tank, i.version)
+    if (stale) return stale
     const bad = validateTank(c, i, id)
     if (bad) return bad
     if (i.fuelType !== tank.fuelType) {
@@ -72,7 +75,7 @@ export function updateTank(c: ActionCtx, id: string, i: TankInput): Promise<Resu
     const current = c.data.tanks.find((t) => t.id === id)?.currentLiters ?? 0
     if (i.capacityLiters < current) return fail(`Capacity cannot be lower than the current stock (${Math.round(current).toLocaleString()} L).`)
     await c.commit([
-      op.update('tanks', { ...tank, ...i }),
+      op.update('tanks', { ...tank, ...i }, i.version),
       auditOp(c, 'tank.edit', 'tank', id, `Edited Tank #${i.tankNo}`, { before: pickTank(tank), after: i }),
     ])
     return ok(undefined)
@@ -109,6 +112,7 @@ export interface NozzleInput {
   initialMeter: number
   testingLiters: number
   assignedStaff: string
+  version?: string
 }
 
 function validateNozzle(c: ActionCtx, i: NozzleInput, selfId?: string): Result<never> | null {
@@ -150,6 +154,8 @@ export function updateNozzle(c: ActionCtx, id: string, i: Omit<NozzleInput, 'ini
     if (denied) return denied
     const nozzle = c.raw.nozzles.find((n) => n.id === id)
     if (!nozzle) return fail('Nozzle not found.')
+    const stale = checkVersion(nozzle, i.version)
+    if (stale) return stale
     const bad = validateNozzle(c, { ...i, initialMeter: nozzle.initialMeter }, id)
     if (bad) return bad
     if (i.tankId !== nozzle.tankId && c.raw.fuelSales.some((s) => s.nozzleId === id)) {
@@ -160,7 +166,7 @@ export function updateNozzle(c: ActionCtx, id: string, i: Omit<NozzleInput, 'ini
       }
     }
     await c.commit([
-      op.update('nozzles', { ...nozzle, ...i, assignedStaff: clean(i.assignedStaff) }),
+      op.update('nozzles', { ...nozzle, ...i, assignedStaff: clean(i.assignedStaff) }, i.version),
       auditOp(c, 'nozzle.edit', 'nozzle', id, `Edited Dispenser ${i.dispenserNo} • Nozzle ${i.nozzleNo}`),
     ])
     return ok(undefined)

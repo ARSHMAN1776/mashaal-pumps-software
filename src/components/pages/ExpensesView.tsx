@@ -14,6 +14,7 @@ import { useSubmit } from '../common/useSubmit'
 import { CalcStrip, EmptyRow, Field, FilterBar, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
 
 const ExpenseModal: React.FC<{ expense?: ExpenseRecord; onClose: () => void }> = ({ expense, onClose }) => {
+  const [version] = useState(expense?.updatedAt) // the record's version when this window was opened
   const { activeSiteData, act, currentUser } = useApp()
   const toast = useToast()
   const isCashier = currentUser?.role === 'cashier'
@@ -33,7 +34,7 @@ const ExpenseModal: React.FC<{ expense?: ExpenseRecord; onClose: () => void }> =
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const input = { category, payee, description, amount: Number(amount), paymentMode: mode, bankAccountId: mode === 'Bank' ? bankId : '', date, voucherNo: voucher }
-    if (expense) void run((ack) => act.updateExpense(expense.id, { ...input, acknowledge: ack }), () => { toast.success('Expense updated.'); onClose() })
+    if (expense) void run((ack) => act.updateExpense(expense.id, { ...input, acknowledge: ack, version }), () => { toast.success('Expense updated.'); onClose() })
     else void run((ack) => act.addExpense({ ...input, acknowledge: ack }), (x) => { toast.success(`Voucher ${x.voucherNo} saved — ${rs(x.amount)}${x.paymentMode === 'Cash' ? ' (deducted from the safe)' : ''}`); onClose() })
   }
 

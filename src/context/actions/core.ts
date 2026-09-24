@@ -1,7 +1,7 @@
 import type {
   BankTxType, DaybookCategory, SourceType, StationData, User, UserRole,
 } from '../../types'
-import { friendlyError, fail, type Result } from '../../data/errors'
+import { friendlyError, fail, STALE_MESSAGE, type Result } from '../../data/errors'
 import { op, type Op } from '../../data/ops'
 import type { OpResult, RawStation } from '../../data/raw'
 import type { DocKind } from '../../data/backend'
@@ -64,6 +64,27 @@ export const money = (n: unknown): number => {
 export const isPositive = (n: number) => Number.isFinite(n) && n > 0
 export const isNonNegative = (n: number) => Number.isFinite(n) && n >= 0
 export const clean = (s: unknown) => String(s ?? '').trim()
+
+/**
+ * An edit made on a screen that was opened before someone else saved the same record is refused, so one person
+ * can never silently overwrite another's change. The database repeats this check when it saves (see apply_ops).
+ */
+export function checkVersion(current: { updatedAt?: string } | undefined, version?: string): Result<never> | null {
+  if (!version || !current?.updatedAt) return null
+  return sameVersion(current.updatedAt, version) ? null : fail(STALE_MESSAGE, 'CONFLICT')
+}
+
+/** Two timestamps written differently ("Z" vs "+00:00", trailing zeros) still count as the same version. */
+export function sameVersion(a: string, b: string): boolean {
+  if (a === b) return true
+  const norm = (s: string) => {
+    const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}(?::?\d{2})?)$/.exec(s.trim())
+    if (!m) return s.trim()
+    const off = m[4] === 'Z' ? '+00:00' : m[4].length === 3 ? `${m[4]}:00` : m[4].includes(':') ? m[4] : `${m[4].slice(0, 3)}:${m[4].slice(3)}`
+    return `${m[1]}T${m[2]}.${(m[3] ?? '').padEnd(6, '0')}${off}`
+  }
+  return norm(a) === norm(b)
+}
 
 /** Nobody can post a record dated in the future; cashiers may only post records dated today. */
 export function checkDate(c: ActionCtx, date: string): Result<never> | null {

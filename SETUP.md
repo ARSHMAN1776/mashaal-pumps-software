@@ -15,7 +15,8 @@
 
 When a new version adds columns, run `supabase/update.sql` once in the SQL Editor **before** you deploy the new
 app. It only adds columns, changes no data, and is safe to run again. (Latest update: cheque confirmation,
-salary deductions, supplier bills from lubricant restocks.)
+salary deductions, supplier bills from lubricant restocks, and protection against two people editing the same record
+at the same time. The app also works before you run it, but that protection only works in the database after you do.)
 
 ## 2. First login
 

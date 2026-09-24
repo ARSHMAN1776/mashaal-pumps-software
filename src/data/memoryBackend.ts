@@ -6,7 +6,7 @@
  */
 import type { AuditEntry, SiteId, StationSummary, User, UserRole } from '../types'
 import type { Backend, DocKind, ManagedUser, SaveUserInput, StationProfilePatch } from './backend'
-import { AppError } from './errors'
+import { AppError, STALE_MESSAGE } from './errors'
 import type { Op } from './ops'
 import { COLLECTION_KEYS, EMPTY_SETTINGS, emptyRaw, type OpResult, type RawStation } from './raw'
 import { LOADED_TABLES, MANAGER_ONLY_TABLES, TABLES, fromRow, settingsFromRow, type Row } from './tables'
@@ -82,12 +82,16 @@ export function createMemoryBackend(seed: MemorySeed): Backend {
     }
   }
 
+  /** a new, later timestamp (the in-memory stand-in for the database clock) */
+  function nextStamp(): string {
+    tick += 1
+    return new Date(Date.UTC(2026, 0, 1) + tick * 1000).toISOString().replace('Z', '+00:00')
+  }
+
   function stamp(table: string, row: Row): Row {
     const out: Row = { ...row }
-    if (out.created_at === undefined) {
-      tick += 1
-      out.created_at = new Date(Date.UTC(2026, 0, 1) + tick * 1000).toISOString().replace('Z', '+00:00')
-    }
+    if (out.created_at === undefined) out.created_at = nextStamp()
+    if (out.updated_at === undefined) out.updated_at = out.created_at
     if (table === 'daybook_entries' && out.seq === undefined) out.seq = ++seq
     return out
   }
@@ -196,7 +200,8 @@ export function createMemoryBackend(seed: MemorySeed): Backend {
           const row = o.row ? ({ ...o.row } as Row) : {}
           delete row.site_id
           if (table === 'station_settings') {
-            Object.assign(draftSettings, row)
+            if (o.v && draftSettings.updated_at !== undefined && draftSettings.updated_at !== o.v) throw new AppError(STALE_MESSAGE, 'P0409')
+            Object.assign(draftSettings, row, { updated_at: nextStamp() })
             out.push({ t: table, a: 'upsert', row: { ...draftSettings } })
             continue
           }
@@ -224,7 +229,7 @@ export function createMemoryBackend(seed: MemorySeed): Backend {
               break
             }
             case 'upsert': {
-              const r = i >= 0 ? { ...list[i], ...row } : stamp(table, row)
+              const r = i >= 0 ? { ...list[i], ...row, updated_at: nextStamp() } : stamp(table, row)
               checkUnique(draft, table, r)
               checkFks(draft, table, r)
               if (i >= 0) list[i] = r
@@ -234,7 +239,8 @@ export function createMemoryBackend(seed: MemorySeed): Backend {
             }
             case 'update': {
               if (i < 0) throw new AppError(`apply_ops: ${table} "${id}" was not found (or you do not have permission to change it)`)
-              const r = { ...list[i], ...row }
+              if (o.v && list[i].updated_at !== o.v) throw new AppError(STALE_MESSAGE, 'P0409')
+              const r = { ...list[i], ...row, updated_at: nextStamp() }
               checkUnique(draft, table, r)
               checkFks(draft, table, r)
               list[i] = r

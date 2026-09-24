@@ -19,6 +19,7 @@ const rsn = (n: number) => `Rs ${Math.round(n).toLocaleString('en-US')}`
 // Register / edit customer
 // ===========================================================================
 export const CustomerFormModal: React.FC<{ customer?: Customer; onClose: () => void; onSaved?: (c: Customer | null) => void }> = ({ customer, onClose, onSaved }) => {
+  const [version] = useState(customer?.updatedAt) // the record's version when this window was opened
   const { act } = useApp()
   const toast = useToast()
   const { busy, error, run } = useSubmit()
@@ -38,7 +39,7 @@ export const CustomerFormModal: React.FC<{ customer?: Customer; onClose: () => v
       creditLimit: Number(limit), openingBalance: Number(opening), status,
     }
     if (customer) {
-      void run(() => act.updateCustomer(customer.id, input), () => { toast.success('Customer updated.'); onSaved?.(null); onClose() })
+      void run(() => act.updateCustomer(customer.id, { ...input, version }), () => { toast.success('Customer updated.'); onSaved?.(null); onClose() })
     } else {
       void run(() => act.createCustomer(input), (c) => { toast.success(`Registered ${c.businessName}.`); onSaved?.(c); onClose() })
     }
@@ -85,6 +86,7 @@ export const CustomerFormModal: React.FC<{ customer?: Customer; onClose: () => v
 // Credit fuel slip (DEBIT) — issue or edit
 // ===========================================================================
 export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; onClose: () => void; onSaved?: (s: CreditSaleSlip) => void }> = ({ customerId, slip, onClose, onSaved }) => {
+  const [version] = useState(slip?.updatedAt) // the record's version when this window was opened
   const { activeSiteData, act, currentUser } = useApp()
   const toast = useToast()
   const { busy, error, run } = useSubmit()
@@ -122,7 +124,7 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
   const submit = (sendWhatsApp: boolean) => {
     if (slip) {
       void run(
-        () => act.updateSlip(slip.id, { vehicleNo: vehicle, driverName: driver, fuelType: fuel, liters: l, date, rate: Number(rateText) }),
+        () => act.updateSlip(slip.id, { vehicleNo: vehicle, driverName: driver, fuelType: fuel, liters: l, date, rate: Number(rateText), version }),
         () => { toast.success(`Slip ${slip.slipNo} updated.`); onClose() },
       )
       return
@@ -208,6 +210,7 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
 // Recovery (CREDIT) — record or edit
 // ===========================================================================
 export const RecoveryModal: React.FC<{ customerId?: string; recovery?: CustomerRecovery; onClose: () => void; onSaved?: (r: CustomerRecovery, print: boolean) => void }> = ({ customerId, recovery, onClose, onSaved }) => {
+  const [version] = useState(recovery?.updatedAt) // the record's version when this window was opened
   const { activeSiteData, act, currentUser } = useApp()
   const toast = useToast()
   const { busy, error, run } = useSubmit()
@@ -231,7 +234,7 @@ export const RecoveryModal: React.FC<{ customerId?: string; recovery?: CustomerR
   const submit = (print: boolean) => {
     if (recovery) {
       void run(
-        (ack) => act.updateRecovery(recovery.id, { amount: amt, method, referenceNo: ref, date, bankAccountId: bankId, acknowledge: ack }),
+        (ack) => act.updateRecovery(recovery.id, { amount: amt, method, referenceNo: ref, date, bankAccountId: bankId, acknowledge: ack, version }),
         () => { toast.success(`Receipt ${recovery.receiptNo} updated.`); onClose() },
       )
       return
@@ -306,6 +309,7 @@ export const RecoveryModal: React.FC<{ customerId?: string; recovery?: CustomerR
 // Debit / credit note
 // ===========================================================================
 export const AdjustmentModal: React.FC<{ customerId: string; adjustment?: CustomerAdjustment; onClose: () => void }> = ({ customerId, adjustment, onClose }) => {
+  const [version] = useState(adjustment?.updatedAt) // the record's version when this window was opened
   const { activeSiteData, act } = useApp()
   const toast = useToast()
   const { busy, error, run } = useSubmit()
@@ -319,7 +323,7 @@ export const AdjustmentModal: React.FC<{ customerId: string; adjustment?: Custom
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     if (adjustment) {
-      void run(() => act.updateAdjustment(adjustment.id, { kind, amount: Number(amount), reason, referenceNo: ref, date }), () => { toast.success('Adjustment updated.'); onClose() })
+      void run(() => act.updateAdjustment(adjustment.id, { kind, amount: Number(amount), reason, referenceNo: ref, date, version }), () => { toast.success('Adjustment updated.'); onClose() })
     } else {
       void run(() => act.addAdjustment({ customerId, kind, amount: Number(amount), reason, referenceNo: ref, date }), () => { toast.success(`${kind} note posted.`); onClose() })
     }

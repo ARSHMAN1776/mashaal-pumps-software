@@ -7,7 +7,7 @@ import { op, type Op } from '../../data/ops'
 import type { RawStation } from '../../data/raw'
 import { newId } from '../../lib/ids'
 import { isValidISODate, todayISO } from '../../lib/dates'
-import { auditOp, clean, fmt, isNonNegative, isPositive, money, needManager, needRole, run, type ActionCtx } from './core'
+import { auditOp, checkVersion, clean, fmt, isNonNegative, isPositive, money, needManager, needRole, run, type ActionCtx } from './core'
 
 /** The price-revision record (with the stock gain / loss of every tank) for a change from the current rates to `newRates`. */
 function buildRevision(c: ActionCtx, newRates: FuelRates, effectiveDate: string, notificationNo: string, notes: string): TariffRevisionLog {
@@ -29,10 +29,13 @@ function buildRevision(c: ActionCtx, newRates: FuelRates, effectiveDate: string,
   }
 }
 
-export function saveSettings(c: ActionCtx, s: StationSettings): Promise<Result<void>> {
+/** `version`: the settings' updatedAt when the screen was opened; the save is refused if someone saved them since. */
+export function saveSettings(c: ActionCtx, s: StationSettings, version?: string): Promise<Result<void>> {
   return run(async () => {
     const denied = needManager(c, 'change station settings')
     if (denied) return denied
+    const stale = checkVersion(c.raw.settings, version)
+    if (stale) return stale
     for (const f of FUEL_TYPES) {
       if (!isPositive(money(s.rates[f]))) return fail(`Enter a selling price for ${f}.`)
       if (!isNonNegative(money(s.margins[f]))) return fail(`The dealer margin for ${f} cannot be negative.`)
@@ -46,7 +49,7 @@ export function saveSettings(c: ActionCtx, s: StationSettings): Promise<Result<v
       ? [op.insert('tariff_revisions', buildRevision(c, s.rates, todayISO(), `MANUAL/${todayISO()}`, 'Price changed in Station Settings.'))]
       : []
     await c.commit([
-      op.settings({ ...s, stationPhone: clean(s.stationPhone), managerContact: clean(s.managerContact) }),
+      op.settings({ ...s, stationPhone: clean(s.stationPhone), managerContact: clean(s.managerContact) }, version),
       ...revision,
       auditOp(c, 'settings.save', 'settings', 'main', changedRates.length ? `Changed rates: ${changedRates.map((f) => `${f} ${old.rates[f]} → ${s.rates[f]}`).join(', ')}` : 'Saved station settings', { before: old, after: s }),
     ])

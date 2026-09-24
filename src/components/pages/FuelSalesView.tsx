@@ -135,6 +135,7 @@ const ReadingModal: React.FC<{ nozzleId: string; onClose: () => void; onSaved: (
 // Add / edit nozzle dialog
 // ===========================================================================
 const NozzleModal: React.FC<{ nozzle?: Nozzle; onClose: () => void }> = ({ nozzle, onClose }) => {
+  const [version] = useState(nozzle?.updatedAt) // the record's version when this window was opened
   const { activeSiteData, act } = useApp()
   const toast = useToast()
   const { tanks, nozzles } = activeSiteData
@@ -155,7 +156,7 @@ const NozzleModal: React.FC<{ nozzle?: Nozzle; onClose: () => void }> = ({ nozzl
     e.preventDefault()
     if (nozzle) {
       void run(
-        () => act.updateNozzle(nozzle.id, { dispenserNo: Number(dispenser), nozzleNo: Number(number), tankId, testingLiters: Number(testing), assignedStaff: staff, isActive: active }),
+        () => act.updateNozzle(nozzle.id, { dispenserNo: Number(dispenser), nozzleNo: Number(number), tankId, testingLiters: Number(testing), assignedStaff: staff, isActive: active, version }),
         () => { toast.success('Nozzle updated.'); onClose() },
       )
     } else {

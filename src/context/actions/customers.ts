@@ -22,7 +22,7 @@ import { newId } from '../../lib/ids'
 import { round2 } from '../../lib/money'
 import { todayISO } from '../../lib/dates'
 import {
-  EPS, auditOp, checkDate, clean, fmt, guard, isNonNegative, isPositive, money, needManager, run,
+  EPS, auditOp, checkDate, checkVersion, clean, fmt, guard, isNonNegative, isPositive, money, needManager, run,
   syncLinkedBankTx, syncLinkedDaybook, type ActionCtx,
 } from './core'
 
@@ -54,6 +54,8 @@ export interface CustomerInput {
   creditLimit: number
   openingBalance: number
   status: Exclude<CustomerStatus, 'Archived'>
+  /** updatedAt of the customer when the edit window was opened */
+  version?: string
 }
 
 function validateCustomer(c: ActionCtx, i: CustomerInput, selfId?: string): Result<never> | null {
@@ -96,6 +98,8 @@ export function updateCustomer(c: ActionCtx, id: string, i: CustomerInput): Prom
     if (denied) return denied
     const customer = c.raw.customers.find((x) => x.id === id)
     if (!customer) return fail('Customer not found.')
+    const stale = checkVersion(customer, i.version)
+    if (stale) return stale
     const bad = validateCustomer(c, i, id)
     if (bad) return bad
     const next: Customer = {
@@ -103,7 +107,7 @@ export function updateCustomer(c: ActionCtx, id: string, i: CustomerInput): Prom
       vehicleNumbers: i.vehicleNumbers.map(normalizePlate).filter(Boolean), creditLimit: money(i.creditLimit),
       openingBalance: round2(money(i.openingBalance)), status: i.status,
     }
-    const ops: Op[] = [op.update('customers', next)]
+    const ops: Op[] = [op.update('customers', next, i.version)]
     // names are copied onto slips/recoveries for printing; keep history readable if the business is renamed
     if (next.businessName !== customer.businessName) {
       for (const s of c.raw.creditSlips.filter((x) => x.customerId === id)) ops.push(op.update('credit_slips', { ...s, customerName: next.businessName }))
@@ -232,6 +236,7 @@ export interface SlipEdit {
   liters: number
   date: string
   rate?: number
+  version?: string
 }
 
 export function updateSlip(c: ActionCtx, id: string, i: SlipEdit): Promise<Result<void>> {
@@ -240,6 +245,8 @@ export function updateSlip(c: ActionCtx, id: string, i: SlipEdit): Promise<Resul
     if (denied) return denied
     const slip = c.raw.creditSlips.find((s) => s.id === id)
     if (!slip) return fail('Slip not found.')
+    const stale = checkVersion(slip, i.version)
+    if (stale) return stale
     const bad = checkDate(c, i.date)
     if (bad) return bad
     if (!normalizePlate(i.vehicleNo)) return fail('Enter the vehicle registration number.')
@@ -251,7 +258,7 @@ export function updateSlip(c: ActionCtx, id: string, i: SlipEdit): Promise<Resul
     if (!isPositive(rate)) return fail('The rate per liter must be more than 0.')
     const total = round2(liters * rate)
     await c.commit([
-      op.update('credit_slips', { ...slip, vehicleNo: normalizePlate(i.vehicleNo), driverName: clean(i.driverName), fuelType: i.fuelType, liters, rate, totalAmount: total, date: i.date }),
+      op.update('credit_slips', { ...slip, vehicleNo: normalizePlate(i.vehicleNo), driverName: clean(i.driverName), fuelType: i.fuelType, liters, rate, totalAmount: total, date: i.date }, i.version),
       auditOp(c, 'slip.edit', 'credit_slip', id, `Edited slip ${slip.slipNo}: ${fmt(slip.totalAmount)} → ${fmt(total)}`, {
         before: { liters: slip.liters, rate: slip.rate, total: slip.totalAmount, vehicle: slip.vehicleNo },
         after: { liters, rate, total, vehicle: normalizePlate(i.vehicleNo) },
@@ -342,6 +349,7 @@ export interface RecoveryEdit {
   date: string
   bankAccountId?: string
   acknowledge?: string[]
+  version?: string
 }
 
 export function updateRecovery(c: ActionCtx, id: string, i: RecoveryEdit): Promise<Result<void>> {
@@ -352,6 +360,8 @@ export function updateRecovery(c: ActionCtx, id: string, i: RecoveryEdit): Promi
     if (!rec) return fail('Recovery not found.')
     const customer = c.data.customers.find((x) => x.id === rec.customerId)
     if (!customer) return fail('The customer of this recovery no longer exists.')
+    const stale = checkVersion(rec, i.version)
+    if (stale) return stale
     const bad = checkDate(c, i.date)
     if (bad) return bad
     const amount = round2(money(i.amount))
@@ -364,7 +374,7 @@ export function updateRecovery(c: ActionCtx, id: string, i: RecoveryEdit): Promi
     if (bankId && !c.raw.bankAccounts.some((b) => b.id === bankId)) return fail('Choose a valid bank account.')
 
     const next: CustomerRecovery = { ...rec, amount, paymentMethod: i.method, referenceNo: clean(i.referenceNo), date: i.date, bankAccountId: bankId, bankPending: i.method !== 'Cash' && !bankId }
-    const ops: Op[] = [op.update('customer_recoveries', next)]
+    const ops: Op[] = [op.update('customer_recoveries', next, i.version)]
     ops.push(...syncLinkedDaybook(c, 'recovery', id, i.method === 'Cash' ? recoveryDaybook({ ...next, method: i.method }) : null))
     ops.push(...syncLinkedBankTx(c, 'recovery', id, bankId ? {
       bankId, date: i.date, type: 'Credit Received', amount, description: `${i.method} from ${rec.customerName} (${next.referenceNo}) — ${rec.receiptNo}`,
@@ -426,6 +436,7 @@ export interface AdjustmentInput {
   reason: string
   date?: string
   referenceNo?: string
+  version?: string
 }
 
 export function addAdjustment(c: ActionCtx, i: AdjustmentInput): Promise<Result<CustomerAdjustment>> {
@@ -458,6 +469,8 @@ export function updateAdjustment(c: ActionCtx, id: string, i: Omit<AdjustmentInp
     if (denied) return denied
     const adj = c.raw.customerAdjustments.find((a) => a.id === id)
     if (!adj) return fail('Adjustment not found.')
+    const stale = checkVersion(adj, i.version)
+    if (stale) return stale
     const amount = round2(money(i.amount))
     if (!isPositive(amount)) return fail('The amount must be more than 0.')
     if (!clean(i.reason)) return fail('Enter the reason for this adjustment.')
@@ -465,7 +478,7 @@ export function updateAdjustment(c: ActionCtx, id: string, i: Omit<AdjustmentInp
     const bad = checkDate(c, date)
     if (bad) return bad
     await c.commit([
-      op.update('customer_adjustments', { ...adj, kind: i.kind, amount, reason: clean(i.reason), date, referenceNo: clean(i.referenceNo) }),
+      op.update('customer_adjustments', { ...adj, kind: i.kind, amount, reason: clean(i.reason), date, referenceNo: clean(i.referenceNo) }, i.version),
       auditOp(c, 'adjustment.edit', 'customer_adjustment', id, `Edited ${adj.kind} note: ${fmt(adj.amount)} → ${i.kind} ${fmt(amount)}`),
     ])
     return ok(undefined)

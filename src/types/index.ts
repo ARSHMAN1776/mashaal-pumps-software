@@ -40,6 +40,8 @@ export interface SiteInfo {
 }
 
 export interface Tank {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   siteId: SiteId
   tankNo: number
@@ -57,6 +59,8 @@ export interface Tank {
 }
 
 export interface Nozzle {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   siteId: SiteId
   tankId: string
@@ -131,6 +135,8 @@ export interface TankDipRecord {
 }
 
 export interface OmcInvoice {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   invoiceNo: string
   date: string
@@ -204,6 +210,8 @@ export interface DaybookEntry {
 
 export type CustomerStatus = 'Active' | 'Hold' | 'Archived'
 export interface Customer {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   siteId: SiteId
   name: string
@@ -217,6 +225,8 @@ export interface Customer {
 }
 
 export interface CreditSaleSlip {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   slipNo: string
   date: string
@@ -234,6 +244,8 @@ export interface CreditSaleSlip {
 
 export type RecoveryMethod = 'Cash' | 'Cheque' | 'Online Transfer'
 export interface CustomerRecovery {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   receiptNo: string
   date: string
@@ -250,6 +262,8 @@ export interface CustomerRecovery {
 }
 
 export interface CustomerAdjustment {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   date: string
   customerId: string
@@ -262,6 +276,8 @@ export interface CustomerAdjustment {
 }
 
 export interface BankAccount {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   bankName: string
   accountTitle: string
@@ -314,6 +330,8 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'Municipal & Legal', 'Stationery & Cleaning', 'Misc',
 ]
 export interface ExpenseRecord {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   voucherNo: string
   date: string
@@ -331,6 +349,8 @@ export const STAFF_ROLES: StaffRole[] = ['Shift Manager', 'Head Cashier', 'Pump 
 export type StaffStatus = 'On Duty' | 'Off Duty' | 'On Leave'
 
 export interface StaffMember {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   siteId: SiteId
   name: string
@@ -374,6 +394,8 @@ export interface SalaryPayment {
 }
 
 export interface LubricantProduct {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   name: string
   brand: string
@@ -403,6 +425,8 @@ export interface LubricantMovement {
 }
 
 export interface Supplier {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   id: string
   name: string
   company: string
@@ -433,6 +457,8 @@ export interface SupplierTransaction {
 export type FuelRates = Record<FuelType, number>
 
 export interface StationSettings {
+  /** version of the record: an edit is refused if it changed since it was opened */
+  updatedAt?: string
   rates: FuelRates
   /** Dealer margin per litre (Rs) used for the estimated-profit figures. */
   margins: FuelRates

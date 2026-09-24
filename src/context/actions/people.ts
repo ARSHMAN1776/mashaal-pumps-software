@@ -14,7 +14,7 @@ import { newId } from '../../lib/ids'
 import { round2 } from '../../lib/money'
 import { monthISO, todayISO } from '../../lib/dates'
 import {
-  EPS, auditOp, checkDate, clean, fmt, guard, isNonNegative, isPositive, money, needManager, run, safeCash,
+  EPS, auditOp, checkDate, checkVersion, clean, fmt, guard, isNonNegative, isPositive, money, needManager, run, safeCash,
   syncLinkedDaybook, type ActionCtx,
 } from './core'
 
@@ -28,6 +28,7 @@ export interface StaffInput {
   dailyAdvanceLimit: number
   joiningDate: string
   status: StaffStatus
+  version?: string
 }
 
 function validateStaff(c: ActionCtx, i: StaffInput, selfId?: string): Result<never> | null {
@@ -60,10 +61,12 @@ export function updateStaff(c: ActionCtx, id: string, i: StaffInput & { isActive
     if (denied) return denied
     const s = c.raw.staff.find((x) => x.id === id)
     if (!s) return fail('Employee not found.')
+    const stale = checkVersion(s, i.version)
+    if (stale) return stale
     const bad = validateStaff(c, i, id)
     if (bad) return bad
     await c.commit([
-      op.update('staff_members', { ...s, name: clean(i.name), role: i.role, phone: clean(i.phone), monthlySalary: money(i.monthlySalary), dailyAdvanceLimit: money(i.dailyAdvanceLimit), joiningDate: i.joiningDate, status: i.status, isActive: i.isActive }),
+      op.update('staff_members', { ...s, name: clean(i.name), role: i.role, phone: clean(i.phone), monthlySalary: money(i.monthlySalary), dailyAdvanceLimit: money(i.dailyAdvanceLimit), joiningDate: i.joiningDate, status: i.status, isActive: i.isActive }, i.version),
       auditOp(c, 'staff.edit', 'staff', id, `Edited employee ${i.name}`, { before: { salary: s.monthlySalary, role: s.role }, after: { salary: i.monthlySalary, role: i.role } }),
     ])
     return ok(undefined)

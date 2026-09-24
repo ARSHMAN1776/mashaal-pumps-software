@@ -36,13 +36,14 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 
 -- ---- apply_ops: run several writes as ONE transaction --------------------
--- Ops: [{ "t": "<logical table>", "a": "insert|insert_ignore|upsert|update|delete|purge", "row": {...} }]
+-- Ops: [{ "t": "<logical table>", "a": "insert|insert_ignore|upsert|update|delete|purge", "row": {...}, "v": "<updated_at the editor saw (update only)>" }]
 --   * The logical table name (e.g. "customers") is routed to THIS station's own
 --     table (e.g. s01_customers for SITE-01). A call for one station can never
 --     touch another station's tables.
 --   * Only the tables in v_allowed can be written, and Row Level Security is
 --     still enforced because the function is SECURITY INVOKER.
 --   * Returns the resulting rows (with server-assigned seq / timestamps).
+-- APPLY_OPS-BEGIN
 create or replace function public.apply_ops(p_site text, p_ops jsonb)
 returns jsonb
 language plpgsql
@@ -68,6 +69,8 @@ declare
   v_cols   text;
   v_set    text;
   v_res    jsonb;
+  v_ver    text;
+  v_exists boolean;
   v_out    jsonb := '[]'::jsonb;
 begin
   if p_site is null or p_site = '' then
@@ -133,11 +136,27 @@ begin
       if v_set is null then
         continue;
       end if;
-      execute format(
-        'update public.%1$I as t set (%2$s) = (select %2$s from jsonb_populate_record(null::public.%1$I, $1)) '
-        'where t.id = $2 returning to_jsonb(t.*)',
-        v_full, v_set) into v_res using v_row, v_id;
+      -- optional edit check: "v" is the version (updated_at) of the record as the person saw it when they opened it
+      v_ver := nullif(v_op ->> 'v', '');
+      if v_ver is null then
+        execute format(
+          'update public.%1$I as t set (%2$s) = (select %2$s from jsonb_populate_record(null::public.%1$I, $1)) '
+          'where t.id = $2 returning to_jsonb(t.*)',
+          v_full, v_set) into v_res using v_row, v_id;
+      else
+        execute format(
+          'update public.%1$I as t set (%2$s) = (select %2$s from jsonb_populate_record(null::public.%1$I, $1)) '
+          'where t.id = $2 and t.updated_at = $3::timestamptz returning to_jsonb(t.*)',
+          v_full, v_set) into v_res using v_row, v_id, v_ver;
+      end if;
       if v_res is null then
+        if v_ver is not null then
+          execute format('select exists (select 1 from public.%I where id = $1)', v_full) into v_exists using v_id;
+          if v_exists then
+            raise exception using errcode = 'P0409',
+              message = 'This record was changed by someone else while you had it open. Nothing was saved. Close this window, open the record again to see their change, then redo yours.';
+          end if;
+        end if;
         raise exception 'apply_ops: % "%" was not found (or you do not have permission to change it)', v_t, v_id;
       end if;
       v_out := v_out || jsonb_build_array(jsonb_build_object('t', v_t, 'a', 'upsert', 'row', v_res));
@@ -160,6 +179,7 @@ begin
 
   return v_out;
 end $$;
+-- APPLY_OPS-END
 
 -- ---- next_doc_no: race-free running numbers (per station) ----------------
 create or replace function public.next_doc_no(p_site text, p_kind text, p_start bigint default 1000)

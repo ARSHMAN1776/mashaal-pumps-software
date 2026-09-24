@@ -648,4 +648,106 @@ describe.each(KINDS)('%s backend', (kind) => {
     })
   })
 
+
+  describe('two people editing the same record', () => {
+    // A = the station manager, B = the owner, both on SITE-01 and on the same database
+    const both = async () => {
+      const a = await openStation(S1, 'naveed.akhtar')
+      const b = await openStation(S1, 'owner', a.be)
+      return { a, b }
+    }
+    const custInput = (name: string) => ({ businessName: name, name: 'Prop', phone: '0300-1', vehicleNumbers: [], creditLimit: 500000, openingBalance: 0, status: 'Active' as const })
+    const cust = (st: Awaited<ReturnType<typeof both>>['a']) => st.data.customers.find((c) => c.id === 'CUST-01')!
+
+    it('the second save is refused, nothing is overwritten, and it works again after reopening', async () => {
+      const { a, b } = await both()
+      // give the record a version, then both people "open" it
+      must(await a.act.updateCustomer('CUST-01', custInput('Al-Hafiz Goods Transport RYK')))
+      await b.reload()
+      const opened = cust(a).updatedAt
+      expect(opened).toBeTruthy()
+      expect(cust(b).updatedAt).toBe(opened)
+      // B saves first
+      must(await b.act.updateCustomer('CUST-01', { ...custInput('Al-Hafiz Transport (B)'), version: cust(b).updatedAt }))
+      // A saves with the version A saw: refused
+      const r = failed(await a.act.updateCustomer('CUST-01', { ...custInput('Al-Hafiz Transport (A)'), version: opened }))
+      expect(r.error).toMatch(/changed by someone else/)
+      await a.reload()
+      expect(cust(a).businessName).toBe('Al-Hafiz Transport (B)') // B's change is still there
+      // A opens it again (fresh version) and can save
+      must(await a.act.updateCustomer('CUST-01', { ...custInput('Al-Hafiz Transport (A)'), version: cust(a).updatedAt }))
+      await b.reload()
+      expect(cust(b).businessName).toBe('Al-Hafiz Transport (A)')
+    })
+
+    it('a screen that already knows the newer version refuses at once, without asking the database', async () => {
+      const { a, b } = await both()
+      must(await a.act.updateCustomer('CUST-01', custInput('Al-Hafiz Goods Transport RYK')))
+      const opened = cust(a).updatedAt
+      must(await a.act.updateCustomer('CUST-01', { ...custInput('Renamed'), version: opened }))
+      const r = failed(await a.act.updateCustomer('CUST-01', { ...custInput('Again'), version: opened })) // the version from before A's own save
+      expect(r.code).toBe('CONFLICT')
+      expect(b).toBeTruthy()
+    })
+
+    it('edits without a version behave as before (last save wins), and different records never clash', async () => {
+      const { a, b } = await both()
+      must(await a.act.updateCustomer('CUST-01', custInput('First')))
+      must(await b.act.updateCustomer('CUST-01', custInput('Second')))
+      await a.reload()
+      expect(cust(a).businessName).toBe('Second')
+      // B edits customer CUST-01 while A edits the OTHER customer: both fine
+      const other = a.data.customers.find((c) => c.id !== 'CUST-01')
+      if (other) {
+        must(await a.act.updateCustomer(other.id, { ...custInput(other.businessName), phone: '0300-9', version: other.updatedAt }))
+        must(await b.act.updateCustomer('CUST-01', { ...custInput('Third'), version: cust(b).updatedAt || undefined }))
+      }
+    })
+
+    it('a refused save changes nothing at all', async () => {
+      const { a, b } = await both()
+      must(await a.act.updateCustomer('CUST-01', custInput('Al-Hafiz Goods Transport RYK')))
+      const opened = cust(a).updatedAt
+      await b.reload()
+      must(await b.act.updateCustomer('CUST-01', { ...custInput('B-name'), version: cust(b).updatedAt }))
+      const slipsBefore = JSON.stringify(a.raw.creditSlips)
+      failed(await a.act.updateCustomer('CUST-01', { ...custInput('A-name'), version: opened })) // a rename would also rename the slips
+      await a.reload()
+      expect(cust(a).businessName).toBe('B-name')
+      expect(a.raw.creditSlips.every((s) => s.customerName === 'B-name')).toBe(true)
+      expect(slipsBefore).toBeTruthy()
+    })
+
+    it('station settings: the second person to save is refused', async () => {
+      const { a, b } = await both()
+      must(await a.act.saveSettings({ ...a.data.settings, cashDifferenceAlertLimit: 1000 }))
+      const opened = a.data.settings.updatedAt
+      expect(opened).toBeTruthy()
+      await b.reload()
+      must(await b.act.saveSettings({ ...b.data.settings, cashDifferenceAlertLimit: 2000 }, b.data.settings.updatedAt))
+      expect(failed(await a.act.saveSettings({ ...a.data.settings, cashDifferenceAlertLimit: 3000 }, opened)).error).toMatch(/changed by someone else/)
+      await a.reload()
+      expect(a.data.settings.cashDifferenceAlertLimit).toBe(2000)
+      must(await a.act.saveSettings({ ...a.data.settings, cashDifferenceAlertLimit: 3000 }, a.data.settings.updatedAt))
+    })
+
+    it('other record types are protected too (expense, staff, supplier)', async () => {
+      const { a, b } = await both()
+      const exp = must(await a.act.addExpense({ category: 'Staff Meals & Tea', payee: 'x', description: 'tea', amount: 100, paymentMode: 'Cash' }))
+      const expInput = (amount: number) => ({ category: 'Staff Meals & Tea' as const, payee: 'x', description: 'tea', amount, paymentMode: 'Cash' as const })
+      await b.reload()
+      const seenByA = a.data.expenses.find((e) => e.id === exp.id)!.updatedAt
+      must(await b.act.updateExpense(exp.id, { ...expInput(200), version: b.data.expenses.find((e) => e.id === exp.id)!.updatedAt }))
+      expect(failed(await a.act.updateExpense(exp.id, { ...expInput(300), version: seenByA })).error).toMatch(/changed by someone else/)
+
+      const s0 = a.data.suppliers[0]
+      const sInput = (phone: string) => ({ name: s0.name, company: s0.company, category: s0.category, phone, openingBalance: s0.openingBalance, isActive: true })
+      must(await a.act.updateSupplier(s0.id, sInput('1')))
+      const seenA = a.data.suppliers[0].updatedAt
+      await b.reload()
+      must(await b.act.updateSupplier(s0.id, { ...sInput('2'), version: b.data.suppliers[0].updatedAt }))
+      expect(failed(await a.act.updateSupplier(s0.id, { ...sInput('3'), version: seenA })).error).toMatch(/changed by someone else/)
+    })
+  })
+
 })

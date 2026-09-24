@@ -16,7 +16,7 @@ import { newId } from '../../lib/ids'
 import { round2 } from '../../lib/money'
 import { todayISO } from '../../lib/dates'
 import {
-  EPS, auditOp, bankBalance, bankTxInsertOp, checkDate, clean, daybookInsertOp, fmt, guard, isManager, isNonNegative,
+  EPS, auditOp, bankBalance, bankTxInsertOp, checkDate, checkVersion, clean, daybookInsertOp, fmt, guard, isManager, isNonNegative,
   isPositive, money, needManager, needRole, run, safeCash, syncLinkedBankTx, syncLinkedDaybook, type ActionCtx,
 } from './core'
 
@@ -91,6 +91,8 @@ export interface ExpenseInput {
   date?: string
   voucherNo?: string
   acknowledge?: string[]
+  /** updatedAt of the record when the edit window was opened */
+  version?: string
 }
 
 const expenseDaybook = (e: { category: string; description: string; amount: number; date: string; voucherNo: string }) => ({
@@ -151,6 +153,8 @@ export function updateExpense(c: ActionCtx, id: string, i: ExpenseInput): Promis
     if (denied) return denied
     const old = c.raw.expenses.find((e) => e.id === id)
     if (!old) return fail('Expense not found.')
+    const stale = checkVersion(old, i.version)
+    if (stale) return stale
     const date = i.date || old.date
     const badDate = checkDate(c, date)
     if (badDate) return badDate
@@ -163,7 +167,7 @@ export function updateExpense(c: ActionCtx, id: string, i: ExpenseInput): Promis
       ...old, voucherNo, date, category: i.category, description: clean(i.description), payee: clean(i.payee), amount,
       paymentMode: i.paymentMode, bankAccountId: i.paymentMode === 'Bank' ? clean(i.bankAccountId) : '',
     }
-    const ops: Op[] = [op.update('expenses', next)]
+    const ops: Op[] = [op.update('expenses', next, i.version)]
     ops.push(...syncLinkedDaybook(c, 'expense', id, next.paymentMode === 'Cash' ? expenseDaybook(next) : null))
     ops.push(...syncLinkedBankTx(c, 'expense', id, next.paymentMode === 'Bank' ? expenseBankTx(next) : null))
     ops.push(auditOp(c, 'expense.edit', 'expense', id, `Edited voucher ${old.voucherNo}: ${fmt(old.amount)} → ${fmt(amount)}`, {
@@ -199,6 +203,7 @@ export interface BankAccountInput {
   accountNumber: string
   branch: string
   openingBalance: number
+  version?: string
 }
 
 function validateBankAccount(c: ActionCtx, i: BankAccountInput, selfId?: string): Result<never> | null {
@@ -232,13 +237,15 @@ export function updateBankAccount(c: ActionCtx, id: string, i: BankAccountInput 
     if (denied) return denied
     const acc = c.raw.bankAccounts.find((b) => b.id === id)
     if (!acc) return fail('Bank account not found.')
+    const stale = checkVersion(acc, i.version)
+    if (stale) return stale
     const bad = validateBankAccount(c, i, id)
     if (bad) return bad
     await c.commit([
       op.update('bank_accounts', {
         ...acc, bankName: clean(i.bankName), accountTitle: clean(i.accountTitle), accountNumber: clean(i.accountNumber),
         branch: clean(i.branch), openingBalance: round2(money(i.openingBalance)), isActive: i.isActive,
-      }),
+      }, i.version),
       auditOp(c, 'bank.edit', 'bank_account', id, `Edited bank account ${i.bankName}`, { before: { opening: acc.openingBalance }, after: { opening: i.openingBalance } }),
     ])
     return ok(undefined)
@@ -390,6 +397,7 @@ export interface OmcInvoiceInput {
   decantedVolumeLiters: number
   ratePerLiter: number
   freightAmount: number
+  version?: string
 }
 
 function validateInvoice(c: ActionCtx, i: OmcInvoiceInput, selfId?: string): Result<never> | null {
@@ -433,6 +441,8 @@ export function updateOmcInvoice(c: ActionCtx, id: string, i: OmcInvoiceInput): 
     const inv = c.data.omcInvoices.find((x) => x.id === id)
     const raw = c.raw.omcInvoices.find((x) => x.id === id)
     if (!inv || !raw) return fail('Invoice not found.')
+    const stale = checkVersion(raw, i.version)
+    if (stale) return stale
     const date = i.date || inv.date
     const bad = checkDate(c, date) ?? validateInvoice(c, i, id)
     if (bad) return bad
@@ -442,7 +452,7 @@ export function updateOmcInvoice(c: ActionCtx, id: string, i: OmcInvoiceInput): 
       ...raw, invoiceNo: clean(i.invoiceNo), date, tankLorryNo: clean(i.tankLorryNo), driverName: clean(i.driverName), fuelType: i.fuelType,
       tankId: i.tankId ?? '', invoiceVolumeLiters: money(i.invoiceVolumeLiters), decantedVolumeLiters: money(i.decantedVolumeLiters),
       ratePerLiter: money(i.ratePerLiter), freightAmount: money(i.freightAmount), totalAmount: total,
-    })]
+    }, i.version)]
     if (clean(i.invoiceNo) !== raw.invoiceNo) {
       for (const p of c.raw.omcPayments.filter((x) => x.invoiceNo === raw.invoiceNo)) ops.push(op.update('omc_payments', { ...p, invoiceNo: clean(i.invoiceNo) }))
     }
@@ -541,7 +551,7 @@ export function removeOmcPayment(c: ActionCtx, id: string): Promise<Result<void>
 // ===========================================================================
 // Suppliers
 // ===========================================================================
-export interface SupplierInput { name: string; company: string; category: string; phone: string; openingBalance: number }
+export interface SupplierInput { name: string; company: string; category: string; phone: string; openingBalance: number; version?: string }
 
 function validateSupplier(c: ActionCtx, i: SupplierInput, selfId?: string): Result<never> | null {
   if (!clean(i.name)) return fail('Enter the supplier name.')
@@ -571,10 +581,12 @@ export function updateSupplier(c: ActionCtx, id: string, i: SupplierInput & { is
     if (denied) return denied
     const s = c.raw.suppliers.find((x) => x.id === id)
     if (!s) return fail('Supplier not found.')
+    const stale = checkVersion(s, i.version)
+    if (stale) return stale
     const bad = validateSupplier(c, i, id)
     if (bad) return bad
     await c.commit([
-      op.update('suppliers', { ...s, name: clean(i.name), company: clean(i.company), category: clean(i.category), phone: clean(i.phone), openingBalance: round2(money(i.openingBalance)), isActive: i.isActive }),
+      op.update('suppliers', { ...s, name: clean(i.name), company: clean(i.company), category: clean(i.category), phone: clean(i.phone), openingBalance: round2(money(i.openingBalance)), isActive: i.isActive }, i.version),
       auditOp(c, 'supplier.edit', 'supplier', id, `Edited supplier ${i.name}`),
     ])
     return ok(undefined)

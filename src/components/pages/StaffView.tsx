@@ -15,6 +15,7 @@ import { useSubmit } from '../common/useSubmit'
 import { CalcStrip, EmptyRow, Field, Grid2, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard, Tabs } from '../common/kit'
 
 const StaffModal: React.FC<{ member?: StaffMember; onClose: () => void }> = ({ member, onClose }) => {
+  const [version] = useState(member?.updatedAt) // the record's version when this window was opened
   const { act } = useApp()
   const toast = useToast()
   const [name, setName] = useState(member?.name ?? '')
@@ -30,7 +31,7 @@ const StaffModal: React.FC<{ member?: StaffMember; onClose: () => void }> = ({ m
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const input = { name, role, phone, monthlySalary: Number(salary), dailyAdvanceLimit: Number(limit), joiningDate: joined, status }
-    if (member) void run(() => act.updateStaff(member.id, { ...input, isActive: active }), () => { toast.success('Employee updated.'); onClose() })
+    if (member) void run(() => act.updateStaff(member.id, { ...input, isActive: active, version }), () => { toast.success('Employee updated.'); onClose() })
     else void run(() => act.addStaff(input), (s) => { toast.success(`Added ${s.name}.`); onClose() })
   }
 

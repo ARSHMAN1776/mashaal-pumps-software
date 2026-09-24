@@ -31,7 +31,7 @@ const FUEL_BADGE: Record<FuelType, { cls: string; color: string }> = {
 // ===========================================================================
 // OGRA fortnightly revision wizard
 // ===========================================================================
-const OgraModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+const OgraModal: React.FC<{ onClose: () => void; onApplied?: () => void }> = ({ onClose, onApplied }) => {
   const { activeSiteData, act } = useApp()
   const toast = useToast()
   const { settings, tanks, nozzles } = activeSiteData
@@ -56,7 +56,7 @@ const OgraModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const newRates = Object.fromEntries(FUEL_TYPES.map((f) => [f, Number(rates[f])])) as FuelRates
     void run(
       () => act.applyOgraPriceChange({ newRates, effectiveDate: effective, notificationNo: notif, notes }),
-      (log) => { toast.success(`OGRA revision active — all ${nozzles.length} nozzles updated. Inventory impact ${log.netInventoryGainLoss >= 0 ? '+' : ''}${rs(log.netInventoryGainLoss)}`); onClose() },
+      (log) => { toast.success(`OGRA revision active — all ${nozzles.length} nozzles updated. Inventory impact ${log.netInventoryGainLoss >= 0 ? '+' : ''}${rs(log.netInventoryGainLoss)}`); onApplied?.(); onClose() },
     )
   }
 
@@ -296,6 +296,12 @@ export const SettingsView: React.FC = () => {
   const [lowPct, setLowPct] = useState(String(settings.lowStockAlertPct))
   const [cashLimit, setCashLimit] = useState(String(settings.cashDifferenceAlertLimit))
   const [ogra, setOgra] = useState(false)
+  // the settings' version as this page last loaded / saved them; a save is refused if someone else saved since
+  const [version, setVersion] = useState(settings.updatedAt)
+  const [resync, setResync] = useState(false)
+  useEffect(() => {
+    if (resync) { setVersion(settings.updatedAt); setResync(false) }
+  }, [resync, settings.updatedAt])
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [pending, setPending] = useState<BackupCheck | null>(null)
   const { busy, error, run } = useSubmit()
@@ -320,8 +326,8 @@ export const SettingsView: React.FC = () => {
         margins: Object.fromEntries(FUEL_TYPES.map((f) => [f, Number(margins[f])])) as FuelRates,
         stationPhone: phone, managerContact: manager, receiptHeader: header, receiptFooter: footer,
         lowStockAlertPct: Number(lowPct), cashDifferenceAlertLimit: Number(cashLimit),
-      }),
-      () => toast.success(`Configuration saved — new prices are active on all ${nozzles.length} nozzles.`),
+      }, version),
+      () => { setResync(true); toast.success(`Configuration saved — new prices are active on all ${nozzles.length} nozzles.`) },
     )
   }
 
@@ -579,7 +585,7 @@ export const SettingsView: React.FC = () => {
         </section>
       )}
 
-      {ogra && <OgraModal onClose={() => setOgra(false)} />}
+      {ogra && <OgraModal onClose={() => setOgra(false)} onApplied={() => setResync(true)} />}
       {passwordOpen && <PasswordDialog onClose={() => setPasswordOpen(false)} />}
       {pending && (
         <Modal title="Restore Station Database" subtitle="Check the backup before it replaces the live data" onClose={() => setPending(null)} width={560}>

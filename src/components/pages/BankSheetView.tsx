@@ -18,6 +18,7 @@ import { CalcStrip, EmptyRow, Field, FilterBar, Grid2, IconButton, Kpi, KpiStrip
 // Bank account dialog
 // ===========================================================================
 const AccountModal: React.FC<{ account?: BankAccount; onClose: () => void }> = ({ account, onClose }) => {
+  const [version] = useState(account?.updatedAt) // the record's version when this window was opened
   const { act } = useApp()
   const toast = useToast()
   const [bankName, setBankName] = useState(account?.bankName ?? '')
@@ -31,7 +32,7 @@ const AccountModal: React.FC<{ account?: BankAccount; onClose: () => void }> = (
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const input = { bankName, accountTitle: title, accountNumber: number, branch, openingBalance: Number(opening) }
-    if (account) void run(() => act.updateBankAccount(account.id, { ...input, isActive: active }), () => { toast.success('Bank account updated.'); onClose() })
+    if (account) void run(() => act.updateBankAccount(account.id, { ...input, isActive: active, version }), () => { toast.success('Bank account updated.'); onClose() })
     else void run(() => act.addBankAccount(input), (a) => { toast.success(`Added ${a.bankName}.`); onClose() })
   }
 

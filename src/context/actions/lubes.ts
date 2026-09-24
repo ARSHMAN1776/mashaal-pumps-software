@@ -10,7 +10,7 @@ import { newId } from '../../lib/ids'
 import { round2 } from '../../lib/money'
 import { todayISO } from '../../lib/dates'
 import {
-  EPS, auditOp, checkDate, clean, fmt, isManager, isNonNegative, money, needManager, run, syncLinkedDaybook,
+  EPS, auditOp, checkDate, checkVersion, clean, fmt, isManager, isNonNegative, money, needManager, run, syncLinkedDaybook,
   type ActionCtx,
 } from './core'
 
@@ -26,6 +26,8 @@ export interface ProductInput {
   minStockAlert: number
   costPrice: number
   salePrice: number
+  /** updatedAt of the product when the edit window was opened */
+  version?: string
 }
 
 function validateProduct(c: ActionCtx, i: ProductInput, selfId?: string): Result<never> | null {
@@ -61,10 +63,12 @@ export function updateProduct(c: ActionCtx, id: string, i: Omit<ProductInput, 'o
     if (denied) return denied
     const p = c.raw.lubricants.find((x) => x.id === id)
     if (!p) return fail('Product not found.')
+    const stale = checkVersion(p, i.version)
+    if (stale) return stale
     const bad = validateProduct(c, { ...i, openingStock: p.openingStock }, id)
     if (bad) return bad
     await c.commit([
-      op.update('lubricant_products', { ...p, name: clean(i.name), brand: clean(i.brand), grade: clean(i.grade), packSize: clean(i.packSize), minStockAlert: money(i.minStockAlert), costPrice: money(i.costPrice), salePrice: money(i.salePrice), isActive: i.isActive }),
+      op.update('lubricant_products', { ...p, name: clean(i.name), brand: clean(i.brand), grade: clean(i.grade), packSize: clean(i.packSize), minStockAlert: money(i.minStockAlert), costPrice: money(i.costPrice), salePrice: money(i.salePrice), isActive: i.isActive }, i.version),
       auditOp(c, 'lube.product.edit', 'lubricant', id, `Edited product ${i.name}`, { before: { sale: p.salePrice, cost: p.costPrice }, after: { sale: i.salePrice, cost: i.costPrice } }),
     ])
     return ok(undefined)

@@ -14,6 +14,7 @@ import { useSubmit } from '../common/useSubmit'
 import { CalcStrip, EmptyRow, Field, Grid2, Grid3, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard } from '../common/kit'
 
 const InvoiceModal: React.FC<{ invoice?: OmcInvoice; onClose: () => void }> = ({ invoice, onClose }) => {
+  const [version] = useState(invoice?.updatedAt) // the record's version when this window was opened
   const { activeSiteData, act } = useApp()
   const toast = useToast()
   const { tanks } = activeSiteData
@@ -41,7 +42,7 @@ const InvoiceModal: React.FC<{ invoice?: OmcInvoice; onClose: () => void }> = ({
       invoiceNo, date, tankLorryNo: lorry, driverName: driver, fuelType: fuel, tankId: fuelTanks.some((t) => t.id === tankId) ? tankId : '',
       invoiceVolumeLiters: Number(invVol), decantedVolumeLiters: Number(decVol), ratePerLiter: Number(rate), freightAmount: Number(freight),
     }
-    if (invoice) void run(() => act.updateOmcInvoice(invoice.id, input), () => { toast.success('Invoice updated.'); onClose() })
+    if (invoice) void run(() => act.updateOmcInvoice(invoice.id, { ...input, version }), () => { toast.success('Invoice updated.'); onClose() })
     else void run(() => act.addOmcInvoice(input), (i) => { toast.success(`Invoice ${i.invoiceNo} recorded — ${rs(i.totalAmount)} payable.`); onClose() })
   }
 

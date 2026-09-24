@@ -323,6 +323,8 @@ export function fromRow<T>(table: keyof typeof TABLES, row: Row, siteId: SiteId)
     }
   }
   if (def.siteScoped) m.siteId = siteId
+  // the version of the record (server generated, never written back): an edit is refused if it changed since it was opened
+  if (row.updated_at !== undefined && row.updated_at !== null) m.updatedAt = String(row.updated_at)
   return { ...(def.derived ?? {}), ...m } as T
 }
 
@@ -404,5 +406,6 @@ export function settingsFromRow(r: Row): StationSettings {
     receiptFooter: String(r.receipt_footer ?? ''),
     lowStockAlertPct: toNumber(r.low_stock_alert_pct),
     cashDifferenceAlertLimit: toNumber(r.cash_difference_alert_limit),
+    updatedAt: r.updated_at === undefined || r.updated_at === null ? '' : String(r.updated_at),
   }
 }

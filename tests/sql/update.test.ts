@@ -48,7 +48,11 @@ describe('update.sql upgrades a database that was set up before these columns ex
     await db.exec(update) // running it again is harmless
     for (const p of ['s01', 's02']) for (const [t, c] of NEW_COLUMNS) expect(await has(`${p}_${t}`, c)).toBe(true)
 
-    const rec = (await db.query<{ bank_pending: boolean; amount: string }>(`select bank_pending, amount from public.s01_customer_recoveries where id = 'R1'`)).rows[0]
+    // the save function is refreshed too: it refuses an edit made on an out-of-date screen
+    const src = (await db.query<{ prosrc: string }>(`select prosrc from pg_proc where proname = 'apply_ops'`)).rows[0].prosrc
+    expect(src).toContain('P0409')
+
+    const rec =(await db.query<{ bank_pending: boolean; amount: string }>(`select bank_pending, amount from public.s01_customer_recoveries where id = 'R1'`)).rows[0]
     expect(rec.bank_pending).toBe(false) // existing receipts are not "waiting"
     expect(Number(rec.amount)).toBe(500)
     const sal = (await db.query<{ deduction: string; absent_days: string; net_paid: string }>(`select deduction, absent_days, net_paid from public.s01_staff_salary_payments where id = 'P1'`)).rows[0]

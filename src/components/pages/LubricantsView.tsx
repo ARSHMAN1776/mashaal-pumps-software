@@ -13,6 +13,7 @@ import { useSubmit } from '../common/useSubmit'
 import { CalcStrip, EmptyRow, Field, Grid2, Grid3, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard, Tabs } from '../common/kit'
 
 const ProductModal: React.FC<{ product?: LubricantProduct; onClose: () => void }> = ({ product, onClose }) => {
+  const [version] = useState(product?.updatedAt) // the record's version when this window was opened
   const { act } = useApp()
   const toast = useToast()
   const [name, setName] = useState(product?.name ?? '')
@@ -29,7 +30,7 @@ const ProductModal: React.FC<{ product?: LubricantProduct; onClose: () => void }
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const base = { name, brand, grade, packSize: pack, minStockAlert: Number(minAlert), costPrice: Number(cost), salePrice: Number(price) }
-    if (product) void run(() => act.updateProduct(product.id, { ...base, isActive: active }), () => { toast.success('Product updated.'); onClose() })
+    if (product) void run(() => act.updateProduct(product.id, { ...base, isActive: active, version }), () => { toast.success('Product updated.'); onClose() })
     else void run(() => act.addProduct({ ...base, openingStock: Number(opening) }), (p) => { toast.success(`Added ${p.name}.`); onClose() })
   }
 

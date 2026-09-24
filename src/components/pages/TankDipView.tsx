@@ -118,6 +118,7 @@ const DipModal: React.FC<{ tankId: string; onClose: () => void }> = ({ tankId, o
 // Add / edit tank dialog
 // ===========================================================================
 const TankModal: React.FC<{ tank?: Tank; onClose: () => void }> = ({ tank, onClose }) => {
+  const [version] = useState(tank?.updatedAt) // the record's version when this window was opened
   const { activeSiteData, act } = useApp()
   const toast = useToast()
   const nextNo = activeSiteData.tanks.length ? Math.max(...activeSiteData.tanks.map((t) => t.tankNo)) + 1 : 1
@@ -132,7 +133,7 @@ const TankModal: React.FC<{ tank?: Tank; onClose: () => void }> = ({ tank, onClo
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const input = { tankNo: Number(tankNo), fuelType: fuel, capacityLiters: Number(capacity), minReserveLiters: Number(reserve), initialLiters: Number(initialL), initialDipMm: Number(initialMm) }
-    if (tank) void run(() => act.updateTank(tank.id, input), () => { toast.success('Tank updated.'); onClose() })
+    if (tank) void run(() => act.updateTank(tank.id, { ...input, version }), () => { toast.success('Tank updated.'); onClose() })
     else void run(() => act.addTank(input), (t) => { toast.success(`Added Tank #${t.tankNo}.`); onClose() })
   }
 
