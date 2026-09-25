@@ -1823,3 +1823,22 @@ textarea.form-input {
   .owner-portal-root .executive-kpi-strip,
   .owner-financial-page .executive-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ---------- Coloured side menu: PARCO red, PSO green ---------- */
+.theme-parco { --side-bg: #a80f27; --side-line: rgba(255, 255, 255, 0.18); }
+.theme-pso { --side-bg: #00704a; --side-line: rgba(255, 255, 255, 0.18); }
+:is(.theme-parco, .theme-pso) .shell-side { color: rgba(255, 255, 255, 0.9); }
+:is(.theme-parco, .theme-pso) .shell-brand-mark { background: #fff; color: var(--accent-strong); }
+:is(.theme-parco, .theme-pso) .shell-brand-text small { color: rgba(255, 255, 255, 0.82); }
+:is(.theme-parco, .theme-pso) .shell-group-title { color: rgba(255, 255, 255, 0.8); }
+:is(.theme-parco, .theme-pso) .shell-link { color: rgba(255, 255, 255, 0.92); }
+:is(.theme-parco, .theme-pso) .shell-link:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+:is(.theme-parco, .theme-pso) .shell-link[aria-current='page'] { background: rgba(255, 255, 255, 0.24); color: #fff; }
+:is(.theme-parco, .theme-pso) .shell-link[aria-current='page']::before { background: #fff; }
+:is(.theme-parco, .theme-pso) .shell-link:focus-visible,
+:is(.theme-parco, .theme-pso) .shell-out:focus-visible { outline-color: #fff; }
+:is(.theme-parco, .theme-pso) .shell-badge { background: #fbbf24; color: #3b2300; }
+:is(.theme-parco, .theme-pso) .shell-version { color: rgba(255, 255, 255, 0.82); }
+:is(.theme-parco, .theme-pso) .shell-out { border-color: rgba(255, 255, 255, 0.5); color: #fff; }
+:is(.theme-parco, .theme-pso) .shell-out:hover { background: rgba(255, 255, 255, 0.16); }
+:is(.theme-parco, .theme-pso) .shell-nav { scrollbar-color: rgba(255, 255, 255, 0.4) transparent; }
