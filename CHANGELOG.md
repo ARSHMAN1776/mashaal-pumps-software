@@ -2,6 +2,16 @@
 
 Newest first. The version number is shown at the bottom of the menu and in Station Setup.
 
+## Next (screen redesign, no database change)
+
+- New look for laptops: a clean side menu with plain names (Home, Sell fuel, Credit customers, Cash book, Fuel tanks, Fuel deliveries, Bank, Staff & salaries...), a slim top bar, and one main button per page.
+- Row buttons are tucked into a "More" menu so tables stay readable.
+- Home shows what needs doing today, the key numbers and how full the tanks are.
+- Plain-English titles, headings and table columns on the main pages, and a simpler Fuel deliveries table.
+- Owner overview and Profit & withdrawals rewritten in plain words.
+- Station picker rewritten. PARCO is red and PSO is green everywhere.
+- No SQL to run for this update.
+
 ## 1.0.0 — 2026-09-25 (first release for real use)
 
 **Data and safety**

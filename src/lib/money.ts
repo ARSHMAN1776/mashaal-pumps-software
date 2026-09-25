@@ -6,6 +6,6 @@ export const num = (v: unknown, fallback = 0): number => {
 }
 
 /** "Rs 1,234,567" (no decimals) */
-export const rs = (n: number): string => `Rs ${Math.round(num(n)).toLocaleString('en-US')}`
+export const rs = (n: number): string => `Rs ${Math.round(num(n)).toLocaleString('en-US')}`
 export const rs2 = (n: number): string =>
-  `Rs ${num(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  `Rs ${num(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`

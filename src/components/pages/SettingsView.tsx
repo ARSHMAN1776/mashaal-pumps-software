@@ -75,13 +75,13 @@ const OgraModal: React.FC<{ onClose: () => void; onApplied?: () => void }> = ({ 
             </Field>
           ))}
         </Grid3>
-        <div style={{ background: '#faf6ee', border: '1px solid #ebd9c8', borderRadius: 8, padding: '10px 12px' }}>
+        <div style={{ background: '#f3f6fa', border: '1px solid #d9dce0', borderRadius: 8, padding: '10px 12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
             <strong style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Fuel in your tanks now: gain or loss from the new price</strong>
             <span className={`badge ${net >= 0 ? 'badge-success' : 'badge-danger'}`}>{net >= 0 ? 'Net inventory gain' : 'Net inventory loss'}</span>
           </div>
           {lines.map(({ tank, oldR, newR, diff, gain }) => (
-            <div key={tank.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 12px', fontSize: 11.5, padding: '3px 0', borderBottom: '1px dashed #e5dcc7' }}>
+            <div key={tank.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 12px', fontSize: 11.5, padding: '3px 0', borderBottom: '1px dashed #d9dce0' }}>
               <span style={{ minWidth: 0 }}><strong>Tank #{tank.tankNo}: {tank.fuelType}</strong> <span style={{ color: '#686256' }}>({Math.round(tank.estimatedBookLiters).toLocaleString()} L @ Rs. {oldR} → Rs. {newR})</span></span>
               <span style={{ color: diff >= 0 ? '#15803d' : '#b91c1c', fontWeight: 700, whiteSpace: 'nowrap' }}>{diff >= 0 ? '+' : ''}Rs. {gain.toLocaleString()}</span>
             </div>
@@ -550,7 +550,7 @@ export const SettingsView: React.FC = () => {
             {isOwner && (
               <>
                 <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={onFile} />
-                <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938' }} onClick={() => fileRef.current?.click()}><FileTextIcon size={16} /><span>Restore from backup (.json)</span></button>
+                <button type="button" className="btn btn-outline" style={{ borderColor: '#475569', color: '#475569' }} onClick={() => fileRef.current?.click()}><FileTextIcon size={16} /><span>Restore from backup (.json)</span></button>
               </>
             )}
           </div>

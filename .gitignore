@@ -33,3 +33,7 @@ backups/
 
 # the wipe-everything script is generated on demand and kept OUTSIDE the project (see UPDATING.md)
 supabase/reset_blank.sql
+
+# design review screenshots and browser-automation scratch files
+design-shots/
+.playwright-mcp/

@@ -305,24 +305,18 @@ export const FuelSalesView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="DAILY DISPENSER LOG"
-        title="Fuel Sales & Nozzle Readings"
-        subtitle="Opening and closing meter readings, testing deduction, and net fuel revenue"
+        eyebrow="Sell fuel"
+        title="Sell fuel"
+        subtitle="Type the meter number shown on a pump. The system works out the litres sold and the money."
         actions={
           <>
-            <button type="button" className="btn btn-outline" style={{ color: '#15803d', borderColor: '#86efac', backgroundColor: '#f0fdf4' }} onClick={handleSendWhatsAppSummary} title="Dispatch the summary via WhatsApp">
-              <WhatsAppIcon size={16} color="#15803d" /><span>WhatsApp Summary</span>
-            </button>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintSheet(true)}>
-              <PrinterIcon size={16} /><span>Print Nozzle Sheet</span>
-            </button>
             {isManager && (
-              <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setNozzleForm({})}>
-                <PlusIcon size={16} /><span>Add Nozzle</span>
+              <button type="button" className="btn btn-outline" onClick={() => setNozzleForm({})}>
+                <PlusIcon size={16} /><span>Add nozzle</span>
               </button>
             )}
             <button type="button" className="btn btn-primary" onClick={() => setReadingFor('')} disabled={activeCount === 0}>
-              <PlusIcon size={16} /><span>Enter Meter Reading</span>
+              <PlusIcon size={16} /><span>Enter meter reading</span>
             </button>
           </>
         }
@@ -341,45 +335,45 @@ export const FuelSalesView: React.FC = () => {
       </FilterBar>
 
       <KpiStrip>
-        <Kpi label={`Liters sold — ${periodLabel}`} value={`${totalLiters.toLocaleString()} L`} sub={`${rows.length} reading(s)`} />
-        <Kpi label="Fuel revenue" value={rs(totalAmount)} tone="gold" sub="Rate in force when each reading was saved" />
-        <Kpi label="Active nozzles" value={`${activeCount} of ${nozzles.length}`} sub={`${tanks.length} underground tank(s)`} />
+        <Kpi label={`Fuel sold — ${periodLabel}`} value={`${totalLiters.toLocaleString()} L`} sub={`${rows.length} ${rows.length === 1 ? 'reading' : 'readings'}`} />
+        <Kpi label="Money from fuel" value={rs(totalAmount)} sub="Each sale uses the price of its day" />
+        <Kpi label="Nozzles working" value={`${activeCount} of ${nozzles.length}`} sub={`Connected to ${tanks.length} ${tanks.length === 1 ? 'tank' : 'tanks'}`} />
       </KpiStrip>
 
       <div className="section-surface">
         <div className="section-surface-header">
           <div>
-            <h3 className="section-title">Dispensers & Nozzles</h3>
-            <p className="section-subtitle">Click a nozzle to enter its next reading{isManager ? ' • edit or delete nozzles with the buttons on each card' : ''}</p>
+            <h3 className="section-title">Your nozzles</h3>
+            <p className="section-subtitle">Press "Enter reading" on a nozzle when you read its meter.{isManager ? ' Use "More" to change or remove a nozzle.' : ''}</p>
           </div>
         </div>
 
         {nozzles.length === 0 ? (
-          <div className="ui-empty">No nozzles are set up yet.{isManager ? ' Click "Add Nozzle" to register the first one.' : ' Ask a manager to add them.'}</div>
+          <div className="ui-empty">No nozzles have been added yet.{isManager ? ' Press "Add nozzle" to add the first one.' : ' Ask a manager to add them.'}</div>
         ) : (
           <div className="nozzles-compact-grid">
             {nozzles.map((n) => {
               const tank = tanks.find((t) => t.id === n.tankId)
               return (
-                <div key={n.id} className="nozzle-status-item" style={n.isActive ? undefined : { opacity: 0.6 }}>
+                <div key={n.id} className="nozzle-status-item" data-fuel={n.fuelType} style={n.isActive ? undefined : { opacity: 0.6 }}>
                   <div className="nozzle-badge-header">
                     <div className="nozzle-name-tag">
-                      <GasPumpIcon size={18} color="#b88d2b" />
+                      <GasPumpIcon size={18} color="currentColor" />
                       <strong>Dispenser {n.dispenserNo} • Nozzle {n.nozzleNo}</strong>
                     </div>
-                    <span className="fuel-pill">{n.fuelType}</span>
+                    <span className="fuel-chip" data-fuel={n.fuelType}>{n.fuelType}</span>
                   </div>
 
                   <div className="nozzle-reading-details">
-                    <div className="reading-row"><span className="r-label">Current meter:</span><strong className="r-val highlight">{n.closingMeter.toLocaleString()}</strong></div>
-                    <div className="reading-row"><span className="r-label">Price / liter:</span><span className="r-val">Rs {n.ratePerLiter}</span></div>
-                    <div className="reading-row"><span className="r-label">Tank:</span><span className="r-val text-muted">{tank ? `#${tank.tankNo}` : '—'}</span></div>
-                    <div className="reading-row"><span className="r-label">Attendant:</span><span className="r-val text-muted">{n.assignedStaff || '—'}</span></div>
+                    <div className="reading-row"><span className="r-label">Meter now</span><strong className="r-val highlight">{n.closingMeter.toLocaleString()}</strong></div>
+                    <div className="reading-row"><span className="r-label">Price per litre</span><span className="r-val">Rs {n.ratePerLiter}</span></div>
+                    <div className="reading-row"><span className="r-label">Tank</span><span className="r-val text-muted">{tank ? `#${tank.tankNo}` : '—'}</span></div>
+                    <div className="reading-row"><span className="r-label">Attendant</span><span className="r-val text-muted">{n.assignedStaff || '—'}</span></div>
                   </div>
 
                   {!n.isActive && <span className="badge badge-neutral" style={{ marginTop: 8 }}>Out of service</span>}
                   <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}>
-                    <button type="button" className="btn btn-secondary" style={{ flex: 1 }} disabled={!n.isActive} onClick={() => setReadingFor(n.id)}>Update Reading</button>
+                    <button type="button" className="btn btn-outline" style={{ flex: 1 }} disabled={!n.isActive} onClick={() => setReadingFor(n.id)}>Enter reading</button>
                     {isManager && (
                       <RowActions>
                         <IconButton label="Edit nozzle" onClick={() => setNozzleForm({ nozzle: n })}><EditIcon size={14} /></IconButton>
@@ -394,29 +388,38 @@ export const FuelSalesView: React.FC = () => {
         )}
       </div>
 
-      <SectionCard title={`Recorded nozzle sales — ${periodLabel}`} subtitle="Calculations showing testing-liter deductions and net amount">
+      <SectionCard
+        title={`Sales recorded — ${periodLabel}`}
+        subtitle="Litres are worked out from the meter numbers, after taking off the testing litres."
+        actions={
+          <>
+            <button type="button" className="btn btn-outline btn-sm" onClick={handleSendWhatsAppSummary} title="Send this summary on WhatsApp"><WhatsAppIcon size={15} /><span>Send on WhatsApp</span></button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setPrintSheet(true)}><PrinterIcon size={15} /><span>Print sheet</span></button>
+          </>
+        }
+      >
         <div className="table-responsive">
           <table className="clean-table">
             <thead>
               <tr>
-                <th>Date / shift</th><th>Nozzle</th><th>Fuel</th><th>Opening</th><th>Closing</th><th>Testing</th><th>Net liters</th><th>Rate</th>
-                <th className="text-right">Revenue (PKR)</th><th>Attendant</th>{isManager && <th />}
+                <th>Date & shift</th><th>Nozzle</th><th>Fuel</th><th>Meter start</th><th>Meter end</th><th>Testing</th><th>Litres sold</th><th>Price</th>
+                <th className="text-right">Amount</th><th>Attendant</th>{isManager && <th />}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <EmptyRow colSpan={isManager ? 11 : 10}>No readings recorded for {periodLabel}.</EmptyRow>
+                <EmptyRow colSpan={isManager ? 11 : 10}>No sales have been recorded for {periodLabel}.</EmptyRow>
               ) : rows.map((s) => (
                 <tr key={s.id}>
                   <td className="ui-nowrap"><strong>{formatDate(s.date)}</strong><div className="text-muted text-xs">{s.shiftName}</div></td>
                   <td><strong>D{s.dispenserNo}-N{s.nozzleNo}</strong></td>
-                  <td><span className="fuel-pill">{s.fuelType}</span></td>
+                  <td><span className="fuel-chip" data-fuel={s.fuelType}>{s.fuelType}</span></td>
                   <td>{s.openingMeter.toLocaleString()}</td>
                   <td>{s.closingMeter.toLocaleString()}</td>
                   <td>{s.testingLiters} L</td>
                   <td><strong>{s.netLiters.toLocaleString()} L</strong></td>
-                  <td>Rs {s.ratePerLiter}</td>
-                  <td className="text-right text-gold"><strong>{rs(s.totalAmount)}</strong></td>
+                  <td>Rs {s.ratePerLiter}</td>
+                  <td className="text-right"><strong>{rs(s.totalAmount)}</strong></td>
                   <td>{s.cashierName}</td>
                   {isManager && (
                     <td>

@@ -95,9 +95,9 @@ const DipModal: React.FC<{ tankId: string; onClose: () => void }> = ({ tankId, o
           <Field label="Water (mm)" hint="0 = clear"><input type="number" min={0} step="any" className="form-input" value={water} onChange={(e) => setWater(e.target.value)} /></Field>
         </Grid3>
         <CalcStrip items={[
-          { label: 'Book stock', value: `${num(book)} L` },
-          { label: 'Physical', value: closingL === '' ? '—' : `${num(physical)} L`, tone: 'gold' },
-          { label: 'Variance', value: closingL === '' ? '—' : variance === 0 ? '0 L (balanced)' : `${variance > 0 ? 'Gain +' : 'Loss '}${Math.abs(variance)} L`, tone: variance < 0 ? 'red' : variance > 0 ? 'green' : undefined },
+          { label: 'Expected stock', value: `${num(book)} L` },
+          { label: 'Measured', value: closingL === '' ? '—' : `${num(physical)} L`, tone: 'gold' },
+          { label: 'Difference', value: closingL === '' ? '—' : variance === 0 ? '0 L (balanced)' : `${variance > 0 ? 'Gain +' : 'Loss '}${Math.abs(variance)} L`, tone: variance < 0 ? 'red' : variance > 0 ? 'green' : undefined },
           { label: 'Tolerance ±0.5%', value: `±${num(tolerance)} L` },
         ]} />
         {closingL !== '' && Math.abs(variance) > tolerance && <div className="ui-notice ui-notice-warning">The variance is outside the normal ±0.5% tolerance. Re-check the dip before saving.</div>}
@@ -193,20 +193,20 @@ export const TankDipView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="PHYSICAL INVENTORY AUDIT"
-        title="Tank Dip & Physical Stock"
-        subtitle="Dip rod calibration, decanted volumes, daily meter sales, and book vs physical stock variance"
+        eyebrow="Fuel tanks"
+        title="Fuel tanks"
+        subtitle="See how much fuel is in each tank, and check it against what should be there."
         actions={
           <>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Dip Audit Sheet</span></button>
-            {isManager && <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setTankForm({})}><PlusIcon size={16} /><span>Add Tank</span></button>}
-            <button type="button" className="btn btn-primary" onClick={() => setDipFor('')} disabled={tanks.length === 0}><PlusIcon size={16} /><span>Record Daily Dip</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print</span></button>
+            {isManager && <button type="button" className="btn btn-outline" onClick={() => setTankForm({})}><PlusIcon size={16} /><span>Add tank</span></button>}
+            <button type="button" className="btn btn-primary" onClick={() => setDipFor('')} disabled={tanks.length === 0}><PlusIcon size={16} /><span>Measure a tank</span></button>
           </>
         }
       />
 
       {tanks.length === 0 ? (
-        <div className="ui-empty">No tanks are set up yet.{isManager ? ' Click "Add Tank" to register the first underground tank.' : ''}</div>
+        <div className="ui-empty">No tanks have been added yet.{isManager ? ' Click "Add Tank" to register the first underground tank.' : ''}</div>
       ) : (
         <div className="tanks-meter-row">
           {tanks.map((tank) => {
@@ -241,14 +241,14 @@ export const TankDipView: React.FC = () => {
         </div>
       )}
 
-      <SectionCard title="Historical Tank Dip Records" subtitle="Comparison of book stock and measured stick readings — newest first">
+      <SectionCard title="Past tank measurements" subtitle="What the system expected in each tank, against what was really measured. Newest first.">
         <div className="table-responsive">
           <table className="clean-table">
             <thead>
-              <tr><th>Date & tank</th><th>Fuel</th><th>Morning dip</th><th>Decanted</th><th>Sales</th><th>Book stock</th><th>Closing dip</th><th>Variance</th><th>Water</th><th>Inspector</th>{isManager && <th />}</tr>
+              <tr><th>Date & tank</th><th>Fuel</th><th>Morning dip</th><th>Fuel received</th><th>Fuel sold</th><th>Expected stock</th><th>Closing dip</th><th>Difference</th><th>Water</th><th>Checked by</th>{isManager && <th />}</tr>
             </thead>
             <tbody>
-              {tankDips.length === 0 ? <EmptyRow colSpan={isManager ? 11 : 10}>No dip records yet.</EmptyRow> : tankDips.map((d) => (
+              {tankDips.length === 0 ? <EmptyRow colSpan={isManager ? 11 : 10}>No tank measurements yet.</EmptyRow> : tankDips.map((d) => (
                 <tr key={d.id}>
                   <td><strong>Tank #{d.tankNo}</strong><div className="text-muted text-xs">{formatDate(d.date)}</div></td>
                   <td><span className="fuel-pill">{d.fuelType}</span></td>
@@ -277,7 +277,7 @@ export const TankDipView: React.FC = () => {
 
       <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Daily Tank Dip & Stock Calibration Audit" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
         <table className="slip-table">
-          <thead><tr><th>Date</th><th>Tank</th><th>Fuel</th><th>Morning (mm)</th><th>Decanted</th><th>Sales</th><th>Book</th><th>Closing (mm)</th><th>Physical</th><th>Variance</th></tr></thead>
+          <thead><tr><th>Date</th><th>Tank</th><th>Fuel</th><th>Morning (mm)</th><th>Fuel received</th><th>Fuel sold</th><th>Expected</th><th>Closing (mm)</th><th>Measured</th><th>Difference</th></tr></thead>
           <tbody>
             {tankDips.map((d) => (
               <tr key={d.id}><td>{formatDate(d.date)}</td><td>#{d.tankNo}</td><td>{d.fuelType}</td><td>{d.morningDipMm}</td><td>{d.decantedLiters}L</td><td>{d.dispensedLiters}L</td><td>{d.bookStockLiters}L</td><td>{d.closingDipMm}</td><td>{d.closingPhysicalLiters}L</td><td>{d.varianceLiters}L</td></tr>

@@ -4,15 +4,15 @@ import { computeProfit } from '../../data/profit'
 import { isLowTank, safeCash } from '../../data/derive'
 import { monthISO } from '../../lib/dates'
 import { rs } from '../../lib/money'
-import { GasPumpIcon, CashIcon, UsersIcon, CreditCardIcon, PrinterIcon, ShieldIcon, AlertCircleIcon, CalendarIcon, PlusIcon } from '../common/Icons'
+import { CashIcon, PrinterIcon, AlertCircleIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
-import { Kpi, KpiStrip } from '../common/kit'
+import { EmptyRow, Kpi, KpiStrip, PageHeader, SectionCard } from '../common/kit'
 import { OwnerTransferModal } from '../../features/owner/OwnerTransferModal'
 import { PendingBankNotice } from '../../features/customers/PendingBankNotice'
 
 const monthLabel = (ym: string) => {
-  if (ym === 'all') return 'All Recorded History'
+  if (ym === 'all') return 'All time'
   const [y, m] = ym.split('-').map(Number)
   return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
 }
@@ -20,7 +20,6 @@ const monthLabel = (ym: string) => {
 export const OwnerPortalView: React.FC = () => {
   const { activeSiteData } = useApp()
   const site = activeSiteData.siteInfo
-  const isParco = site.brand === 'TOTAL PARCO'
   const { fuelSales, expenses, daybook, creditSlips, bankAccounts, customers, omcInvoices, suppliers, tanks, settings, salaryPayments } = activeSiteData
 
   const months = useMemo(() => {
@@ -50,197 +49,163 @@ export const OwnerPortalView: React.FC = () => {
   const vendorPayables = suppliers.filter((s) => s.isActive).reduce((s, x) => s + Math.max(0, x.balanceDue), 0)
   const lowTanks = tanks.filter((t) => isLowTank(t, settings.lowStockAlertPct))
   const topDebtors = [...customers].filter((c) => c.status !== 'Archived' && c.currentBalance > 0).sort((a, b) => b.currentBalance - a.currentBalance).slice(0, 6)
-  const accent = isParco ? '#9e1b1b' : '#006a4e'
   const marginRates = profit.fuel.map((f) => `${f.fuelType} Rs ${settings.margins[f.fuelType]}`).join(' • ')
+  const owe = omcPayables + vendorPayables
 
   return (
     <div className="page-content-wrapper owner-portal-root">
-      <div className="page-title-banner" style={{ flexDirection: 'column', gap: 14, alignItems: 'stretch' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span className="badge badge-gold" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}><ShieldIcon size={12} /> Executive Command</span>
-              <span className={`badge ${isParco ? 'badge-parco' : 'badge-pso'}`} style={{ fontSize: 11 }}>{site.code} • {site.brand}</span>
-            </div>
-            <h2 className="page-heading" style={{ fontSize: 24, letterSpacing: '-0.02em', margin: '2px 0 4px' }}>{site.name} — Owner Financial Portal</h2>
-            <p className="page-sub" style={{ margin: 0 }}>Forecourt performance, dealer margin, safe cash liquidity and estimated monthly profit.</p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <div className="owner-month-filter-cluster">
-              <span className="owner-month-label"><CalendarIcon size={14} color="#967938" /><span>Month:</span></span>
-              <select className="owner-month-dropdown" value={selected} onChange={(e) => setSelected(e.target.value)} aria-label="Filter by month">
-                <option value="all">All Recorded History</option>
-                {months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
-              </select>
-            </div>
-            <button type="button" className="btn btn-outline" onClick={() => setTransferOpen(true)} style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }}><PlusIcon size={15} /><span>Withdraw Capital</span></button>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={15} /><span>Print Audit</span></button>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Home"
+        title="Owner overview"
+        subtitle={`${site.name} · ${monthLabel(selected)}. Sales, profit, cash and what people owe.`}
+        actions={
+          <>
+            <select className="form-input owner-select" value={selected} onChange={(e) => setSelected(e.target.value)} aria-label="Choose a month">
+              <option value="all">All time</option>
+              {months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
+            </select>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={15} /><span>Print</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setTransferOpen(true)}><CashIcon size={15} /><span>Take money out</span></button>
+          </>
+        }
+      />
 
       <PendingBankNotice />
 
       {lowTanks.length > 0 && (
-        <div className="dashboard-alert-banner" style={{ margin: '0 0 16px' }}>
+        <div className="owner-alerts">
           {lowTanks.map((t) => (
-            <div key={t.id} className="dash-alert-pill warning">
-              <AlertCircleIcon size={15} color="#b45309" />
-              <span><strong>Tank dip alert:</strong> {t.fuelType} (Tank #{t.tankNo}) has only {t.currentLiters.toLocaleString()} L left.</span>
+            <div key={t.id} className="owner-alert">
+              <AlertCircleIcon size={16} />
+              <span><strong>{t.fuelType} tank #{t.tankNo} is running low</strong>: about {Math.round(t.currentLiters).toLocaleString()} L left.</span>
             </div>
           ))}
         </div>
       )}
 
       <KpiStrip>
-        <Kpi label={`Gross fuel revenue (${monthLabel(selected)})`} value={rs(profit.fuelRevenue)} tone="gold" sub={`${profit.liters.toLocaleString()} L dispensed`} />
-        <Kpi label="Dealer margin (estimate)" value={rs(profit.dealerMargin)} tone="green" sub={marginRates} />
-        <Kpi label="Net profit take-home" value={rs(profit.netProfit)} tone={profit.netProfit >= 0 ? 'green' : 'red'} sub={`After ${rs(profit.expenses + profit.salaries)} expenses & salaries`} />
-        <Kpi label="Cash in safe" value={rs(safe)} tone="gold" sub="Liquid cash ready for deposit" />
-        <Kpi label="Bank liquidity" value={rs(bankTotal)} sub={`${bankAccounts.length} station account(s)`} />
-        <Kpi label="Fleet credit receivables" value={rs(receivables)} tone="red" sub="Uncollected customer balance" />
-        <Kpi label="Pending payables" value={rs(omcPayables + vendorPayables)} tone="amber" sub="OMC invoices & vendor balances" />
+        <Kpi label="Fuel sold" value={rs(profit.fuelRevenue)} sub={`${profit.liters.toLocaleString()} litres`} />
+        <Kpi label="Estimated profit" value={rs(profit.netProfit)} tone={profit.netProfit >= 0 ? 'green' : 'red'} sub="After expenses and salaries" />
+        <Kpi label="Cash in the safe" value={rs(safe)} sub="Ready to bank or use" />
+        <Kpi label="Money in the bank" value={rs(bankTotal)} sub={`${bankAccounts.length} account${bankAccounts.length === 1 ? '' : 's'}`} />
+        <Kpi label="Customers owe you" value={rs(receivables)} sub="Fuel given on credit" />
+        <Kpi label="You owe" value={rs(owe)} sub="Oil company and suppliers" />
       </KpiStrip>
 
-      <div className="table-surface" style={{ marginTop: 18, padding: 20, borderLeft: `4px solid ${accent}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-          <div>
-            <span className="badge badge-gold" style={{ fontSize: 10.5 }}>Month: {monthLabel(selected)}</span>
-            <h4 style={{ fontSize: 18, fontWeight: 700, margin: '6px 0 2px', color: '#1a1814' }}>Station Earning & Expense Audit</h4>
-            <span style={{ fontSize: 12, color: '#736b5e' }}>{site.location}</span>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: 12, color: '#736b5e', display: 'block' }}>Volume sold</span>
-            <strong style={{ fontSize: 18 }}>{profit.liters.toLocaleString()} Liters</strong>
-          </div>
-        </div>
-
-        <div style={{ background: isParco ? '#faf6ee' : '#f0f7f4', borderRadius: 8, padding: 16, marginBottom: 14, border: `1px solid ${isParco ? 'rgba(158,27,27,0.12)' : 'rgba(0,106,78,0.12)'}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13 }}><span>Gross forecourt turnover:</span><strong>{rs(profit.fuelRevenue)}</strong></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13.5 }}><span style={{ color: '#15803d', fontWeight: 700 }}>+ Dealer margin earned:</span><strong style={{ color: '#15803d' }}>+ {rs(profit.dealerMargin)}</strong></div>
-          <div style={{ fontSize: 11.5, color: '#686256', marginLeft: 6, marginBottom: 8 }}>{profit.fuel.map((f) => `${f.fuelType} (${f.liters.toLocaleString()} L): ${rs(f.margin)}`).join('  |  ')}</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}><span style={{ color: '#15803d', fontWeight: 600 }}>+ Lubricant margin:</span><strong style={{ color: '#15803d' }}>+ {rs(profit.lubeMargin)}</strong></div>
-          <div style={{ borderTop: '1px dashed #d9cfb8', paddingTop: 10, marginTop: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}><span style={{ color: '#b91c1c', fontWeight: 600 }}>− Operating expenses:</span><strong style={{ color: '#b91c1c' }}>− {rs(profit.expenses)}</strong></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: '#b91c1c', fontWeight: 600 }}>− Staff salaries (gross):</span><strong style={{ color: '#b91c1c' }}>− {rs(profit.salaries)}</strong></div>
-            {expenseCategories.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {expenseCategories.map(([cat, amt]) => <span key={cat} style={{ fontSize: 11, background: '#fff', border: '1px solid #ebd9c8', borderRadius: 4, padding: '2px 8px' }}>{cat}: {rs(amt)}</span>)}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid #e5e7eb', flexWrap: 'wrap', gap: 10 }}>
-          <div>
-            <span style={{ fontSize: 12, color: '#686256', display: 'block' }}>Net estimated profit (margin − expenses − salaries)</span>
-            <strong style={{ fontSize: 24, color: profit.netProfit >= 0 ? '#15803d' : '#b91c1c' }}>{rs(profit.netProfit)}</strong>
-          </div>
-          <button type="button" className="btn btn-outline" onClick={() => setTransferOpen(true)} style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6 }}><CashIcon size={14} /><span>Transfer profit to owner account →</span></button>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 20 }}>
-        <div className="table-surface" style={{ margin: 0, width: '100%' }}>
-          <div className="table-surface-header">
-            <div>
-              <h3 className="surface-heading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><GasPumpIcon size={18} color="#967938" />Product Volume Distribution ({monthLabel(selected)})</h3>
-              <p className="surface-sub">Comparison across Super, Diesel and Hi-Octane</p>
+      <div className="owner-grid">
+        <SectionCard title="How the profit is made" subtitle={`${monthLabel(selected)}. Estimated from the earnings per litre set in Settings.`}>
+          <div className="owner-sum">
+            <div className="owner-sum-row"><span>Fuel sold</span><strong>{rs(profit.fuelRevenue)}</strong></div>
+            <div className="owner-sum-row plus">
+              <span>Earnings on fuel<small>{profit.fuel.length ? profit.fuel.map((f) => `${f.fuelType}: ${rs(f.margin)}`).join('  ·  ') : `Rates: ${marginRates}`}</small></span>
+              <strong>+ {rs(profit.dealerMargin)}</strong>
             </div>
-            <span className="badge badge-gold font-bold">{profit.liters.toLocaleString()} L total</span>
+            <div className="owner-sum-row plus"><span>Earnings on oil & lubricants</span><strong>+ {rs(profit.lubeMargin)}</strong></div>
+            <div className="owner-sum-row minus"><span>Expenses</span><strong>− {rs(profit.expenses)}</strong></div>
+            <div className="owner-sum-row minus"><span>Salaries</span><strong>− {rs(profit.salaries)}</strong></div>
+            <div className="owner-sum-total">
+              <span>Estimated profit</span>
+              <strong className={profit.netProfit >= 0 ? 'text-green' : 'text-red'}>{rs(profit.netProfit)}</strong>
+            </div>
           </div>
+          {expenseCategories.length > 0 && (
+            <div className="owner-cats">
+              <span className="owner-cats-title">Where the expenses went</span>
+              {expenseCategories.map(([cat, amt]) => <span key={cat} className="owner-cat">{cat}<strong>{rs(amt)}</strong></span>)}
+            </div>
+          )}
+          <div className="owner-sum-foot">
+            <button type="button" className="btn btn-outline" onClick={() => setTransferOpen(true)}><CashIcon size={15} /><span>Take money out</span></button>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Cash and bank" subtitle="Where your money is right now." actions={<strong>{rs(safe + bankTotal)}</strong>}>
           <div className="table-responsive">
             <table className="clean-table">
-              <thead><tr><th>Product</th><th>Liters sold</th><th>Share</th><th>Gross sales</th><th>Dealer commission</th></tr></thead>
+              <thead><tr><th>Where</th><th className="text-right">Balance</th></tr></thead>
               <tbody>
-                {profit.fuel.map((f, i) => {
-                  const colour = ['#2563eb', '#059669', '#b45309'][i]
-                  const share = profit.liters > 0 ? (f.liters / profit.liters) * 100 : 0
-                  return (
-                    <tr key={f.fuelType}>
-                      <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: colour }} /><strong>{f.fuelType}</strong></div></td>
-                      <td className="font-bold">{f.liters.toLocaleString()} L</td>
-                      <td><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ flex: 1, height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}><div style={{ width: `${share}%`, height: '100%', background: colour }} /></div><span style={{ fontSize: 11.5, minWidth: 32 }}>{Math.round(share)}%</span></div></td>
-                      <td className="text-gold font-bold">{rs(f.revenue)}</td>
-                      <td className="text-green font-bold">{rs(f.margin)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="table-surface" style={{ margin: 0 }}>
-          <div className="table-surface-header">
-            <div>
-              <h3 className="surface-heading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CreditCardIcon size={18} color="#967938" />Station Liquidity & Bank Accounts</h3>
-              <p className="surface-sub">Safe cash register & bank balances</p>
-            </div>
-            <strong className="text-gold font-bold">{rs(safe + bankTotal)}</strong>
-          </div>
-          <div className="table-responsive">
-            <table className="clean-table">
-              <thead><tr><th>Account / asset</th><th>Details</th><th>Balance (PKR)</th></tr></thead>
-              <tbody>
-                <tr style={{ background: '#faf6ee' }}><td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CashIcon size={16} color="#8c7333" /><strong>Physical cash in safe</strong></div></td><td className="text-muted text-xs">Daybook register</td><td className="text-gold font-bold">{rs(safe)}</td></tr>
+                <tr><td><strong>Cash in the safe</strong><div className="text-muted text-xs">From the cash book</div></td><td className="text-right"><strong>{rs(safe)}</strong></td></tr>
                 {bankAccounts.map((b) => (
-                  <tr key={b.id} style={b.isActive ? undefined : { opacity: 0.55 }}><td><strong>{b.bankName}</strong><div className="text-muted text-xs">{b.accountNumber}</div></td><td className="text-muted text-xs">{b.branch}</td><td className="font-bold">{rs(b.currentBalance)}</td></tr>
+                  <tr key={b.id} className={b.isActive ? undefined : 'owner-dim'}>
+                    <td><strong>{b.bankName}</strong><div className="text-muted text-xs">{b.accountNumber}{b.branch ? ` · ${b.branch}` : ''}</div></td>
+                    <td className="text-right"><strong>{rs(b.currentBalance)}</strong></td>
+                  </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="table-surface" style={{ marginTop: 20 }}>
-        <div className="table-surface-header">
-          <div>
-            <h3 className="surface-heading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><UsersIcon size={18} color="#967938" />Major Transporter Accounts (Credit Aging)</h3>
-            <p className="surface-sub">Clients with outstanding receivables needing follow-up</p>
-          </div>
-          <span className="badge badge-danger font-bold">{rs(receivables)} total outstanding</span>
-        </div>
+      <SectionCard title="Fuel sold by type" subtitle={`${monthLabel(selected)}. How much of each fuel you sold.`} actions={<span className="badge badge-gold">{profit.liters.toLocaleString()} L in total</span>}>
         <div className="table-responsive">
           <table className="clean-table">
-            <thead><tr><th>Customer</th><th>Contact</th><th>Approved limit</th><th>Balance due</th><th>Limit used</th></tr></thead>
+            <thead><tr><th>Fuel</th><th className="text-right">Litres sold</th><th>Share of sales</th><th className="text-right">Sales</th><th className="text-right">Your earnings</th></tr></thead>
             <tbody>
-              {topDebtors.length === 0 ? <tr><td colSpan={5} className="ui-empty">No outstanding customer balances.</td></tr> : topDebtors.map((c) => {
-                const pct = c.creditLimit > 0 ? Math.round((c.currentBalance / c.creditLimit) * 100) : 0
+              {profit.fuel.map((f) => {
+                const share = profit.liters > 0 ? (f.liters / profit.liters) * 100 : 0
                 return (
-                  <tr key={c.id}>
-                    <td><strong>{c.businessName}</strong><div className="text-muted text-xs">{c.name}</div></td>
-                    <td>{c.phone}</td><td>{rs(c.creditLimit)}</td>
-                    <td><strong className="text-red">{rs(c.currentBalance)}</strong></td>
-                    <td><span className="badge" style={{ backgroundColor: pct > 80 ? '#fee2e2' : '#f1f5f9', color: pct > 80 ? '#b91c1c' : '#334155', fontWeight: 700 }}>{pct}% used</span></td>
+                  <tr key={f.fuelType}>
+                    <td><span className="fuel-chip" data-fuel={f.fuelType}>{f.fuelType}</span></td>
+                    <td className="text-right"><strong>{f.liters.toLocaleString()} L</strong></td>
+                    <td>
+                      <div className="owner-share">
+                        <div className="owner-share-track"><div className="owner-share-fill" data-fuel={f.fuelType} style={{ width: `${share}%` }} /></div>
+                        <span>{Math.round(share)}%</span>
+                      </div>
+                    </td>
+                    <td className="text-right">{rs(f.revenue)}</td>
+                    <td className="text-right text-green"><strong>{rs(f.margin)}</strong></td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
         </div>
-      </div>
+      </SectionCard>
+
+      <SectionCard title="Customers who owe the most" subtitle="Follow these up first." actions={<span className="badge badge-danger">{rs(receivables)} owed in total</span>}>
+        <div className="table-responsive">
+          <table className="clean-table">
+            <thead><tr><th>Customer</th><th>Phone</th><th className="text-right">Credit limit</th><th className="text-right">Owes</th><th>Limit used</th></tr></thead>
+            <tbody>
+              {topDebtors.length === 0 ? <EmptyRow colSpan={5}>Nobody owes you anything right now.</EmptyRow> : topDebtors.map((c) => {
+                const pct = c.creditLimit > 0 ? Math.round((c.currentBalance / c.creditLimit) * 100) : 0
+                return (
+                  <tr key={c.id}>
+                    <td><strong>{c.businessName}</strong><div className="text-muted text-xs">{c.name}</div></td>
+                    <td>{c.phone}</td>
+                    <td className="text-right">{rs(c.creditLimit)}</td>
+                    <td className="text-right"><strong className="text-red">{rs(c.currentBalance)}</strong></td>
+                    <td><span className={`badge ${pct > 80 ? 'badge-danger' : 'badge-outline'}`}>{pct}% used</span></td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
 
       {transferOpen && <OwnerTransferModal onClose={() => setTransferOpen(false)} />}
 
-      <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title={`Owner Performance Audit — ${monthLabel(selected)}`} stationName={site.name} stationLocation={site.location} stationPhone={site.phone} defaultMode="a4">
+      <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title={`Owner summary — ${monthLabel(selected)}`} stationName={site.name} stationLocation={site.location} stationPhone={site.phone} defaultMode="a4">
         <div className="slip-meta-grid">
           <div><strong>Station:</strong> {site.name}</div><div><strong>Period:</strong> {monthLabel(selected)}</div>
-          <div><strong>Dealer code:</strong> {site.code}</div><div><strong>Printed:</strong> {new Date().toLocaleString()}</div>
+          <div><strong>Station code:</strong> {site.code}</div><div><strong>Printed:</strong> {new Date().toLocaleString()}</div>
         </div>
         <table className="slip-table">
-          <thead><tr><th>Metric</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead>
+          <thead><tr><th>Item</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead>
           <tbody>
-            <tr><td>Fuel dispensed</td><td style={{ textAlign: 'right' }}>{profit.liters.toLocaleString()} L</td></tr>
-            <tr><td>Gross fuel sales</td><td style={{ textAlign: 'right' }}>{rs(profit.fuelRevenue)}</td></tr>
-            <tr style={{ background: '#f0fdf4' }}><td>Dealer margin (estimate, per Settings)</td><td style={{ textAlign: 'right' }}>+ {rs(profit.dealerMargin)}</td></tr>
-            <tr><td>Lubricant margin</td><td style={{ textAlign: 'right' }}>+ {rs(profit.lubeMargin)}</td></tr>
-            <tr style={{ background: '#fef2f2' }}><td>Operating expenses</td><td style={{ textAlign: 'right' }}>- {rs(profit.expenses)}</td></tr>
-            <tr style={{ background: '#fef2f2' }}><td>Staff salaries</td><td style={{ textAlign: 'right' }}>- {rs(profit.salaries)}</td></tr>
-            <tr style={{ background: '#fefce8' }}><td><strong>Net estimated profit</strong></td><td style={{ textAlign: 'right' }}><strong>{rs(profit.netProfit)}</strong></td></tr>
-            <tr><td>Cash in safe</td><td style={{ textAlign: 'right' }}>{rs(safe)}</td></tr>
-            <tr><td>Bank balances</td><td style={{ textAlign: 'right' }}>{rs(bankTotal)}</td></tr>
-            <tr><td>Fleet credit receivable</td><td style={{ textAlign: 'right' }}>{rs(receivables)}</td></tr>
+            <tr><td>Fuel sold</td><td style={{ textAlign: 'right' }}>{profit.liters.toLocaleString()} L</td></tr>
+            <tr><td>Fuel sales</td><td style={{ textAlign: 'right' }}>{rs(profit.fuelRevenue)}</td></tr>
+            <tr><td>Earnings on fuel (estimate, from Settings)</td><td style={{ textAlign: 'right' }}>+ {rs(profit.dealerMargin)}</td></tr>
+            <tr><td>Earnings on oil & lubricants</td><td style={{ textAlign: 'right' }}>+ {rs(profit.lubeMargin)}</td></tr>
+            <tr><td>Expenses</td><td style={{ textAlign: 'right' }}>- {rs(profit.expenses)}</td></tr>
+            <tr><td>Salaries</td><td style={{ textAlign: 'right' }}>- {rs(profit.salaries)}</td></tr>
+            <tr><td><strong>Estimated profit</strong></td><td style={{ textAlign: 'right' }}><strong>{rs(profit.netProfit)}</strong></td></tr>
+            <tr><td>Cash in the safe</td><td style={{ textAlign: 'right' }}>{rs(safe)}</td></tr>
+            <tr><td>Money in the bank</td><td style={{ textAlign: 'right' }}>{rs(bankTotal)}</td></tr>
+            <tr><td>Customers owe you</td><td style={{ textAlign: 'right' }}>{rs(receivables)}</td></tr>
           </tbody>
         </table>
         <div className="receipt-divider" />
@@ -248,21 +213,21 @@ export const OwnerPortalView: React.FC = () => {
       </PrintReceiptModal>
 
       <ModuleGuide
-        title="Owner Executive Portal & Margin Auditing"
+        title="How to read this page"
         urduTitle="اسٹیشن اونر کے لیے ماہانہ منافع اور اخراجات کا خلاصہ"
         role="owner"
-        roleLabel="Station Owner"
-        purpose="Top-level view of liters sold, estimated dealer margin, expenses and salaries, cash and bank liquidity, and take-home profit for any month."
+        roleLabel="Owner"
+        purpose="Your sales, estimated profit, cash, bank money and what people owe, for any month."
         steps={[
-          { step: 1, title: 'Filter by month (ماہانہ انتخاب)', detail: 'Pick any month, or all recorded history.', urdu: 'ڈراپ ڈاؤن سے مہینہ منتخب کریں۔' },
-          { step: 2, title: 'Dealer margin (ڈیلر کمیشن)', detail: `Computed from liters sold × the margin per liter set in Settings (${marginRates}). It is an estimate — compare it with your OMC statement.`, urdu: 'ڈیلر مارجن سیٹنگز میں مقرر شرح کے مطابق حساب ہوتا ہے۔' },
-          { step: 3, title: 'Costs (اخراجات)', detail: 'Operating expenses and staff salaries are deducted from the margin.', urdu: 'اخراجات اور تنخواہیں منہا کر کے اصل بچت دیکھیں۔' },
-          { step: 4, title: 'Check liquidity (کیش اور بینک)', detail: 'Confirm safe cash and bank balances, then use "Withdraw Capital" to record money moved to your personal account.', urdu: 'رقم منتقل کرنے سے پہلے سیف اور بینک بیلنس دیکھیں۔' },
+          { step: 1, title: 'Choose a month (ماہانہ انتخاب)', detail: 'Use the month box at the top, or pick "All time".', urdu: 'ڈراپ ڈاؤن سے مہینہ منتخب کریں۔' },
+          { step: 2, title: 'Earnings on fuel (ڈیلر کمیشن)', detail: `Litres sold × the earning per litre set in Settings (${marginRates}). This is an estimate, so compare it with the oil company statement.`, urdu: 'ڈیلر مارجن سیٹنگز میں مقرر شرح کے مطابق حساب ہوتا ہے۔' },
+          { step: 3, title: 'Costs (اخراجات)', detail: 'Expenses and salaries are taken off your earnings to give the estimated profit.', urdu: 'اخراجات اور تنخواہیں منہا کر کے اصل بچت دیکھیں۔' },
+          { step: 4, title: 'Check cash and bank (کیش اور بینک)', detail: 'Look at the cash in the safe and the bank balances first, then press "Take money out" to record money you take for yourself.', urdu: 'رقم منتقل کرنے سے پہلے سیف اور بینک بیلنس دیکھیں۔' },
         ]}
         criticalChecks={[
-          'Reconcile physical safe cash with the Daybook before authorising withdrawals.',
-          'Keep a working-capital reserve for upcoming OMC tanker payments.',
-          'Withdrawals are recorded as bank debits and cannot exceed the bank balance.',
+          'Match the cash in the safe with the Cash book before you take money out.',
+          'Keep enough money back for the next fuel delivery payment.',
+          'Money taken from a bank account cannot be more than that account holds.',
         ]}
       />
     </div>

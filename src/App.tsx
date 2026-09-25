@@ -149,10 +149,10 @@ export const AppContent: React.FC = () => {
   const themeClass = activeSiteData.siteInfo.brand === 'TOTAL PARCO' ? 'theme-parco' : 'theme-pso'
 
   return (
-    <div className={`app-shell-root ${themeClass}`}>
+    <div className={`shell ${themeClass}`}>
       {menuOpen && <div className="ui-menu-backdrop" onClick={() => setMenuOpen(false)} />}
       <Sidebar open={menuOpen} onNavigate={() => setMenuOpen(false)} />
-      <div className="app-workspace-layout">
+      <div className="shell-main">
         <Navbar onMenu={() => setMenuOpen(true)} />
         {!online && (
           <div className="ui-offline-banner" role="alert">

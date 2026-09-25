@@ -51,15 +51,15 @@
   width: 30px;
   height: 30px;
   border-radius: 7px;
-  border: 1px solid var(--border-medium, #e0d7c3);
+  border: 1px solid var(--border-medium, #d4d7db);
   background: #fff;
   color: #5a5346;
   cursor: pointer;
   transition: background 120ms, color 120ms, border-color 120ms;
 }
 .ui-icon-btn:hover:not(:disabled) {
-  background: #f7f1e1;
-  border-color: #cdbf9c;
+  background: #eef1f5;
+  border-color: #475569;
   color: #2b2618;
 }
 .ui-icon-btn-danger {
@@ -140,8 +140,8 @@
 }
 .ui-notice-warning {
   background: var(--warning-bg, #fdf5e7);
-  color: var(--warning-text, #965b05);
-  border-color: var(--warning-border, #f7dcab);
+  color: var(--warning-text, #334155);
+  border-color: var(--warning-border, #d8dce2);
 }
 .ui-notice-danger {
   background: var(--danger-bg, #fbeeed);
@@ -250,8 +250,8 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 2.5px solid #e0d7c3;
-  border-top-color: #a87e22;
+  border: 2.5px solid #d4d7db;
+  border-top-color: #475569;
   animation: ui-spin 800ms linear infinite;
 }
 @keyframes ui-spin {
@@ -266,7 +266,7 @@
   align-items: center;
   justify-content: center;
   gap: 14px;
-  background: var(--bg-app, #f7f4ed);
+  background: var(--bg-app, #f1f4f8);
   padding: 24px;
   text-align: center;
 }
@@ -297,7 +297,7 @@
   margin: 0 0 14px;
   padding: 12px 14px;
   background: #fff;
-  border: 1px solid var(--border-subtle, #ece5d6);
+  border: 1px solid var(--border-subtle, #e2e5e9);
   border-radius: 10px;
 }
 .ui-filter-bar .form-group {
@@ -329,9 +329,9 @@
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
-  background: #f1eddf;
+  background: #eaedf1;
   color: #555044;
-  border: 1px solid #e1dcce;
+  border: 1px solid #d9dce0;
 }
 .ui-muted {
   color: var(--text-muted, #837c6d);
@@ -351,13 +351,13 @@
   margin-top: 6px;
 }
 .ui-statement-opening td {
-  background: #faf6ea;
+  background: #f3f6fa;
   font-style: italic;
 }
 .ui-link-btn {
   background: none;
   border: 0;
-  color: #8a671d;
+  color: #334155;
   font-weight: 600;
   cursor: pointer;
   padding: 0;
@@ -388,7 +388,7 @@
   height: 38px;
   padding: 0 9px;
   border-radius: 8px;
-  border: 1px solid var(--border-medium, #e0d7c3);
+  border: 1px solid var(--border-medium, #d4d7db);
   background: #fff;
   cursor: pointer;
   margin-right: 8px;

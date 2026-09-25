@@ -69,7 +69,7 @@ const ExpenseModal: React.FC<{ expense?: ExpenseRecord; onClose: () => void }> =
           )}
         </Grid3>
         <Field label="What was it for?"><input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. 50 L generator diesel during load-shedding" required /></Field>
-        <CalcStrip items={[{ label: 'Category', value: category }, { label: 'Funding source', value: mode === 'Cash' ? 'Cash safe (daybook)' : bank?.bankName ?? 'Bank account', tone: 'gold' }, { label: 'Total expense', value: rs(amt), tone: 'red' }]} />
+        <CalcStrip items={[{ label: 'Category', value: category }, { label: 'Paid from', value: mode === 'Cash' ? 'Cash safe (daybook)' : bank?.bankName ?? 'Bank account', tone: 'gold' }, { label: 'Amount', value: rs(amt), tone: 'red' }]} />
         <FormError message={error} />
         <div className="modal-actions-footer">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
@@ -111,13 +111,13 @@ export const ExpensesView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="STATION OVERHEADS"
-        title="Station Expenses & Vouchers"
-        subtitle="Generator diesel, electricity bills, dispenser repairs, staff food & tea, and station supplies"
+        eyebrow="Expenses"
+        title="Expenses"
+        subtitle="Money spent to run the station: generator diesel, bills, repairs, tea and supplies."
         actions={
           <>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Expense Sheet</span></button>
-            <button type="button" className="btn btn-primary" onClick={() => setForm({})}><PlusIcon size={16} /><span>New Expense Voucher</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setForm({})}><PlusIcon size={16} /><span>Add expense</span></button>
           </>
         }
       />
@@ -139,16 +139,16 @@ export const ExpensesView: React.FC = () => {
 
       <KpiStrip>
         <Kpi label="Total expenses" value={rs(total)} tone="red" sub={`${rows.length} voucher(s)`} />
-        <Kpi label="Cash from safe" value={rs(cash)} sub="Deducted from shift collections" />
-        <Kpi label="Bank payments" value={rs(bank)} sub="Utilities & corporate fees" />
+        <Kpi label="Cash from safe" value={rs(cash)} sub="Paid from the safe" />
+        <Kpi label="Bank payments" value={rs(bank)} sub="Paid from a bank account" />
       </KpiStrip>
 
-      <SectionCard title="Station Expense Vouchers" subtitle="Newest first">
+      <SectionCard title="All expenses" subtitle="Newest first">
         <div className="table-responsive">
           <table className="clean-table">
-            <thead><tr><th>Voucher #</th><th>Date</th><th>Category</th><th>Description</th><th>Paid to</th><th>Mode</th><th>Amount</th><th>Approved by</th>{isManager && <th />}</tr></thead>
+            <thead><tr><th>Voucher</th><th>Date</th><th>Category</th><th>What for</th><th>Paid to</th><th>Paid from</th><th>Amount</th><th>Approved by</th>{isManager && <th />}</tr></thead>
             <tbody>
-              {rows.length === 0 ? <EmptyRow colSpan={isManager ? 9 : 8}>No expense vouchers for this selection.</EmptyRow> : rows.map((e) => (
+              {rows.length === 0 ? <EmptyRow colSpan={isManager ? 9 : 8}>No expenses for this period.</EmptyRow> : rows.map((e) => (
                 <tr key={e.id}>
                   <td><strong>{e.voucherNo}</strong></td>
                   <td>{formatDate(e.date)}</td>
@@ -176,7 +176,7 @@ export const ExpensesView: React.FC = () => {
       <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Station Expense Statement" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
         <div className="slip-meta-grid"><div><strong>Period:</strong> {month === 'all' ? 'All months' : month}</div><div><strong>Category:</strong> {category === 'all' ? 'All' : category}</div></div>
         <table className="slip-table">
-          <thead><tr><th>Voucher</th><th>Date</th><th>Category</th><th>Payee</th><th>Mode</th><th>Amount</th></tr></thead>
+          <thead><tr><th>Voucher</th><th>Date</th><th>Category</th><th>Paid to</th><th>Paid from</th><th>Amount</th></tr></thead>
           <tbody>{rows.map((e) => <tr key={e.id}><td>{e.voucherNo}</td><td>{formatDate(e.date)}</td><td>{e.category}</td><td>{e.payee}</td><td>{e.paymentMode}</td><td>{rs(e.amount)}</td></tr>)}</tbody>
         </table>
         <div className="receipt-divider" />

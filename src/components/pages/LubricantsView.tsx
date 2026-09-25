@@ -146,7 +146,7 @@ const MoveModal: React.FC<{ mode: MoveMode; productId?: string; onClose: () => v
         )}
         {p && (
           <CalcStrip items={mode === 'sale'
-            ? [{ label: 'In stock', value: `${p.stockCans} cans` }, { label: 'After sale', value: `${p.stockCans - q} cans` }, { label: 'Cash collected', value: rs(q * (isManager ? Number(price) || 0 : p.salePrice)), tone: 'green' }]
+            ? [{ label: 'In stock', value: `${p.stockCans} cans` }, { label: 'After sale', value: `${p.stockCans - q} cans` }, { label: 'Cash received', value: rs(q * (isManager ? Number(price) || 0 : p.salePrice)), tone: 'green' }]
             : [{ label: 'In stock', value: `${p.stockCans} cans` }, { label: 'After', value: `${mode === 'restock' || direction === 'in' ? p.stockCans + q : p.stockCans - q} cans`, tone: 'gold' }]} />
         )}
         <FormError message={error} />
@@ -194,36 +194,36 @@ export const LubricantsView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="MOTOR OILS & LUBRICANTS"
-        title="Lubricants Inventory & Point of Sale"
-        subtitle="Engine oils, brake fluids and grease: stock, low-inventory alerts, restocking and counter billing"
+        eyebrow="Oil & lubricants"
+        title="Oil & lubricants"
+        subtitle="Engine oil and other products you sell at the counter: what is in stock and what has sold."
         actions={
           <>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Stock Sheet</span></button>
-            {isManager && <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setProductForm({})}><PlusIcon size={16} /><span>Add Product</span></button>}
-            {isManager && <button type="button" className="btn btn-outline" onClick={() => setMove({ mode: 'restock' })} disabled={live.length === 0}><span>Receive Stock</span></button>}
-            <button type="button" className="btn btn-primary" onClick={() => setMove({ mode: 'sale' })} disabled={live.length === 0}><CashIcon size={16} /><span>Record Counter Sale</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print</span></button>
+            {isManager && <button type="button" className="btn btn-outline" onClick={() => setProductForm({})}><PlusIcon size={16} /><span>Add product</span></button>}
+            {isManager && <button type="button" className="btn btn-outline" onClick={() => setMove({ mode: 'restock' })} disabled={live.length === 0}><span>Receive stock</span></button>}
+            <button type="button" className="btn btn-primary" onClick={() => setMove({ mode: 'sale' })} disabled={live.length === 0}><CashIcon size={16} /><span>Sell at counter</span></button>
           </>
         }
       />
 
       <KpiStrip>
-        <Kpi label="Cans in stock" value={`${live.reduce((a, p) => a + p.stockCans, 0)} units`} sub={`${live.length} product(s)`} />
-        <Kpi label="Stock value (cost)" value={rs(stockCost)} tone="gold" sub="Wholesale valuation" />
-        <Kpi label="Retail value" value={rs(stockRetail)} tone="green" sub={`Margin ${rs(stockRetail - stockCost)}`} />
-        <Kpi label="Sales today" value={rs(todaySales)} sub="Counter sales" />
-        <Kpi label="Low inventory" value={low > 0 ? `${low} item(s) low` : 'All healthy'} tone={low > 0 ? 'amber' : 'green'} sub="Reorder monitoring" />
+        <Kpi label="Cans in stock" value={`${live.reduce((a, p) => a + p.stockCans, 0)}`} sub={`${live.length} product(s)`} />
+        <Kpi label="Stock value (what you paid)" value={rs(stockCost)} sub="At cost price" />
+        <Kpi label="Stock value (selling price)" value={rs(stockRetail)} tone="green" sub={`Margin ${rs(stockRetail - stockCost)}`} />
+        <Kpi label="Sold today" value={rs(todaySales)} sub="Counter sales" />
+        <Kpi label="Low inventory" value={low > 0 ? `${low} item(s) low` : 'All healthy'} tone={low > 0 ? 'amber' : 'green'} sub="Products to reorder soon" />
       </KpiStrip>
 
-      <Tabs tabs={[{ id: 'products', label: 'Products', count: products.length }, { id: 'movements', label: 'Sales & stock movements', count: lubricantMovements.length }]} active={tab} onChange={(t) => setTab(t as typeof tab)} />
+      <Tabs tabs={[{ id: 'products', label: 'Products', count: products.length }, { id: 'movements', label: 'Sales & stock changes', count: lubricantMovements.length }]} active={tab} onChange={(t) => setTab(t as typeof tab)} />
 
       {tab === 'products' ? (
-        <SectionCard title="Lubricant Products Inventory" subtitle="Current shelf stock and pricing" actions={isManager && <label className="ui-checkbox-row" style={{ margin: 0 }}><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /><span>Show inactive</span></label>}>
+        <SectionCard title="Your products" subtitle="What is on the shelf now, and the prices." actions={isManager && <label className="ui-checkbox-row" style={{ margin: 0 }}><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /><span>Show inactive</span></label>}>
           <div className="table-responsive">
             <table className="clean-table">
-              <thead><tr><th>Product</th><th>Brand & grade</th><th>Pack</th><th>Cost</th><th>Retail</th><th>Stock</th><th>Status</th><th /></tr></thead>
+              <thead><tr><th>Product</th><th>Brand & grade</th><th>Pack</th><th>Cost price</th><th>Selling price</th><th>Stock</th><th>Status</th><th /></tr></thead>
               <tbody>
-                {products.length === 0 ? <EmptyRow colSpan={8}>No products yet.{isManager ? ' Click "Add Product".' : ''}</EmptyRow> : products.map((p) => {
+                {products.length === 0 ? <EmptyRow colSpan={8}>No products added yet.{isManager ? ' Click "Add Product".' : ''}</EmptyRow> : products.map((p) => {
                   const isLow = p.stockCans <= p.minStockAlert
                   return (
                     <tr key={p.id} style={p.isActive ? undefined : { opacity: 0.55 }}>
@@ -251,12 +251,12 @@ export const LubricantsView: React.FC = () => {
           </div>
         </SectionCard>
       ) : (
-        <SectionCard title="Sales & Stock Movements" subtitle="Newest first">
+        <SectionCard title="Sales & stock changes" subtitle="Newest first.">
           <div className="table-responsive">
             <table className="clean-table">
-              <thead><tr><th>Date</th><th>Product</th><th>Type</th><th>Cans</th><th>Amount</th><th>Party / reason</th><th>Ref</th><th>By</th>{isManager && <th />}</tr></thead>
+              <thead><tr><th>Date</th><th>Product</th><th>Type</th><th>Cans</th><th>Amount</th><th>Customer / reason</th><th>Reference</th><th>By</th>{isManager && <th />}</tr></thead>
               <tbody>
-                {lubricantMovements.length === 0 ? <EmptyRow colSpan={isManager ? 9 : 8}>No movements yet.</EmptyRow> : lubricantMovements.map((m) => (
+                {lubricantMovements.length === 0 ? <EmptyRow colSpan={isManager ? 9 : 8}>No sales or stock changes yet.</EmptyRow> : lubricantMovements.map((m) => (
                   <tr key={m.id}>
                     <td>{formatDate(m.date)}</td><td><strong>{productName(m.productId)}</strong></td>
                     <td><span className={`badge ${m.type === 'Sale' ? 'badge-success' : m.type === 'Restock' ? 'badge-gold' : 'badge-neutral'}`}>{m.type}</span></td>
@@ -276,7 +276,7 @@ export const LubricantsView: React.FC = () => {
 
       <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Station Lubricants Inventory Valuation" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
         <table className="slip-table">
-          <thead><tr><th>Product</th><th>Pack</th><th>Stock</th><th>Cost</th><th>Retail</th></tr></thead>
+          <thead><tr><th>Product</th><th>Pack</th><th>Stock</th><th>Cost price</th><th>Selling price</th></tr></thead>
           <tbody>{live.map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.packSize}</td><td>{p.stockCans}</td><td>{rs(p.costPrice)}</td><td>{rs(p.salePrice)}</td></tr>)}</tbody>
         </table>
         <div className="receipt-divider" />

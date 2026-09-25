@@ -133,7 +133,7 @@ const PayModal: React.FC<{ supplierId?: string; onClose: () => void }> = ({ supp
           <Field label="Reference"><input className="form-input" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
           <Field label="Notes"><input className="form-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Payment against spare parts invoice" /></Field>
         </Grid2>
-        <CalcStrip items={[{ label: 'Owed now', value: rs(s?.balanceDue ?? 0) }, { label: 'This payment', value: `− ${rs(amt)}`, tone: 'green' }, { label: 'Owed after', value: rs((s?.balanceDue ?? 0) - amt), tone: 'gold' }]} />
+        <CalcStrip items={[{ label: 'You owe now', value: rs(s?.balanceDue ?? 0) }, { label: 'This payment', value: `− ${rs(amt)}`, tone: 'green' }, { label: 'You will owe', value: rs((s?.balanceDue ?? 0) - amt), tone: 'gold' }]} />
         <FormError message={error} />
         <div className="modal-actions-footer">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
@@ -175,34 +175,34 @@ export const SuppliersView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="VENDOR ACCOUNTS"
-        title="Suppliers & Vendor Payables"
-        subtitle="Distributors, generator technicians, pump calibrators: bills, payments and the balance owed"
+        eyebrow="Suppliers"
+        title="Suppliers"
+        subtitle="People and companies you buy from, and what you still owe each of them."
         actions={
           <>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Vendor Sheet</span></button>
-            <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setForm({})}><PlusIcon size={16} /><span>Add Supplier</span></button>
-            <button type="button" className="btn btn-outline" onClick={() => setBillFor('')} disabled={live.length === 0}><span>Record Bill</span></button>
-            <button type="button" className="btn btn-primary" onClick={() => setPayFor('')} disabled={live.length === 0}><CashIcon size={16} /><span>Make Vendor Payment</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setForm({})}><PlusIcon size={16} /><span>Add supplier</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setBillFor('')} disabled={live.length === 0}><span>Add bill</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setPayFor('')} disabled={live.length === 0}><CashIcon size={16} /><span>Pay a supplier</span></button>
           </>
         }
       />
 
       <KpiStrip>
-        <Kpi label="Registered suppliers" value={`${live.length} vendors`} sub="Contractors & distributors" />
-        <Kpi label="Total payables" value={rs(payables)} tone="gold" sub="Pending vendor bills" />
-        <Kpi label="Payments this month" value={rs(supplierTransactions.filter((t) => t.type === 'Payment' && t.date.startsWith(todayISO().slice(0, 7))).reduce((s, t) => s + t.amount, 0))} tone="green" sub="Paid to vendors" />
+        <Kpi label="Suppliers" value={`${live.length}`} sub="People and companies you buy from" />
+        <Kpi label="You owe in total" value={rs(payables)} sub="Bills not yet paid" />
+        <Kpi label="Paid this month" value={rs(supplierTransactions.filter((t) => t.type === 'Payment' && t.date.startsWith(todayISO().slice(0, 7))).reduce((s, t) => s + t.amount, 0))} tone="green" sub="Paid to vendors" />
       </KpiStrip>
 
-      <Tabs tabs={[{ id: 'vendors', label: 'Vendors', count: shown.length }, { id: 'ledger', label: 'Bills & payments', count: supplierTransactions.length }]} active={tab} onChange={(t) => setTab(t as typeof tab)} />
+      <Tabs tabs={[{ id: 'vendors', label: 'Suppliers', count: shown.length }, { id: 'ledger', label: 'Bills & payments', count: supplierTransactions.length }]} active={tab} onChange={(t) => setTab(t as typeof tab)} />
 
       {tab === 'vendors' ? (
-        <SectionCard title="Station Vendor Directory" subtitle="Balance = opening balance + bills − payments" actions={<label className="ui-checkbox-row" style={{ margin: 0 }}><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /><span>Show inactive</span></label>}>
+        <SectionCard title="Your suppliers" subtitle="What you owe = old balance + bills − payments made." actions={<label className="ui-checkbox-row" style={{ margin: 0 }}><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /><span>Show inactive</span></label>}>
           <div className="table-responsive">
             <table className="clean-table">
-              <thead><tr><th>Vendor / company</th><th>Category</th><th>Phone</th><th>Balance due</th><th /></tr></thead>
+              <thead><tr><th>Supplier</th><th>Category</th><th>Phone</th><th>You owe</th><th /></tr></thead>
               <tbody>
-                {shown.length === 0 ? <EmptyRow colSpan={5}>No vendors yet. Click "Add Supplier".</EmptyRow> : shown.map((s) => (
+                {shown.length === 0 ? <EmptyRow colSpan={5}>No suppliers added yet. Press "Add supplier".</EmptyRow> : shown.map((s) => (
                   <tr key={s.id} style={s.isActive ? undefined : { opacity: 0.55 }}>
                     <td><strong>{s.name}</strong><div className="text-muted text-xs">{s.company}{!s.isActive && ' • inactive'}</div></td>
                     <td><span className="category-tag">{s.category || '—'}</span></td>
@@ -223,10 +223,10 @@ export const SuppliersView: React.FC = () => {
           </div>
         </SectionCard>
       ) : (
-        <SectionCard title="Vendor Bills & Payments" subtitle="Newest first">
+        <SectionCard title="Bills & payments" subtitle="Newest first.">
           <div className="table-responsive">
             <table className="clean-table">
-              <thead><tr><th>Date</th><th>Vendor</th><th>Type</th><th>Reference / details</th><th>Bill (+)</th><th>Paid (−)</th><th>Paid from</th><th /></tr></thead>
+              <thead><tr><th>Date</th><th>Supplier</th><th>Type</th><th>Details</th><th>Bill</th><th>Paid</th><th>Paid from</th><th /></tr></thead>
               <tbody>
                 {supplierTransactions.length === 0 ? <EmptyRow colSpan={8}>No bills or payments yet.</EmptyRow> : supplierTransactions.map((t) => (
                   <tr key={t.id}>
@@ -250,7 +250,7 @@ export const SuppliersView: React.FC = () => {
 
       <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Station Vendor Payables Summary" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
         <table className="slip-table">
-          <thead><tr><th>Vendor</th><th>Category</th><th>Phone</th><th>Due</th></tr></thead>
+          <thead><tr><th>Supplier</th><th>Category</th><th>Phone</th><th>You owe</th></tr></thead>
           <tbody>{live.map((s) => <tr key={s.id}><td>{s.name}</td><td>{s.category}</td><td>{s.phone}</td><td>{rs(s.balanceDue)}</td></tr>)}</tbody>
         </table>
         <div className="receipt-divider" />

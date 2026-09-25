@@ -24,12 +24,12 @@ export const LedgerView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="PARTY STATEMENT"
-        title="Debit / Credit Running Ledger"
-        subtitle="Itemized history of fuel credit (debit), payments received (credit) and the running balance — add, edit or delete customers and entries here"
+        eyebrow="Customer accounts"
+        title="Customer accounts"
+        subtitle="Pick a customer to see all the fuel they were given and all the payments they made."
         actions={isManager && (
-          <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setNewCustomer(true)}>
-            <PlusIcon size={16} /><span>Add Customer</span>
+          <button type="button" className="btn btn-outline" onClick={() => setNewCustomer(true)}>
+            <PlusIcon size={16} /><span>Add customer</span>
           </button>
         )}
       />

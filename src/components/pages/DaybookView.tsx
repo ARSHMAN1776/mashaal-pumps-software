@@ -62,9 +62,9 @@ const EntryModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </Grid3>
         <Field label="What is it for?"><input className="form-input" value={particulars} onChange={(e) => setParticulars(e.target.value)} placeholder="e.g. Morning shift handover by Zahid Khan" required /></Field>
         <CalcStrip items={[
-          { label: 'Current safe cash', value: rs(balance) },
+          { label: 'Cash in safe now', value: rs(balance) },
           { label: direction === 'IN' ? 'Cash coming in' : 'Cash going out', value: `${direction === 'IN' ? '+' : '−'} ${rs(amt)}`, tone: direction === 'IN' ? 'green' : 'red' },
-          { label: 'Projected balance', value: rs(direction === 'IN' ? balance + amt : balance - amt), tone: 'gold' },
+          { label: 'Cash in safe after', value: rs(direction === 'IN' ? balance + amt : balance - amt), tone: 'gold' },
         ]} />
         <FormError message={error} />
         <div className="modal-actions-footer">
@@ -110,13 +110,13 @@ export const DaybookView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="STATION CASHBOOK REGISTER"
-        title="Station Daybook (Cash Flow)"
-        subtitle="Chronological record of shift inflows, customer recoveries, expenses, advances and bank deposits"
+        eyebrow="Cash book"
+        title="Cash book"
+        subtitle="Every rupee that goes into or out of the safe, in the order it happened."
         actions={
           <>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Daybook</span></button>
-            <button type="button" className="btn btn-primary" onClick={() => setModalOpen(true)}><PlusIcon size={16} /><span>Add Cash Voucher</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setModalOpen(true)}><PlusIcon size={16} /><span>Add cash entry</span></button>
           </>
         }
       />
@@ -139,16 +139,16 @@ export const DaybookView: React.FC = () => {
       </FilterBar>
 
       <KpiStrip>
-        <Kpi label="Opening cash (period start)" value={rs(opening)} sub="Brought forward" />
-        <Kpi label="Cash collected (+)" value={`+ ${rs(totalIn)}`} tone="green" sub={periodLabel} />
-        <Kpi label="Cash disbursed (−)" value={`- ${rs(totalOut)}`} tone="red" sub="Expenses, deposits, advances" />
-        <Kpi label="Cash in safe now" value={rs(current)} tone="gold" sub="Available station cash" />
+        <Kpi label="Cash at the start" value={rs(opening)} sub="Before this period" />
+        <Kpi label="Cash in" value={`+ ${rs(totalIn)}`} tone="green" sub={periodLabel} />
+        <Kpi label="Cash out" value={`- ${rs(totalOut)}`} tone="red" sub="Spent, banked or advanced" />
+        <Kpi label="Cash in safe now" value={rs(current)} tone="gold" sub="Available right now" />
       </KpiStrip>
 
-      <SectionCard title="Cash Movement Entries" subtitle={`Ordered by date and time of entry — ${periodLabel}`}>
+      <SectionCard title="Cash entries" subtitle={`Everything that went in or out — ${periodLabel}`}>
         <div className="table-responsive">
           <table className="clean-table">
-            <thead><tr><th>Date / time</th><th>Particulars</th><th>Category</th><th>Ref #</th><th>Cash in (+)</th><th>Cash out (−)</th><th>Safe balance</th><th>Handled by</th><th>Record</th></tr></thead>
+            <thead><tr><th>Date</th><th>Details</th><th>Category</th><th>Reference</th><th>Cash in</th><th>Cash out</th><th>Safe balance</th><th>Done by</th><th>Record</th></tr></thead>
             <tbody>
               {rows.length === 0 ? <EmptyRow colSpan={9}>No cash entries for {periodLabel}.</EmptyRow> : rows.map((e) => (
                 <tr key={e.id}>
@@ -180,7 +180,7 @@ export const DaybookView: React.FC = () => {
       <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Official Station Daily Cash Register (Daybook)" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
         <div className="slip-meta-grid"><div><strong>Period:</strong> {periodLabel}</div><div><strong>Opening cash:</strong> {rs(opening)}</div></div>
         <table className="slip-table">
-          <thead><tr><th>Date</th><th>Particulars</th><th>Ref</th><th>In</th><th>Out</th><th>Balance</th></tr></thead>
+          <thead><tr><th>Date</th><th>Details</th><th>Ref</th><th>In</th><th>Out</th><th>Balance</th></tr></thead>
           <tbody>{rows.map((d) => <tr key={d.id}><td>{formatDate(d.date)} {d.time}</td><td>{d.particulars}</td><td>{d.referenceNo || '—'}</td><td>{d.cashIn > 0 ? rs(d.cashIn) : '—'}</td><td>{d.cashOut > 0 ? rs(d.cashOut) : '—'}</td><td>{rs(d.balanceAfter)}</td></tr>)}</tbody>
         </table>
         <div className="receipt-divider" />

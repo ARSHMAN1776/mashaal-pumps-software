@@ -48,51 +48,48 @@ export const CustomersView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="FLEET & CREDIT ACCOUNTS"
-        title="Customers & Credit Ledger"
-        subtitle={<>Commercial fleet clients, credit limits, daily fuel slips, and cash payment recoveries{!isManager && ' • 🔒 Cashier mode: customer accounts are managed by a manager'}</>}
+        eyebrow="Credit customers"
+        title="Credit customers"
+        subtitle={<>Transport companies and fleets that take fuel now and pay later. See what each one owes and how much credit is left.{!isManager && ' A manager adds and edits customers.'}</>}
         actions={
           <>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintAging(true)}><PrinterIcon size={16} /><span>Print Credit Aging</span></button>
             {isManager && (
-              <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setCustomerForm({})}>
-                <PlusIcon size={16} /><span>Register Customer</span>
-              </button>
+              <button type="button" className="btn btn-outline" onClick={() => setCustomerForm({})}><PlusIcon size={16} /><span>Add customer</span></button>
             )}
-            <button type="button" className="btn btn-secondary" onClick={() => setRecoveryFor('')} disabled={live.length === 0}><CashIcon size={16} /><span>Record Recovery</span></button>
-            <button type="button" className="btn btn-primary" onClick={() => setSlipFor('')} disabled={live.filter((c) => c.status === 'Active').length === 0}><PlusIcon size={16} /><span>Issue Credit Slip</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setRecoveryFor('')} disabled={live.length === 0}><CashIcon size={16} /><span>Receive payment</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setSlipFor('')} disabled={live.filter((c) => c.status === 'Active').length === 0}><PlusIcon size={16} /><span>Give fuel on credit</span></button>
           </>
         }
       />
 
       <KpiStrip>
-        <Kpi label="Credit accounts" value={`${live.length} accounts`} sub={`${live.filter((c) => c.status === 'Hold').length} on hold`} />
-        <Kpi label="Total outstanding" value={rs(totalOutstanding)} tone="gold" sub="Station receivables" />
-        <Kpi label="Slips issued today" value={rs(todaySlips.reduce((a, s) => a + s.totalAmount, 0))} sub={`${todaySlips.length} slip(s)`} />
-        <Kpi label="Recoveries today" value={rs(todayRecoveries.reduce((a, r) => a + r.amount, 0))} tone="green" sub={`${todayRecoveries.length} receipt(s)`} />
+        <Kpi label="Credit customers" value={`${live.length}`} sub={`${live.filter((c) => c.status === 'Hold').length} on hold`} />
+        <Kpi label="Total owed to you" value={rs(totalOutstanding)} sub="Fuel given on credit, not yet paid" />
+        <Kpi label="Fuel given on credit today" value={rs(todaySlips.reduce((a, s) => a + s.totalAmount, 0))} sub={`${todaySlips.length} ${todaySlips.length === 1 ? 'slip' : 'slips'}`} />
+        <Kpi label="Payments received today" value={rs(todayRecoveries.reduce((a, r) => a + r.amount, 0))} tone="green" sub={`${todayRecoveries.length} ${todayRecoveries.length === 1 ? 'payment' : 'payments'}`} />
       </KpiStrip>
 
       <div className="table-search-bar">
         <div className="search-input-wrap">
-          <SearchIcon size={18} color="#9c7728" />
-          <input type="text" className="search-field" placeholder="Search by client, transport company, phone or vehicle…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <SearchIcon size={18} color="currentColor" />
+          <input type="text" className="search-field" placeholder="Search by name, phone or vehicle number" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         {isManager && (
           <label className="ui-checkbox-row" style={{ margin: 0 }}>
-            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /><span>Show archived</span>
+            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /><span>Also show removed customers</span>
           </label>
         )}
       </div>
 
-      <SectionCard title="Credit Customer Directory" subtitle="Authorized commercial parties with credit limits">
+      <SectionCard title="All credit customers" subtitle="Click a name to see that customer's full account." actions={<button type="button" className="btn btn-outline btn-sm" onClick={() => setPrintAging(true)}><PrinterIcon size={15} /><span>Print list</span></button>}>
         <div className="table-responsive">
           <table className="clean-table">
             <thead>
-              <tr><th>Customer & contact</th><th>Registered vehicles</th><th>Credit limit</th><th>Owes now</th><th>Credit left</th><th>Status</th><th className="col-actions">Actions</th></tr>
+              <tr><th>Customer</th><th>Vehicles</th><th>Credit limit</th><th>Owes now</th><th>Credit left</th><th>Status</th><th className="col-actions" /></tr>
             </thead>
             <tbody>
               {shown.length === 0 ? (
-                <EmptyRow colSpan={7}>{customers.length === 0 ? 'No customers yet.' : 'No customers match the search.'}{isManager && customers.length === 0 ? ' Click "Register Customer" to add the first one.' : ''}</EmptyRow>
+                <EmptyRow colSpan={7}>{customers.length === 0 ? 'No credit customers yet.' : 'No customer matches your search.'}{isManager && customers.length === 0 ? ' Press "Add customer" to add the first one.' : ''}</EmptyRow>
               ) : shown.map((c) => {
                 const pct = c.creditLimit > 0 ? Math.round((c.currentBalance / c.creditLimit) * 100) : 0
                 const over = c.currentBalance >= c.creditLimit && c.creditLimit > 0
@@ -101,8 +98,8 @@ export const CustomersView: React.FC = () => {
                 return (
                   <tr key={c.id} style={archived ? { opacity: 0.6 } : undefined}>
                     <td>
-                      <button type="button" className="ui-link-btn" onClick={() => setLedgerFor(c.id)} title="Open ledger"><strong style={{ fontSize: 12.5 }}>{c.businessName}</strong></button>
-                      <div className="text-muted text-xs">Prop: {c.name} • 📞 {c.phone}</div>
+                      <button type="button" className="ui-link-btn" onClick={() => setLedgerFor(c.id)} title="Open this customer's account"><strong style={{ fontSize: 14 }}>{c.businessName}</strong></button>
+                      <div className="text-muted text-xs">{c.name !== c.businessName ? `${c.name} · ` : ''}{c.phone}</div>
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', maxWidth: 170 }}>
@@ -123,8 +120,8 @@ export const CustomersView: React.FC = () => {
                     <td><span className={`badge ${c.status === 'Active' ? 'badge-success' : c.status === 'Hold' ? 'badge-warning' : 'badge-neutral'}`} style={{ fontSize: 10.5, padding: '2px 6px' }}>{c.status}</span></td>
                     <td className="col-actions">
                       <RowActions>
-                        <button type="button" className="btn btn-outline ui-mini-btn" disabled={c.status !== 'Active'} onClick={() => setSlipFor(c.id)}>+ Slip</button>
-                        <button type="button" className="btn btn-secondary ui-mini-btn" disabled={archived} onClick={() => setRecoveryFor(c.id)}>Recover</button>
+                        <button type="button" className="btn btn-outline ui-mini-btn" disabled={c.status !== 'Active'} onClick={() => setSlipFor(c.id)}>Give fuel</button>
+                        <button type="button" className="btn btn-outline ui-mini-btn" disabled={archived} onClick={() => setRecoveryFor(c.id)}>Receive payment</button>
                         <IconButton label="Open ledger (debit / credit statement)" onClick={() => setLedgerFor(c.id)}><BookOpenIcon size={14} /></IconButton>
                         {isManager && !archived && <IconButton label="Edit customer" onClick={() => setCustomerForm({ customer: c })}><EditIcon size={14} /></IconButton>}
                         {isManager && !archived && <IconButton label="Delete customer" tone="danger" onClick={() => void removeCustomer(c.id)}><TrashIcon size={14} /></IconButton>}
@@ -138,15 +135,15 @@ export const CustomersView: React.FC = () => {
         </div>
       </SectionCard>
 
-      <Tabs tabs={[{ id: 'slips', label: 'Recent credit slips', count: creditSlips.length }, { id: 'recoveries', label: 'Recent recoveries', count: recoveries.length }]} active={tab} onChange={(t) => setTab(t as 'slips' | 'recoveries')} />
+      <Tabs tabs={[{ id: 'slips', label: 'Fuel given on credit', count: creditSlips.length }, { id: 'recoveries', label: 'Payments received', count: recoveries.length }]} active={tab} onChange={(t) => setTab(t as 'slips' | 'recoveries')} />
 
       {tab === 'slips' ? (
-        <SectionCard title="Recent Credit Fuel Slips" subtitle="Newest first — click a customer to open the ledger where slips can be edited, reprinted or deleted">
+        <SectionCard title="Fuel given on credit" subtitle="Newest first. Open a customer's account to change or print a slip.">
           <div className="table-responsive">
             <table className="clean-table">
               <thead><tr><th>Slip # & date</th><th>Client</th><th>Vehicle & driver</th><th>Product & volume</th><th>Value</th><th>Authorized by</th><th className="col-actions">WhatsApp</th></tr></thead>
               <tbody>
-                {creditSlips.length === 0 ? <EmptyRow colSpan={7}>No credit slips issued yet.</EmptyRow> : creditSlips.slice(0, 40).map((s) => {
+                {creditSlips.length === 0 ? <EmptyRow colSpan={7}>No fuel has been given on credit yet.</EmptyRow> : creditSlips.slice(0, 40).map((s) => {
                   const c = custName(s.customerId)
                   return (
                     <tr key={s.id}>
@@ -169,12 +166,12 @@ export const CustomersView: React.FC = () => {
           </div>
         </SectionCard>
       ) : (
-        <SectionCard title="Recent Recoveries" subtitle="Payments received from fleet accounts — newest first">
+        <SectionCard title="Payments received" subtitle="Money customers have paid, newest first.">
           <div className="table-responsive">
             <table className="clean-table">
               <thead><tr><th>Receipt # & date</th><th>Client</th><th>Mode</th><th>Reference</th><th>Amount</th><th>Received by</th></tr></thead>
               <tbody>
-                {recoveries.length === 0 ? <EmptyRow colSpan={6}>No recoveries recorded yet.</EmptyRow> : recoveries.slice(0, 40).map((r) => {
+                {recoveries.length === 0 ? <EmptyRow colSpan={6}>No payments received yet.</EmptyRow> : recoveries.slice(0, 40).map((r) => {
                   const c = custName(r.customerId)
                   return (
                     <tr key={r.id}>
@@ -197,7 +194,7 @@ export const CustomersView: React.FC = () => {
       {slipFor !== null && <SlipModal customerId={slipFor || undefined} onClose={() => setSlipFor(null)} />}
       {recoveryFor !== null && <RecoveryModal customerId={recoveryFor || undefined} onClose={() => setRecoveryFor(null)} />}
       {ledgerFor && (
-        <Modal title="Customer Ledger" subtitle="Debit / credit running statement" onClose={() => setLedgerFor(null)} width={1150} dismissOnBackdrop>
+        <Modal title="Customer account" subtitle="Everything given on credit and everything paid" onClose={() => setLedgerFor(null)} width={1150} dismissOnBackdrop>
           <div style={{ padding: '16px 20px 20px' }}>
             <CustomerLedgerPanel customerId={ledgerFor} onRemoved={() => setLedgerFor(null)} />
           </div>

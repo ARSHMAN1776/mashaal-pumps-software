@@ -80,13 +80,13 @@ export const ReportsView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="EXECUTIVE AUDIT & ANALYTICS"
-        title="Station Reports & Intelligence"
-        subtitle="Consolidated audits, nozzle performance, tank dip loss / gain and estimated dealer profit — for any period"
+        eyebrow="Reports"
+        title="Reports"
+        subtitle="Sales, fuel stock and estimated profit for any period you choose."
         actions={
           <>
-            <button type="button" className="btn btn-outline" onClick={exportCsv}><FileTextIcon size={16} /><span>Export CSV / Excel</span></button>
-            <button type="button" className="btn btn-primary" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Current Report</span></button>
+            <button type="button" className="btn btn-outline" onClick={exportCsv}><FileTextIcon size={16} /><span>Save as Excel</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print report</span></button>
           </>
         }
       />
@@ -145,7 +145,7 @@ export const ReportsView: React.FC = () => {
         <SectionCard title="Tank Dip Loss & Gain Audit" subtitle={`Physical dip stick vs book stock — ${periodLabel}`}>
           <div className="table-responsive">
             <table className="clean-table">
-              <thead><tr><th>Date</th><th>Tank</th><th>Fuel</th><th>Capacity</th><th>Morning</th><th>Decanted (+)</th><th>Sales (−)</th><th>Book</th><th>Physical</th><th>Variance</th></tr></thead>
+              <thead><tr><th>Date</th><th>Tank</th><th>Fuel</th><th>Capacity</th><th>Morning</th><th>Received (+)</th><th>Sales (−)</th><th>Book</th><th>Physical</th><th>Variance</th></tr></thead>
               <tbody>
                 {dips.length === 0 ? <EmptyRow colSpan={10}>No dip records in this period.</EmptyRow> : dips.map((d) => (
                   <tr key={d.id}>

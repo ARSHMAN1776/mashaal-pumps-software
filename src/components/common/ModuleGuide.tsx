@@ -32,14 +32,14 @@ export const ModuleGuide: React.FC<ModuleGuideProps> = ({
   const [isOpen, setIsOpen] = useState(defaultOpen)
 
   const roleBadgeColor =
-    role === 'cashier' ? '#2563eb' : role === 'manager' ? '#0d9488' : role === 'owner' ? '#967938' : '#64748b'
+    role === 'cashier' ? '#2563eb' : role === 'manager' ? '#0d9488' : role === 'owner' ? '#475569' : '#64748b'
 
   return (
     <div className={`module-guide-card ${isOpen ? 'guide-expanded' : 'guide-collapsed'}`}>
       <div className="module-guide-header" onClick={() => setIsOpen(!isOpen)} role="button" tabIndex={0}>
         <div className="guide-header-left">
           <div className="guide-icon-pill">
-            <BookOpenIcon size={16} color="#967938" />
+            <BookOpenIcon size={16} color="#475569" />
           </div>
           <div>
             <div className="guide-title-line">

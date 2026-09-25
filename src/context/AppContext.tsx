@@ -72,7 +72,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
 const EMPTY_INFO = {
-  id: '', code: '', name: '', location: '', brand: 'TOTAL PARCO' as const, brandColor: '#967938', phone: '', managerName: '', ntn: '',
+  id: '', code: '', name: '', location: '', brand: 'TOTAL PARCO' as const, brandColor: '#475569', phone: '', managerName: '', ntn: '',
 }
 export const EMPTY_STATION_DATA: StationData = deriveStation(emptyRaw(EMPTY_INFO, EMPTY_SETTINGS))
 

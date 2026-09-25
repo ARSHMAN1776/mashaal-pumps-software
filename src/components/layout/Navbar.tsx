@@ -1,86 +1,59 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
-import { MapPinIcon, CalendarIcon, GasPumpIcon, KeyIcon } from '../common/Icons'
+import { MapPinIcon, KeyIcon } from '../common/Icons'
 import { PasswordDialog } from '../common/PasswordDialog'
 
+/** The bar at the top: which station, whether everything is being saved, the date, and who is signed in. */
 export const Navbar: React.FC<{ onMenu?: () => void }> = ({ onMenu }) => {
   const { currentUser, activeSiteData, realtime, online, backendKind } = useApp()
-  const [currentTime, setCurrentTime] = useState(new Date())
+  const [now, setNow] = useState(new Date())
   const [passwordOpen, setPasswordOpen] = useState(false)
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => clearInterval(timer)
+    const t = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(t)
   }, [])
 
   const site = activeSiteData.siteInfo
-  const isParco = site.brand === 'TOTAL PARCO'
+  const date = new Intl.DateTimeFormat('en-PK', { weekday: 'long', day: 'numeric', month: 'long' }).format(now)
+  const time = new Intl.DateTimeFormat('en-PK', { hour: 'numeric', minute: '2-digit', hour12: true }).format(now)
+  const initials = currentUser?.name ? currentUser.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : '?'
 
-  const formattedDate = new Intl.DateTimeFormat('en-PK', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(currentTime)
-  const formattedTime = new Intl.DateTimeFormat('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true }).format(currentTime)
-
-  const initials = currentUser?.name
-    ? currentUser.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
-    : '?'
-
-  // what the dot means: green = saved to the cloud and live-synced, amber = reconnecting, red = offline
+  // plain words for "is my work being saved?"
   const status = !online
-    ? { color: '#dc2626', label: 'Offline — not saving', title: 'No internet connection. Changes cannot be saved.' }
+    ? { color: '#dc2626', text: 'No internet — not saving', title: 'No internet connection. Nothing can be saved until it comes back.' }
     : backendKind === 'memory'
-    ? { color: '#2563eb', label: 'Preview (not saved)', title: 'Preview mode: sample data, nothing is stored.' }
+    ? { color: '#2563eb', text: 'Demo — nothing is saved', title: 'Demo mode with sample data. Nothing is stored.' }
     : realtime === 'live'
-    ? { color: '#16a34a', label: 'Cloud live synced', title: 'Every change is saved to the cloud database and appears on other devices instantly.' }
-    : realtime === 'connecting'
-    ? { color: '#f59e0b', label: 'Connecting…', title: 'Connecting live updates. Saving works normally.' }
-    : { color: '#f59e0b', label: 'Live updates paused', title: 'Saving works, but changes from other devices may be delayed. Reconnecting…' }
+    ? { color: '#16a34a', text: 'Saved online', title: 'Everything you enter is saved to the database and shows on other computers straight away.' }
+    : { color: '#d97706', text: 'Connecting…', title: 'Saving works. Updates from other computers may be a little late.' }
 
   return (
-    <header className="navbar-surface">
-      <div className="navbar-left-identity">
-        <button type="button" className="ui-menu-btn" onClick={onMenu} aria-label="Open menu">
-          <span /><span /><span />
+    <header className="shell-top">
+      <div className="shell-top-left">
+        <button type="button" className="shell-icon-btn shell-menu-btn" onClick={onMenu} aria-label="Open menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
         </button>
-        <div className={`station-badge-pill ${isParco ? 'badge-parco' : 'badge-pso'}`}>
-          <GasPumpIcon size={14} />
-          <span>{site.code}</span>
-        </div>
-
-        <div className="header-station-info">
-          <h1 className="header-station-title">{site.name}</h1>
-          <div className="header-station-location">
-            <MapPinIcon size={13} color={isParco ? '#9e1b1b' : '#006a4e'} />
-            <span>{site.location}</span>
-          </div>
+        <div className="shell-station">
+          <strong>{site.name}</strong>
+          <span><MapPinIcon size={13} />{site.location}</span>
         </div>
       </div>
 
-      <div className="navbar-right-cluster">
-        <div className="header-online-status" title={status.title}>
-          <span className="live-status-dot" style={{ backgroundColor: status.color }} />
-          <span className="live-status-label">{status.label}</span>
-        </div>
-
-        <div className="header-divider" />
-
-        <div className="header-datetime-chip">
-          <CalendarIcon size={14} color="#6b7280" />
-          <span className="header-datetime-text">
-            {formattedDate} &nbsp;•&nbsp; {formattedTime}
-          </span>
-        </div>
-
-        <div className="header-divider" />
-
-        <div className="header-profile-trigger" style={{ cursor: 'default' }}>
-          <div className={`user-avatar-circle ${isParco ? 'avatar-parco' : 'avatar-pso'}`}>
-            <span>{initials}</span>
+      <div className="shell-top-right">
+        <span className="shell-status" title={status.title}>
+          <span className="shell-status-dot" style={{ background: status.color }} />
+          <span className="shell-status-text">{status.text}</span>
+        </span>
+        <span className="shell-clock">{date} · {time}</span>
+        <div className="shell-user">
+          <div className="shell-avatar" aria-hidden="true">{initials}</div>
+          <div className="shell-user-meta">
+            <strong>{currentUser?.name}</strong>
+            <span>{currentUser?.role}</span>
           </div>
-          <div className="header-user-meta">
-            <span className="header-user-title">{currentUser?.name}</span>
-            <span className="ui-muted" style={{ textTransform: 'capitalize' }}>{currentUser?.role}</span>
-          </div>
-          <button type="button" className="ui-icon-btn" style={{ marginLeft: 8 }} title="Change my password" aria-label="Change my password" onClick={() => setPasswordOpen(true)}>
-            <KeyIcon size={15} />
+          <button type="button" className="shell-icon-btn" title="Change my password" aria-label="Change my password" onClick={() => setPasswordOpen(true)}>
+            <KeyIcon size={16} />
           </button>
         </div>
       </div>

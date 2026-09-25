@@ -3,11 +3,11 @@ import { useApp } from '../../context/AppContext'
 import { computeProfit } from '../../data/profit'
 import { formatDate, todayISO } from '../../lib/dates'
 import { rs } from '../../lib/money'
-import { TrendingUpIcon, CashIcon, CreditCardIcon, CalendarIcon, PrinterIcon, FileTextIcon, ShieldIcon, BuildingIcon, TrashIcon } from '../common/Icons'
+import { CashIcon, PrinterIcon, FileTextIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { useConfirm } from '../common/Confirm'
 import { useToast } from '../common/Toast'
-import { IconButton, RowActions } from '../common/kit'
+import { EmptyRow, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCard, Tabs } from '../common/kit'
 import { OwnerTransferModal } from '../../features/owner/OwnerTransferModal'
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -17,7 +17,6 @@ export const OwnerFinancialView: React.FC = () => {
   const toast = useToast()
   const confirm = useConfirm()
   const site = activeSiteData.siteInfo
-  const isParco = site.brand === 'TOTAL PARCO'
   const thisYear = String(new Date().getFullYear())
 
   // everything the owner has taken out: bank transfers and cash taken from the safe
@@ -86,7 +85,7 @@ export const OwnerFinancialView: React.FC = () => {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-    toast.success(`Annual breakdown for ${year} exported.`)
+    toast.success(`The ${year} figures were saved as a file.`)
   }
 
   const removeTransfer = async (id: string, amount: number, date: string, cash: boolean) => {
@@ -95,188 +94,168 @@ export const OwnerFinancialView: React.FC = () => {
     if (r.ok) toast.success('Withdrawal deleted.'); else toast.error(r.error)
   }
 
-  const accent = isParco ? '#9e1b1b' : '#006a4e'
-  const netColor = (n: number) => (n >= 0 ? '#15803d' : '#b91c1c')
+  const netClass = (n: number) => (n >= 0 ? 'text-green' : 'text-red')
 
   return (
     <div className="page-content-wrapper owner-financial-page">
-      <div className="page-title-banner" style={{ flexDirection: 'column', gap: 16, alignItems: 'stretch' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span className="badge badge-gold" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}><ShieldIcon size={12} /> Executive Financial Intelligence</span>
-              <span className={`badge ${isParco ? 'badge-parco' : 'badge-pso'}`} style={{ fontSize: 11 }}>{site.code} • {site.brand}</span>
-            </div>
-            <h2 className="page-heading" style={{ fontSize: 24, letterSpacing: '-0.02em' }}>{site.name} — Financial & Annual Performance</h2>
-            <p className="page-sub">Turnover, estimated dealer margin, costs, net profit and money withdrawn by the owner for {year}.</p>
-          </div>
-          <div className="page-actions" style={{ alignItems: 'center', gap: 10 }}>
-            <button type="button" className="btn btn-outline" onClick={exportCsv}><FileTextIcon size={16} /><span>Export CSV</span></button>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Financial Audit</span></button>
-            <button type="button" className="btn btn-primary" style={{ backgroundColor: accent, borderColor: accent }} onClick={() => setTransferOpen(true)}><CreditCardIcon size={16} /><span>Record Owner Withdrawal</span></button>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, paddingTop: 12, borderTop: '1px solid rgba(150,121,56,0.15)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#8c7333', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}><CalendarIcon size={16} /> Fiscal year:</span>
-            <div className="report-tab-strip" style={{ margin: 0, padding: 3, background: '#f5f0e6', borderRadius: 8 }}>
-              {availableYears.map((y) => (
-                <button key={y} type="button" className={`report-tab-btn ${year === y ? 'active' : ''}`} onClick={() => setYear(y)} style={{ padding: '6px 18px', fontSize: 13, fontWeight: year === y ? 800 : 500 }}>{y}</button>
-              ))}
-            </div>
-          </div>
-          <span className="station-security-note" style={{ fontSize: 12, color: '#555' }}><ShieldIcon size={14} color="#8c7333" />Isolated station tables: <strong>{site.brand} ({site.code})</strong></span>
-        </div>
+      <PageHeader
+        eyebrow="Profit & withdrawals"
+        title="Profit & withdrawals"
+        subtitle={`${site.name}. What the station earned in ${year}, and the money you have taken out.`}
+        actions={
+          <>
+            <button type="button" className="btn btn-outline" onClick={exportCsv}><FileTextIcon size={16} /><span>Save as Excel</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setTransferOpen(true)}><CashIcon size={16} /><span>Take money out</span></button>
+          </>
+        }
+      />
+
+      <div className="owner-year-row">
+        <span className="owner-year-label">Year</span>
+        <Tabs tabs={availableYears.map((y) => ({ id: y, label: y }))} active={year} onChange={setYear} />
       </div>
 
       {year === thisYear && (
-        <div style={{ marginTop: 20 }}>
-          <h3 style={{ fontSize: 17, fontWeight: 700, color: '#1a1814', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 8 }}><CashIcon size={20} color="#967938" />This Month ({current.name} {year})</h3>
-          <div className="executive-kpi-strip" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', margin: 0 }}>
-            <div className="kpi-cell"><span className="kpi-label">Gross sales turnover</span><strong className="kpi-cell-value text-gold" style={{ fontSize: 20 }}>{rs(current.fuelRevenue)}</strong><span className="kpi-cell-sub">{current.liters.toLocaleString()} L dispensed</span></div>
-            <div className="kpi-cell"><span className="kpi-label">Dealer margin (estimate)</span><strong className="kpi-cell-value" style={{ fontSize: 20, color: '#27ae60' }}>{rs(current.dealerMargin)}</strong><span className="kpi-cell-sub">Per-liter margins from Settings</span></div>
-            <div className="kpi-cell"><span className="kpi-label">Expenses + salaries</span><strong className="kpi-cell-value text-red" style={{ fontSize: 20 }}>{rs(current.expenses + current.salaries)}</strong><span className="kpi-cell-sub">{rs(current.expenses)} expenses • {rs(current.salaries)} salaries</span></div>
-            <div className="kpi-cell"><span className="kpi-label">Net station profit</span><strong className="kpi-cell-value" style={{ fontSize: 22, color: netColor(current.netProfit) }}>{rs(current.netProfit)}</strong><span className="kpi-cell-sub">Margin − expenses − salaries</span></div>
-            <div className="kpi-cell"><span className="kpi-label">Withdrawn by owner</span><strong className="kpi-cell-value" style={{ fontSize: 20, color: '#1d4ed8' }}>{rs(current.transferred)}</strong><span className="kpi-cell-sub">{current.transfers.length} transfer(s)</span></div>
-            <div className="kpi-cell"><span className="kpi-label">Retained / undrawn</span><strong className="kpi-cell-value text-gold" style={{ fontSize: 20 }}>{rs(current.retained)}</strong><span className="kpi-cell-sub">Profit not yet withdrawn</span></div>
-          </div>
-          <div style={{ background: '#faf6ee', border: '1px solid rgba(150,121,56,0.2)', borderRadius: 8, padding: '10px 16px', marginTop: 10, fontSize: 12, color: '#555' }}>
-            <strong>Revenue ≠ Profit:</strong> turnover ({rs(current.fuelRevenue)}) is fuel sales; profit is the dealer margin minus real costs. <strong>Withdrawal ≠ Profit:</strong> {rs(current.transferred)} is money actually moved to your account. Margins are estimates — compare them with your OMC statement.
-          </div>
-        </div>
+        <section className="owner-block">
+          <h3 className="owner-block-title">This month: {current.name} {year}</h3>
+          <KpiStrip>
+            <Kpi label="Fuel sold" value={rs(current.fuelRevenue)} sub={`${current.liters.toLocaleString()} litres`} />
+            <Kpi label="Your earnings" value={rs(current.dealerMargin)} tone="green" sub="On fuel, from Settings rates" />
+            <Kpi label="Costs" value={rs(current.expenses + current.salaries)} tone="red" sub={`${rs(current.expenses)} expenses, ${rs(current.salaries)} salaries`} />
+            <Kpi label="Estimated profit" value={rs(current.netProfit)} tone={current.netProfit >= 0 ? 'green' : 'red'} sub="Earnings minus costs" />
+            <Kpi label="Taken out by you" value={rs(current.transferred)} sub={`${current.transfers.length} time${current.transfers.length === 1 ? '' : 's'}`} />
+            <Kpi label="Profit left in the station" value={rs(current.retained)} sub="Profit you have not taken out" />
+          </KpiStrip>
+          <p className="owner-note">Sales are not profit: profit is what you earn on the fuel, minus what it costs to run the station. Money taken out is not profit either; it is only what you moved to your own account. Earnings are estimates, so compare them with the oil company statement.</p>
+        </section>
       )}
 
-      <div style={{ marginTop: 24 }}>
-        <h3 style={{ fontSize: 17, fontWeight: 700, color: '#1a1814', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 8 }}><TrendingUpIcon size={20} color="#967938" />Annual Performance Summary ({year})</h3>
-        <div className="executive-kpi-strip" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', margin: 0 }}>
-          <div className="kpi-cell"><span className="kpi-label">Annual gross turnover</span><strong className="kpi-cell-value text-gold" style={{ fontSize: 19 }}>{rs(totals.revenue)}</strong><span className="kpi-cell-sub">{totals.liters.toLocaleString()} L</span></div>
-          <div className="kpi-cell"><span className="kpi-label">Annual margin (fuel + lube)</span><strong className="kpi-cell-value" style={{ fontSize: 19, color: '#27ae60' }}>{rs(totals.margin)}</strong><span className="kpi-cell-sub">Estimated commission</span></div>
-          <div className="kpi-cell"><span className="kpi-label">Annual costs</span><strong className="kpi-cell-value text-red" style={{ fontSize: 19 }}>{rs(totals.costs)}</strong><span className="kpi-cell-sub">Expenses + salaries</span></div>
-          <div className="kpi-cell"><span className="kpi-label">Annual net profit</span><strong className="kpi-cell-value" style={{ fontSize: 20, color: netColor(totals.net) }}>{rs(totals.net)}</strong><span className="kpi-cell-sub">Net station earnings</span></div>
-          <div className="kpi-cell"><span className="kpi-label">Withdrawn by owner</span><strong className="kpi-cell-value" style={{ fontSize: 19, color: '#1d4ed8' }}>{rs(totals.transferred)}</strong><span className="kpi-cell-sub">To personal accounts</span></div>
-          <div className="kpi-cell"><span className="kpi-label">Retained profit</span><strong className="kpi-cell-value text-gold" style={{ fontSize: 19 }}>{rs(totals.retained)}</strong><span className="kpi-cell-sub">Available for distribution</span></div>
-        </div>
-      </div>
+      <section className="owner-block">
+        <h3 className="owner-block-title">Whole year {year}</h3>
+        <KpiStrip>
+          <Kpi label="Fuel sold" value={rs(totals.revenue)} sub={`${totals.liters.toLocaleString()} litres`} />
+          <Kpi label="Your earnings" value={rs(totals.margin)} tone="green" sub="Fuel and lubricants" />
+          <Kpi label="Costs" value={rs(totals.costs)} tone="red" sub="Expenses and salaries" />
+          <Kpi label="Estimated profit" value={rs(totals.net)} tone={totals.net >= 0 ? 'green' : 'red'} sub="For the whole year" />
+          <Kpi label="Taken out by you" value={rs(totals.transferred)} sub="To your own accounts" />
+          <Kpi label="Profit left in the station" value={rs(totals.retained)} sub="Not taken out yet" />
+        </KpiStrip>
+      </section>
 
-      <div className="table-surface" style={{ marginTop: 24, padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-          <div>
-            <h3 className="surface-heading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><TrendingUpIcon size={18} color="#967938" />Monthly Financial Trajectory ({year})</h3>
-            <p className="surface-sub">Margin, net profit and owner withdrawals, January to December</p>
+      <SectionCard
+        title={`Month by month, ${year}`}
+        subtitle="Your earnings, estimated profit and the money you took out."
+        actions={
+          <div className="owner-legend">
+            <span><i style={{ background: 'var(--accent)' }} />Earnings</span>
+            <span><i style={{ background: 'var(--ok)' }} />Profit</span>
+            <span><i style={{ background: 'var(--info)' }} />Taken out</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 12 }}>
-            {[['#27ae60', 'Margin'], ['#15803d', 'Net profit'], ['#1d4ed8', 'Withdrawn']].map(([c, l]) => <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: c, borderRadius: 3 }} /><span>{l}</span></div>)}
-          </div>
-        </div>
-        <div style={{ width: '100%', overflowX: 'auto', paddingTop: 10 }}>
-          <div style={{ minWidth: 700, height: 220, display: 'flex', alignItems: 'flex-end', gap: 14, borderBottom: '2px solid #e5e7eb', paddingBottom: 8 }}>
+        }
+      >
+        <div className="owner-chart-wrap">
+          <div className="owner-chart">
             {monthly.map((m) => {
               const h = (v: number) => (chartMax > 0 ? (Math.max(0, v) / chartMax) * 170 : 0)
               return (
-                <div key={m.mm} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end', position: 'relative' }}
-                  title={`${m.name} ${year}\nMargin: ${rs(m.dealerMargin)}\nNet profit: ${rs(m.netProfit)}\nWithdrawn: ${rs(m.transferred)}`}>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, width: '100%', justifyContent: 'center' }}>
-                    {[[m.dealerMargin, '#27ae60'], [m.netProfit, '#15803d'], [m.transferred, '#1d4ed8']].map(([v, c], i) => (
-                      <div key={i} style={{ width: '28%', maxWidth: 16, height: `${Math.max(h(v as number), (v as number) > 0 ? 4 : 0)}px`, background: c as string, borderRadius: '3px 3px 0 0' }} />
+                <div key={m.mm} className="owner-chart-col" title={`${m.name} ${year}\nEarnings: ${rs(m.dealerMargin)}\nProfit: ${rs(m.netProfit)}\nTaken out: ${rs(m.transferred)}`}>
+                  <div className="owner-chart-bars">
+                    {([[m.dealerMargin, 'var(--accent)'], [m.netProfit, 'var(--ok)'], [m.transferred, 'var(--info)']] as [number, string][]).map(([v, c], i) => (
+                      <div key={i} className="owner-chart-bar" style={{ height: `${Math.max(h(v), v > 0 ? 4 : 0)}px`, background: c }} />
                     ))}
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: m.hasData ? 700 : 500, color: m.hasData ? '#1a1814' : '#9ca3af', marginTop: 8 }}>{m.name.slice(0, 3)}</span>
-                  {!m.hasData && <span style={{ fontSize: 9, color: '#9ca3af', position: 'absolute', bottom: 26 }}>No data</span>}
+                  <span className={`owner-chart-label ${m.hasData ? '' : 'is-empty'}`}>{m.name.slice(0, 3)}</span>
                 </div>
               )
             })}
           </div>
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="table-surface" style={{ marginTop: 24 }}>
-        <div className="table-surface-header">
-          <div>
-            <h3 className="surface-heading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><BuildingIcon size={18} color="#967938" />Monthly Financial Breakdown (January → December {year})</h3>
-            <p className="surface-sub">Months without records are shown as 0 / No data.</p>
-          </div>
-          <span className="badge badge-gold font-bold">Full 12-month audit</span>
-        </div>
+      <SectionCard title={`Every month of ${year}`} subtitle="Months with nothing recorded show zero.">
         <div className="table-responsive">
           <table className="clean-table">
-            <thead><tr><th>Month</th><th>Volume (L)</th><th>Gross turnover</th><th>Dealer margin</th><th>Expenses</th><th>Salaries</th><th>Net profit</th><th>Withdrawn</th><th>Retained</th><th>Records</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Month</th><th className="text-right">Litres sold</th><th className="text-right">Fuel sold</th><th className="text-right">Earnings</th>
+                <th className="text-right">Costs</th><th className="text-right">Profit</th><th className="text-right">Taken out</th><th className="text-right">Left in station</th>
+              </tr>
+            </thead>
             <tbody>
               {monthly.map((m) => (
-                <tr key={m.mm} style={{ opacity: m.hasData ? 1 : 0.65 }}>
-                  <td className="font-bold"><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CalendarIcon size={14} color={m.hasData ? '#8c7333' : '#9ca3af'} />{m.name} {year}</div></td>
-                  <td>{m.liters.toLocaleString()} L</td><td>{rs(m.fuelRevenue)}</td>
-                  <td style={{ color: m.hasData ? '#27ae60' : undefined, fontWeight: 600 }}>{rs(m.dealerMargin)}</td>
-                  <td style={{ color: m.expenses > 0 ? '#b91c1c' : undefined }}>{rs(m.expenses)}</td>
-                  <td style={{ color: m.salaries > 0 ? '#b91c1c' : undefined }}>{rs(m.salaries)}</td>
-                  <td style={{ fontWeight: 700, color: m.hasData ? netColor(m.netProfit) : '#6b7280' }}>{rs(m.netProfit)}</td>
-                  <td style={{ color: m.transferred > 0 ? '#1d4ed8' : undefined, fontWeight: m.transferred > 0 ? 600 : undefined }}>{rs(m.transferred)}</td>
-                  <td>{m.hasData ? rs(m.retained) : 'Rs 0'}</td>
-                  <td>{m.hasData ? <span className="badge" style={{ fontSize: 10.5, background: '#dcfce7', color: '#15803d', borderColor: '#bbf7d0' }}>{m.txCount}</span> : <span className="badge" style={{ fontSize: 10.5, background: '#f3f4f6', color: '#6b7280' }}>0</span>}</td>
+                <tr key={m.mm} className={m.hasData ? undefined : 'owner-dim'}>
+                  <td><strong>{m.name}</strong></td>
+                  <td className="text-right">{m.liters.toLocaleString()} L</td>
+                  <td className="text-right">{rs(m.fuelRevenue)}</td>
+                  <td className="text-right">{rs(m.dealerMargin)}</td>
+                  <td className="text-right">{rs(m.expenses + m.salaries)}<div className="text-muted text-xs">{rs(m.expenses)} + {rs(m.salaries)}</div></td>
+                  <td className={`text-right ${m.hasData ? netClass(m.netProfit) : ''}`}><strong>{rs(m.netProfit)}</strong></td>
+                  <td className="text-right">{rs(m.transferred)}</td>
+                  <td className="text-right">{rs(m.retained)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr style={{ background: '#f8f5ee', fontWeight: 800, borderTop: '2px solid #967938' }}>
-                <td>TOTAL ({year})</td><td>{totals.liters.toLocaleString()} L</td><td className="text-gold">{rs(totals.revenue)}</td>
-                <td style={{ color: '#27ae60' }}>{rs(monthly.reduce((s, m) => s + m.dealerMargin, 0))}</td>
-                <td style={{ color: '#b91c1c' }}>{rs(monthly.reduce((s, m) => s + m.expenses, 0))}</td><td style={{ color: '#b91c1c' }}>{rs(monthly.reduce((s, m) => s + m.salaries, 0))}</td>
-                <td style={{ color: netColor(totals.net) }}>{rs(totals.net)}</td><td style={{ color: '#1d4ed8' }}>{rs(totals.transferred)}</td><td className="text-gold">{rs(totals.retained)}</td><td>{totals.tx}</td>
+              <tr className="owner-total-row">
+                <td>Whole year</td>
+                <td className="text-right">{totals.liters.toLocaleString()} L</td>
+                <td className="text-right">{rs(totals.revenue)}</td>
+                <td className="text-right">{rs(monthly.reduce((s, m) => s + m.dealerMargin, 0))}</td>
+                <td className="text-right">{rs(totals.costs)}</td>
+                <td className={`text-right ${netClass(totals.net)}`}>{rs(totals.net)}</td>
+                <td className="text-right">{rs(totals.transferred)}</td>
+                <td className="text-right">{rs(totals.retained)}</td>
               </tr>
             </tfoot>
           </table>
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="table-surface" style={{ marginTop: 24 }}>
-        <div className="table-surface-header">
-          <div>
-            <h3 className="surface-heading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CreditCardIcon size={18} color="#967938" />Owner Withdrawals & Capital Transfers</h3>
-            <p className="surface-sub">Money actually taken by the owner, from a bank account or in cash from the safe. Lifetime total {rs(lifetime)} in {transfers.length} transfer(s).</p>
-          </div>
-          <button type="button" className="btn btn-primary" style={{ backgroundColor: accent, borderColor: accent, fontSize: 12.5 }} onClick={() => setTransferOpen(true)}>+ Record New Withdrawal</button>
-        </div>
+      <SectionCard
+        title="Money you have taken out"
+        subtitle={`From a bank account or in cash from the safe. ${rs(lifetime)} in total, over ${transfers.length} time${transfers.length === 1 ? '' : 's'}.`}
+        actions={<button type="button" className="btn btn-outline" onClick={() => setTransferOpen(true)}><CashIcon size={15} /><span>Take money out</span></button>}
+      >
         <div className="table-responsive">
           <table className="clean-table">
-            <thead><tr><th>Date</th><th>Reference</th><th>Amount</th><th>Beneficiary</th><th>Paid from</th><th>Status</th><th>By</th><th>Notes</th>{currentUser?.role === 'owner' && <th />}</tr></thead>
+            <thead><tr><th>Date</th><th className="text-right">Amount</th><th>Paid to</th><th>Taken from</th><th>Note</th>{currentUser?.role === 'owner' && <th />}</tr></thead>
             <tbody>
               {transfers.length === 0 ? (
-                <tr><td colSpan={9} className="ui-empty">No withdrawals recorded yet.</td></tr>
+                <EmptyRow colSpan={6}>You have not taken any money out yet.</EmptyRow>
               ) : transfers.map((t) => (
                 <tr key={t.id}>
-                  <td className="font-bold">{formatDate(t.date)}</td>
-                  <td>{t.ref ? <span className="badge badge-outline" style={{ fontSize: 11, fontFamily: 'monospace' }}>{t.ref}</span> : '—'}</td>
-                  <td className="font-bold" style={{ color: '#1d4ed8', fontSize: 14 }}>{rs(t.amount)}</td>
-                  <td><strong>{t.title}</strong>{t.sub && <span style={{ fontSize: 11, color: '#686256', display: 'block' }}>{t.sub}</span>}</td>
-                  <td>{t.from}</td>
-                  <td><span className="badge" style={{ background: '#dcfce7', color: '#15803d', borderColor: '#bbf7d0', fontSize: 11 }}>{t.status}</span></td>
-                  <td>{t.by}</td>
-                  <td style={{ fontSize: 12, color: '#686256' }}>{t.notes || '—'}</td>
-                  {currentUser?.role === 'owner' && <td><RowActions><IconButton label="Delete withdrawal" tone="danger" onClick={() => void removeTransfer(t.id, t.amount, t.date, t.cash)}><TrashIcon size={14} /></IconButton></RowActions></td>}
+                  <td><strong>{formatDate(t.date)}</strong>{t.ref && <div className="text-muted text-xs">Ref {t.ref}</div>}</td>
+                  <td className="text-right"><strong>{rs(t.amount)}</strong></td>
+                  <td><strong>{t.title}</strong>{t.sub && <div className="text-muted text-xs">{t.sub}</div>}</td>
+                  <td>{t.from}<div className="text-muted text-xs">Done by {t.by}</div></td>
+                  <td className="text-muted">{t.notes || '—'}</td>
+                  {currentUser?.role === 'owner' && <td><RowActions><IconButton label="Delete" tone="danger" onClick={() => void removeTransfer(t.id, t.amount, t.date, t.cash)}><TrashIcon size={14} /></IconButton></RowActions></td>}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </SectionCard>
 
       {transferOpen && <OwnerTransferModal onClose={() => setTransferOpen(false)} />}
 
-      <PrintReceiptModal isOpen={printOpen} title={`${site.name} — Annual Financial Audit (${year})`} onClose={() => setPrintOpen(false)} stationName={site.name} stationLocation={site.location} stationPhone={site.phone} defaultMode="a4">
-        <div className="slip-meta-grid"><div><strong>NTN:</strong> {site.ntn}</div><div><strong>Fiscal year:</strong> {year}</div><div><strong>Printed:</strong> {new Date().toLocaleString()}</div><div><strong>By:</strong> {currentUser?.name}</div></div>
+      <PrintReceiptModal isOpen={printOpen} title={`${site.name} — Profit summary for ${year}`} onClose={() => setPrintOpen(false)} stationName={site.name} stationLocation={site.location} stationPhone={site.phone} defaultMode="a4">
+        <div className="slip-meta-grid"><div><strong>NTN:</strong> {site.ntn}</div><div><strong>Year:</strong> {year}</div><div><strong>Printed:</strong> {new Date().toLocaleString()}</div><div><strong>By:</strong> {currentUser?.name}</div></div>
         <div className="slip-summary-list">
-          <div className="slip-row"><span>Liters dispensed:</span><strong>{totals.liters.toLocaleString()} L</strong></div>
-          <div className="slip-row"><span>Gross sales turnover:</span><strong>{rs(totals.revenue)}</strong></div>
-          <div className="slip-row"><span>Estimated margin (fuel + lube):</span><strong>{rs(totals.margin)}</strong></div>
+          <div className="slip-row"><span>Litres sold:</span><strong>{totals.liters.toLocaleString()} L</strong></div>
+          <div className="slip-row"><span>Fuel sold:</span><strong>{rs(totals.revenue)}</strong></div>
+          <div className="slip-row"><span>Your earnings (fuel + lubricants, estimate):</span><strong>{rs(totals.margin)}</strong></div>
           <div className="slip-row"><span>Expenses + salaries:</span><strong>- {rs(totals.costs)}</strong></div>
-          <div className="slip-row highlight"><span>Net estimated profit:</span><strong>{rs(totals.net)}</strong></div>
-          <div className="slip-row"><span>Withdrawn by owner:</span><strong>{rs(totals.transferred)}</strong></div>
-          <div className="slip-row"><span>Retained profit:</span><strong>{rs(totals.retained)}</strong></div>
+          <div className="slip-row highlight"><span>Estimated profit:</span><strong>{rs(totals.net)}</strong></div>
+          <div className="slip-row"><span>Taken out by owner:</span><strong>{rs(totals.transferred)}</strong></div>
+          <div className="slip-row"><span>Profit left in the station:</span><strong>{rs(totals.retained)}</strong></div>
         </div>
         <table className="slip-table">
-          <thead><tr><th>Month</th><th>Liters</th><th>Turnover</th><th>Net profit</th><th>Withdrawn</th></tr></thead>
+          <thead><tr><th>Month</th><th>Litres</th><th>Fuel sold</th><th>Profit</th><th>Taken out</th></tr></thead>
           <tbody>{monthly.map((m) => <tr key={m.mm}><td>{m.name}</td><td>{m.liters.toLocaleString()}</td><td>{Math.round(m.fuelRevenue).toLocaleString()}</td><td>{Math.round(m.netProfit).toLocaleString()}</td><td>{m.transferred.toLocaleString()}</td></tr>)}</tbody>
         </table>
-        <p style={{ fontSize: 11, marginTop: 8 }}>Estimated figures based on the dealer margins configured in Settings; generated {todayISO()}.</p>
+        <p style={{ fontSize: 11, marginTop: 8 }}>Estimated figures, based on the earnings per litre set in Settings. Printed {todayISO()}.</p>
       </PrintReceiptModal>
     </div>
   )

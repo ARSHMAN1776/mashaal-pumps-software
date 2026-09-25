@@ -328,3 +328,25 @@ export const WifiOffIcon: React.FC<IconProps> = ({ size = 16, color = 'currentCo
     <path d="M12 20h.01" />
   </svg>
 )
+
+export const HomeIcon: React.FC<IconProps> = ({ size = 20, color = 'currentColor', className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M3 10.5 12 3l9 7.5" />
+    <path d="M5 9.5V21h5v-6h4v6h5V9.5" />
+  </svg>
+)
+
+export const MoreIcon: React.FC<IconProps> = ({ size = 20, color = 'currentColor', className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="none" className={className} style={{ color }}>
+    <circle cx="5" cy="12" r="1.8" />
+    <circle cx="12" cy="12" r="1.8" />
+    <circle cx="19" cy="12" r="1.8" />
+  </svg>
+)
+
+export const LayersIcon: React.FC<IconProps> = ({ size = 20, color = 'currentColor', className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+    <path d="m3 13 9 5 9-5" />
+  </svg>
+)

@@ -9,22 +9,22 @@
   --font-serif: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
   /* Palette */
-  --bg-app: #f7f4ed;
+  --bg-app: #f1f4f8;
   --bg-surface: #ffffff;
-  --bg-surface-elevated: #fffefb;
-  --bg-surface-subtle: #fbf9f4;
+  --bg-surface-elevated: #fbfeff;
+  --bg-surface-subtle: #f6f9fd;
   --bg-card: #ffffff;
 
   /* Gold & Accents */
-  --gold-50: #fbf6ec;
-  --gold-100: #f5ebd2;
-  --gold-200: #ead29c;
-  --gold-300: #dfb867;
-  --gold-400: #d4a03e;
-  --gold-500: #b88d2b;
-  --gold-600: #9c7520;
-  --gold-700: #7d5a15;
-  --gold-gradient: linear-gradient(135deg, #c59b36 0%, #a87e22 100%);
+  --gold-50: #f3f6fa;
+  --gold-100: #e8ebef;
+  --gold-200: #cdd1d7;
+  --gold-300: #475569;
+  --gold-400: #475569;
+  --gold-500: #475569;
+  --gold-600: #334155;
+  --gold-700: #334155;
+  --gold-gradient: linear-gradient(135deg, #475569 0%, #475569 100%);
   --gold-subtle-glow: 0 8px 24px rgba(184, 141, 43, 0.12);
 
   /* Typography */
@@ -34,8 +34,8 @@
   --text-inverse: #ffffff;
 
   /* Borders & Dividers */
-  --border-subtle: #ece5d6;
-  --border-medium: #e0d7c3;
+  --border-subtle: #e2e5e9;
+  --border-medium: #d4d7db;
   --border-gold: rgba(184, 141, 43, 0.35);
 
   /* Status Colors */
@@ -44,8 +44,8 @@
   --success-border: #c2e5cb;
 
   --warning-bg: #fdf5e7;
-  --warning-text: #965b05;
-  --warning-border: #f7dcab;
+  --warning-text: #334155;
+  --warning-border: #d8dce2;
 
   --danger-bg: #fbeeed;
   --danger-text: #a82315;
@@ -124,23 +124,23 @@ textarea {
 .btn-primary {
   background: var(--gold-gradient);
   color: #ffffff;
-  border-color: #a87e22;
+  border-color: #475569;
   box-shadow: 0 3px 8px rgba(168, 126, 34, 0.25);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #b88d2b 0%, #956e1b 100%);
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
   box-shadow: 0 5px 14px rgba(168, 126, 34, 0.35);
 }
 
 .btn-secondary {
-  background-color: #f5edd7;
-  color: #7b5815;
-  border-color: #e3d3b0;
+  background-color: #eaedf1;
+  color: #334155;
+  border-color: #ced2d8;
 }
 
 .btn-secondary:hover {
-  background-color: #ebdcb9;
+  background-color: #d6dae0;
 }
 
 .btn-outline {
@@ -150,7 +150,7 @@ textarea {
 }
 
 .btn-outline:hover {
-  background-color: #fbf8f2;
+  background-color: #f5f8fc;
   border-color: var(--gold-500);
 }
 
@@ -230,9 +230,9 @@ textarea {
 }
 
 .badge-neutral {
-  background-color: #f1eddf;
+  background-color: #eaedf1;
   color: #555044;
-  border: 1px solid #e1dcce;
+  border: 1px solid #d9dce0;
 }
 
 .badge-gold {
@@ -247,9 +247,9 @@ textarea {
   border-radius: 4px;
   font-size: 11.5px;
   font-weight: 700;
-  background-color: #f4efdf;
+  background-color: #eceff3;
   color: #4a4537;
-  border: 1px solid #e2dac7;
+  border: 1px solid #d7dade;
 }
 
 .category-tag {
@@ -257,9 +257,9 @@ textarea {
   padding: 3px 8px;
   border-radius: 4px;
   font-size: 11.5px;
-  background-color: #faf7f0;
+  background-color: #f4f7fb;
   color: #635d4f;
-  border: 1px solid #e9e3d3;
+  border: 1px solid #e0e3e7;
 }
 
 /* ==========================================================================
@@ -271,7 +271,7 @@ textarea {
   height: 100vh;
   max-height: 100vh;
   position: relative;
-  background: radial-gradient(circle at 50% 12%, #fdfbf7 0%, #f6f1e6 55%, #ede4d4 100%);
+  background: radial-gradient(circle at 50% 12%, #f8fbff 0%, #eef1f5 55%, #e2e5e9 100%);
   color: #2b2720;
   display: flex;
   flex-direction: column;
@@ -371,7 +371,7 @@ textarea {
 }
 
 .auth-back-btn:hover {
-  color: #997328;
+  color: #334155;
   transform: translateX(-3px);
 }
 
@@ -389,7 +389,7 @@ textarea {
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.22em;
-  color: #7d6e4d;
+  color: #334155;
   display: block;
 }
 
@@ -397,7 +397,7 @@ textarea {
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.22em;
-  color: #7d6e4d;
+  color: #334155;
   display: block;
   margin-top: 1px;
 }
@@ -405,7 +405,7 @@ textarea {
 .auth-motto-line {
   width: 40px;
   height: 1.5px;
-  background-color: #a8843c;
+  background-color: #475569;
   margin-top: 3px;
   border-radius: 1px;
 }
@@ -432,7 +432,7 @@ textarea {
   min-height: 0;
   margin-top: 0;
   background: #ffffff;
-  border: 1px solid #e0d0b2;
+  border: 1px solid #cbcfd5;
   border-radius: 14px;
   padding: 18px 28px 14px;
   box-shadow: 0 22px 55px rgba(66, 52, 28, 0.08), 0 4px 12px rgba(66, 52, 28, 0.03);
@@ -465,9 +465,9 @@ textarea {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #faf3e2 70%, #edd8b1 100%);
-  border: 1.5px solid #d4b883;
-  box-shadow: 0 5px 14px rgba(168, 126, 42, 0.14), inset 0 0 0 2px rgba(255, 255, 255, 0.85), inset 0 0 0 3px #e2c99f;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #f0f3f7 70%, #d4d8de 100%);
+  border: 1.5px solid #475569;
+  box-shadow: 0 5px 14px rgba(168, 126, 42, 0.14), inset 0 0 0 2px rgba(255, 255, 255, 0.85), inset 0 0 0 3px #c6cad0;
   display: grid;
   place-items: center;
   transition: transform 260ms ease, box-shadow 260ms ease;
@@ -498,7 +498,7 @@ textarea {
 
 .auth-site-pill {
   background-color: #2c3625;
-  color: #fcfbf7;
+  color: #f8fbff;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -509,9 +509,9 @@ textarea {
 }
 
 .auth-brand-pill {
-  background-color: #fbf7ee;
+  background-color: #f4f7fb;
   color: #403622;
-  border: 1px solid #cbb17d;
+  border: 1px solid #475569;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -561,12 +561,12 @@ textarea {
 .divider-line {
   flex: 1;
   height: 1px;
-  background: linear-gradient(90deg, #c9ae7b 0%, #e8dcbf 50%, transparent 100%);
+  background: linear-gradient(90deg, #475569 0%, #e8dcbf 50%, transparent 100%);
 }
 
 .divider-diamond {
   font-size: 6px;
-  color: #9c762c;
+  color: #475569;
   line-height: 1;
 }
 
@@ -597,7 +597,7 @@ textarea {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.20em;
-  color: #8c7138;
+  color: #334155;
   text-transform: uppercase;
   margin-bottom: 5px;
   text-align: left;
@@ -605,8 +605,8 @@ textarea {
 
 .auth-segmented-control {
   display: flex;
-  background-color: #f6f1e6;
-  border: 1px solid #e4d6bd;
+  background-color: #eef1f5;
+  border: 1px solid #d4d7db;
   border-radius: 9px;
   padding: 3px;
   gap: 4px;
@@ -634,7 +634,7 @@ textarea {
 
 .auth-segment-btn.active {
   background: linear-gradient(135deg, #443c26 0%, #322b19 100%);
-  color: #fbf7ee;
+  color: #f4f7fb;
   box-shadow: 0 2px 8px rgba(48, 40, 23, 0.28);
   font-weight: 600;
 }
@@ -667,14 +667,14 @@ textarea {
   position: relative;
   display: flex;
   align-items: center;
-  background-color: #fdfbf7;
-  border: 1px solid #dfcfb6;
+  background-color: #f8fbff;
+  border: 1px solid #ced1d5;
   border-radius: 8px;
   transition: all 180ms ease;
 }
 
 .auth-input-container:focus-within {
-  border-color: #9f7b32;
+  border-color: #475569;
   background-color: #ffffff;
   box-shadow: 0 0 0 2.5px rgba(164, 127, 54, 0.15);
 }
@@ -714,7 +714,7 @@ textarea {
   display: grid;
   place-items: center;
   padding: 4px;
-  color: #917534;
+  color: #334155;
   transition: opacity 140ms ease;
 }
 
@@ -741,7 +741,7 @@ textarea {
 }
 
 .auth-checkbox {
-  accent-color: #594723;
+  accent-color: #334155;
   width: 15px;
   height: 15px;
   cursor: pointer;
@@ -752,7 +752,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #8a6f33;
+  color: #334155;
   font-weight: 600;
   font-size: 11.5px;
 }
@@ -761,9 +761,9 @@ textarea {
 .auth-primary-btn {
   width: 100%;
   padding: 11px 20px;
-  border: 1px solid #94712b;
+  border: 1px solid #334155;
   border-radius: 8px;
-  background: linear-gradient(135deg, #ad8539 0%, #8c6722 100%);
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
   color: #ffffff;
   cursor: pointer;
   display: flex;
@@ -777,7 +777,7 @@ textarea {
 }
 
 .auth-primary-btn:hover {
-  background: linear-gradient(135deg, #ba9142 0%, #987126 100%);
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
   transform: translateY(-1.5px);
   box-shadow: 0 9px 24px rgba(140, 103, 34, 0.34);
 }
@@ -805,7 +805,7 @@ textarea {
   font-size: 11.5px;
   color: #5c5445;
   line-height: 1.4;
-  border-left: 2.5px solid #c9ae7b;
+  border-left: 2.5px solid #475569;
   padding: 4px 0 4px 10px;
 }
 
@@ -923,7 +923,7 @@ textarea {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(circle at 50% 10%, #faf8f2 0%, #f3eee3 100%);
+  background: radial-gradient(circle at 50% 10%, #f5f8fc 0%, #ebeef2 100%);
 }
 
 .site-select-topbar {
@@ -1114,7 +1114,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  background-color: #faf7ef;
+  background-color: #f4f7fb;
   border-radius: var(--radius-md);
   padding: 14px 16px;
   margin-bottom: 24px;
@@ -1346,7 +1346,7 @@ textarea {
 /* Station Quick Switcher */
 .station-quick-switch {
   display: flex;
-  background-color: #f6f2e8;
+  background-color: #eff2f6;
   padding: 4px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border-subtle);
@@ -1426,7 +1426,7 @@ textarea {
 }
 
 .logout-action-btn:hover {
-  background-color: #f7f2e6;
+  background-color: #eff2f6;
 }
 
 /* ==========================================================================
@@ -1498,12 +1498,12 @@ textarea {
 }
 
 .sidebar-nav-item:hover {
-  background-color: #faf7ef;
+  background-color: #f4f7fb;
   color: var(--text-primary);
 }
 
 .sidebar-nav-item.active {
-  background-color: #f4ecda;
+  background-color: #e9ecf0;
   color: var(--gold-700);
   font-weight: 700;
 }
@@ -1541,7 +1541,7 @@ textarea {
 /* Sidebar Footer: Today's fuel rates */
 .sidebar-footer-card {
   margin-top: 16px;
-  background-color: #fbf9f2;
+  background-color: #f6f9fd;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 12px 14px;
@@ -1740,14 +1740,14 @@ textarea {
 
 .alert-item.warning {
   background-color: #fdf6ea;
-  border: 1px solid #f6dbab;
+  border: 1px solid #d8dce2;
   color: #925406;
 }
 
 .alert-item.info {
-  background-color: #f8f5ed;
+  background-color: #f2f5f9;
   border: 1px solid var(--gold-200);
-  color: #7a5815;
+  color: #334155;
 }
 
 .alert-action-btn {
@@ -1881,7 +1881,7 @@ textarea {
 }
 
 .tank-gauge-card {
-  background-color: #fbf9f4;
+  background-color: #f6f9fd;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 18px 20px;
@@ -1892,8 +1892,8 @@ textarea {
 }
 
 .tank-gauge-card.low-stock-glow {
-  background-color: #fff9f0;
-  border-color: #f3d4a0;
+  background-color: #f7fafe;
+  border-color: #d1d5db;
   box-shadow: 0 0 0 1px rgba(220, 130, 20, 0.1);
 }
 
@@ -1922,7 +1922,7 @@ textarea {
 .tank-progress-track {
   width: 100%;
   height: 8px;
-  background-color: #ebe4d3;
+  background-color: #e1e4e8;
   border-radius: var(--radius-full);
   overflow: hidden;
 }
@@ -1934,7 +1934,7 @@ textarea {
 }
 
 .tank-progress-fill.fill-good {
-  background: linear-gradient(90deg, #c59b36, #27ae60);
+  background: linear-gradient(90deg, #475569, #27ae60);
 }
 
 .tank-progress-fill.fill-low {
@@ -2071,7 +2071,7 @@ textarea {
   padding: 7px 10px;
   font-size: 12px;
   color: var(--text-secondary);
-  border-bottom: 1px solid #f4f0e6;
+  border-bottom: 1px solid #edf0f4;
   vertical-align: middle;
   line-height: 1.3;
 }
@@ -2081,7 +2081,7 @@ textarea {
 }
 
 .clean-table tbody tr:hover {
-  background-color: #fbf9f4;
+  background-color: #f6f9fd;
 }
 
 .text-right {
@@ -2096,7 +2096,7 @@ textarea {
 }
 
 .nozzle-status-item {
-  background-color: #fcfaf5;
+  background-color: #f7fafe;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 16px 18px;
@@ -2209,7 +2209,7 @@ textarea {
 .vehicle-pill {
   padding: 2px 7px;
   border-radius: 4px;
-  background-color: #f5f0e4;
+  background-color: #edf0f4;
   font-size: 11px;
   font-weight: 600;
 }
@@ -2329,7 +2329,7 @@ textarea {
 }
 
 .form-label.text-gold {
-  color: #926318;
+  color: #334155;
 }
 
 .form-input {
@@ -2337,7 +2337,7 @@ textarea {
   height: 42px;
   padding: 8px 14px;
   background-color: #ffffff;
-  border: 1.5px solid #dcd5ca;
+  border: 1.5px solid #d3d6da;
   border-radius: 8px;
   font-size: 13.5px;
   font-family: inherit;
@@ -2354,7 +2354,7 @@ textarea {
 }
 
 .form-input:hover {
-  border-color: #c4b5a2;
+  border-color: #b4b7bb;
 }
 
 .form-input:focus {
@@ -2408,10 +2408,10 @@ textarea.form-input {
 .input-prefix-wrap {
   display: flex;
   align-items: stretch;
-  border: 1.5px solid #dcd5ca;
+  border: 1.5px solid #d3d6da;
   border-radius: 8px;
   overflow: hidden;
-  background-color: #faf7f2;
+  background-color: #f4f7fb;
   transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
   width: 100%;
   box-sizing: border-box;
@@ -2429,14 +2429,14 @@ textarea.form-input {
 
 .input-prefix {
   padding: 0 14px;
-  background-color: #f0e9df;
+  background-color: #e7eaee;
   font-size: 13px;
   font-weight: 700;
   color: #57534e;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-right: 1px solid #dcd5ca;
+  border-right: 1px solid #d3d6da;
   user-select: none;
   flex-shrink: 0;
 }
@@ -2486,8 +2486,8 @@ textarea.form-input {
   flex: 1;
   height: 42px;
   border-radius: 8px;
-  border: 1.5px solid #dcd5ca;
-  background-color: #faf7f2;
+  border: 1.5px solid #d3d6da;
+  background-color: #f4f7fb;
   color: #57534e;
   font-size: 13px;
   font-weight: 600;
@@ -2500,7 +2500,7 @@ textarea.form-input {
 }
 
 .role-pill-btn:hover {
-  border-color: #c4b5a2;
+  border-color: #b4b7bb;
   background-color: #ffffff;
 }
 
@@ -2518,7 +2518,7 @@ textarea.form-input {
 }
 
 .calc-preview-card {
-  background-color: #fbf8f0;
+  background-color: #f5f8fc;
   border: 1px solid var(--gold-200);
   border-radius: var(--radius-md);
   padding: 16px 20px;
@@ -2559,8 +2559,8 @@ textarea.form-input {
   display: flex;
   align-items: center;
   padding: 8px 14px;
-  background-color: #f5f0e4;
-  border: 1.5px solid #dcd5ca;
+  background-color: #edf0f4;
+  border: 1.5px solid #d3d6da;
   border-radius: 8px;
   font-size: 14px;
   box-sizing: border-box;
@@ -2718,7 +2718,7 @@ textarea.form-input {
 }
 
 .report-tab-btn.active {
-  background-color: #f5eedf;
+  background-color: #ebeef2;
   color: var(--gold-700);
 }
 
@@ -2729,24 +2729,24 @@ textarea.form-input {
 
 /* Theme Variables: PARCO (Red Accent) & PSO (Green Accent) */
 .theme-parco {
-  --bg-app: #fbf8f5;
+  --bg-app: #f6f9fd;
   --bg-surface: #ffffff;
   --sidebar-bg: #320a0a;
   --sidebar-border: #4a1212;
   --sidebar-text: #e6d3d3;
   --sidebar-section-title: #b58282;
   --sidebar-hover-bg: #441010;
-  --sidebar-item-active-bg: #eae3d2;
+  --sidebar-item-active-bg: #e0e3e7;
   --sidebar-item-active-text: #320a0a;
   --sidebar-item-active-icon: #9e1b1b;
   --brand-primary: #9e1b1b;
   --brand-pill-bg: #9e1b1b;
   --brand-pill-text: #ffffff;
   --card-bg: #ffffff;
-  --card-border: #ebe4d8;
+  --card-border: #e2e5e9;
   --card-shadow: 0 3px 12px rgba(45, 35, 20, 0.04);
-  --hero-bg: linear-gradient(135deg, #fdf6f5 0%, #fffdf9 100%);
-  --hero-border: #f3e3e0;
+  --hero-bg: linear-gradient(135deg, #fdf6f5 0%, #fafdff 100%);
+  --hero-border: #e4e7eb;
   --icon-bubble-sales-bg: #fdf0ee;
   --icon-bubble-sales-color: #9e1b1b;
   --icon-bubble-safe-bg: #fdf0ee;
@@ -2765,7 +2765,7 @@ textarea.form-input {
   --sidebar-text: #c2d6cc;
   --sidebar-section-title: #6d937e;
   --sidebar-hover-bg: #143825;
-  --sidebar-item-active-bg: #eae3d2;
+  --sidebar-item-active-bg: #e0e3e7;
   --sidebar-item-active-text: #0d281a;
   --sidebar-item-active-icon: #0d281a;
   --brand-primary: #006a4e;
@@ -3375,13 +3375,13 @@ textarea.form-input {
   padding: 4px 8px 4px 4px;
   border-radius: 9999px;
   border: 1px solid var(--card-border);
-  background-color: #faf7f2;
+  background-color: #f4f7fb;
   cursor: pointer;
   transition: all 140ms ease;
 }
 
 .header-profile-trigger:hover {
-  background-color: #f2ece1;
+  background-color: #eaedf1;
 }
 
 .user-avatar-circle {
@@ -3450,7 +3450,7 @@ textarea.form-input {
 
 .dropdown-divider {
   height: 1px;
-  background-color: #ede7dc;
+  background-color: #e5e8ec;
   margin: 4px 0;
 }
 
@@ -3480,11 +3480,11 @@ textarea.form-input {
 }
 
 .dropdown-menu-item:hover {
-  background-color: #f7f3ec;
+  background-color: #f0f3f7;
 }
 
 .dropdown-menu-item.active {
-  background-color: #f0eae0;
+  background-color: #e8ebef;
   font-weight: 600;
 }
 
@@ -3648,9 +3648,9 @@ textarea.form-input {
 }
 
 .dash-alert-pill.warning {
-  background-color: #fef8eb;
-  border: 1px solid #f6deb3;
-  color: #8c5208;
+  background-color: #f5f8fc;
+  border: 1px solid #dadee4;
+  color: #334155;
 }
 
 .dash-alert-pill.info {
@@ -3691,7 +3691,7 @@ textarea.form-input {
 .summary-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(45, 35, 20, 0.08);
-  border-color: #dfd4c2;
+  border-color: #d2d5d9;
 }
 
 .summary-card-inner {
@@ -3858,7 +3858,7 @@ textarea.form-input {
 }
 
 .btn-view-all-tanks:hover {
-  background-color: #f7f3eb;
+  background-color: #f0f3f7;
   color: #1a1813;
 }
 
@@ -3869,8 +3869,8 @@ textarea.form-input {
 }
 
 .tank-item-card {
-  background-color: #faf8f5;
-  border: 1px solid #ede5d8;
+  background-color: #f5f8fc;
+  border: 1px solid #e3e6ea;
   border-radius: 10px;
   padding: 16px;
   display: flex;
@@ -3880,7 +3880,7 @@ textarea.form-input {
 }
 
 .tank-item-card:hover {
-  border-color: #dcd0bc;
+  border-color: #ced1d5;
   background-color: #ffffff;
 }
 
@@ -3966,7 +3966,7 @@ textarea.form-input {
 .tank-progress-track {
   width: 100%;
   height: 6px;
-  background-color: #e5ddd0;
+  background-color: #dbdee2;
   border-radius: 9999px;
   overflow: hidden;
 }
@@ -3994,7 +3994,7 @@ textarea.form-input {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 10px 14px;
-  border-top: 1px solid #eee6d8;
+  border-top: 1px solid #e4e7eb;
   padding-top: 10px;
 }
 
@@ -4049,7 +4049,7 @@ textarea.form-input {
   padding: 6px 13px;
   border-radius: 9999px;
   border: 1px solid var(--card-border);
-  background-color: #faf7f2;
+  background-color: #f4f7fb;
   font-size: 12px;
   font-weight: 600;
   color: #3b352b;
@@ -4058,7 +4058,7 @@ textarea.form-input {
 }
 
 .btn-quick-action:hover {
-  background-color: #f1ebdE;
+  background-color: #e8ebef;
   color: #1a1813;
 }
 
@@ -4170,7 +4170,7 @@ textarea.form-input {
   padding: 5px 11px;
   border-radius: 9999px;
   border: 1px solid var(--card-border);
-  background-color: #faf7f2;
+  background-color: #f4f7fb;
   font-size: 11.5px;
   font-weight: 600;
   color: #3b352b;
@@ -4179,7 +4179,7 @@ textarea.form-input {
 }
 
 .btn-quick-action:hover {
-  background-color: #f1ebde;
+  background-color: #e8ebef;
   color: #1a1813;
 }
 
@@ -4496,7 +4496,7 @@ textarea.form-input {
   justify-content: space-between;
   align-items: center;
   padding: 16px 22px;
-  background-color: #faf8f5;
+  background-color: #f5f8fc;
   border-bottom: 1px solid var(--card-border);
 }
 
@@ -4512,7 +4512,7 @@ textarea.form-input {
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background-color: #f1ebdE;
+  background-color: #e8ebef;
   color: #3b352b;
 }
 
@@ -4554,7 +4554,7 @@ textarea.form-input {
 
 .fuel-rate-panel:focus-within,
 .fuel-rate-panel:hover {
-  border-color: #c9bea9;
+  border-color: #bcbfc3;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
 }
 
@@ -4577,9 +4577,9 @@ textarea.form-input {
 }
 
 .fuel-name-badge.super {
-  background-color: #fff7ed;
+  background-color: #f5f8fc;
   color: #c2410c;
-  border: 1px solid #ffedd5;
+  border: 1px solid #edf0f4;
 }
 
 .fuel-name-badge.diesel {
@@ -4602,10 +4602,10 @@ textarea.form-input {
 .fuel-rate-input-container {
   display: flex;
   align-items: stretch;
-  border: 1.5px solid #dcd5ca;
+  border: 1.5px solid #d3d6da;
   border-radius: 8px;
   overflow: hidden;
-  background-color: #faf7f2;
+  background-color: #f4f7fb;
   transition: all 150ms ease;
 }
 
@@ -4617,13 +4617,13 @@ textarea.form-input {
 
 .fuel-rate-currency-tag {
   padding: 10px 14px;
-  background-color: #f0e9df;
+  background-color: #e7eaee;
   font-size: 13px;
   font-weight: 700;
   color: #57534e;
   display: flex;
   align-items: center;
-  border-right: 1px solid #dcd5ca;
+  border-right: 1px solid #d3d6da;
   user-select: none;
 }
 
@@ -4658,7 +4658,7 @@ textarea.form-input {
   align-items: center;
   font-size: 11.5px;
   color: #8c8270;
-  border-top: 1px dashed #e8e0d5;
+  border-top: 1px dashed #dee1e5;
   padding-top: 10px;
 }
 
@@ -4698,7 +4698,7 @@ textarea.form-input {
 
 .form-field-input {
   width: 100%;
-  border: 1.5px solid #dcd5ca;
+  border: 1.5px solid #d3d6da;
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 13.5px;
@@ -4717,7 +4717,7 @@ textarea.form-input {
 
 .form-field-textarea {
   width: 100%;
-  border: 1.5px solid #dcd5ca;
+  border: 1.5px solid #d3d6da;
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 13px;
@@ -4739,8 +4739,8 @@ textarea.form-input {
 
 /* Live Thermal Receipt Mockup */
 .receipt-preview-wrap {
-  background-color: #f7f4ee;
-  border: 1.5px dashed #cfc5b4;
+  background-color: #f1f4f8;
+  border: 1.5px dashed #c3c6ca;
   border-radius: 10px;
   padding: 18px;
   display: flex;
@@ -4768,8 +4768,8 @@ textarea.form-input {
   font-size: 11.5px;
   color: #1c1917;
   line-height: 1.45;
-  border-top: 3px dashed #d1c7bc;
-  border-bottom: 3px dashed #d1c7bc;
+  border-top: 3px dashed #c6c9cd;
+  border-bottom: 3px dashed #c6c9cd;
 }
 
 .thermal-header-center {
@@ -4852,8 +4852,8 @@ textarea.form-input {
 
 .threshold-pct-pill {
   padding: 6px 14px;
-  background-color: #faf7f2;
-  border: 1.5px solid #dcd5ca;
+  background-color: #f4f7fb;
+  border: 1.5px solid #d3d6da;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 800;
@@ -4863,18 +4863,18 @@ textarea.form-input {
 }
 
 .threshold-hint-box {
-  background-color: #fbf8f2;
-  border: 1px solid #ebdcb9;
+  background-color: #f5f8fc;
+  border: 1px solid #d6dae0;
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 12px;
-  color: #7b5815;
+  color: #334155;
   line-height: 1.45;
 }
 
 .infra-summary-card {
-  background-color: #faf8f5;
-  border: 1px solid #eae3d6;
+  background-color: #f5f8fc;
+  border: 1px solid #e1e4e8;
   border-radius: 10px;
   padding: 16px 18px;
   display: flex;
@@ -4896,7 +4896,7 @@ textarea.form-input {
   align-items: center;
   padding: 8px 12px;
   background-color: #ffffff;
-  border: 1px solid #e8e0d5;
+  border: 1px solid #dee1e5;
   border-radius: 6px;
   font-size: 12.5px;
 }
@@ -5878,7 +5878,7 @@ textarea.form-input {
 .module-guide-card {
   background-color: #ffffff;
   border: 1px solid rgba(150, 121, 56, 0.22);
-  border-left: 4px solid #967938;
+  border-left: 4px solid #475569;
   border-radius: 10px;
   margin-bottom: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
@@ -5897,7 +5897,7 @@ textarea.form-input {
 }
 
 .module-guide-header:hover {
-  background-color: #faf7f2;
+  background-color: #f4f7fb;
 }
 
 .guide-header-left {
@@ -5910,7 +5910,7 @@ textarea.form-input {
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  background-color: #f7f3ec;
+  background-color: #f0f3f7;
   border: 1px solid rgba(150, 121, 56, 0.25);
   display: flex;
   align-items: center;
@@ -5963,7 +5963,7 @@ textarea.form-input {
   gap: 6px;
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid #d9d2c5;
+  border: 1px solid #d0d3d7;
   background-color: #ffffff;
   color: #555046;
   font-size: 12px;
@@ -5974,8 +5974,8 @@ textarea.form-input {
 }
 
 .guide-toggle-btn:hover {
-  background-color: #f5f0e6;
-  border-color: #967938;
+  background-color: #edf0f4;
+  border-color: #475569;
   color: #1a1814;
 }
 
@@ -5991,7 +5991,7 @@ textarea.form-input {
 .module-guide-body {
   padding: 14px 18px 16px;
   border-top: 1px solid rgba(150, 121, 56, 0.14);
-  background-color: #faf8f5;
+  background-color: #f5f8fc;
 }
 
 .guide-steps-grid {
@@ -6004,7 +6004,7 @@ textarea.form-input {
   display: flex;
   gap: 10px;
   background-color: #ffffff;
-  border: 1px solid #e8e3d8;
+  border: 1px solid #e0e3e7;
   border-radius: 8px;
   padding: 10px 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
@@ -6014,7 +6014,7 @@ textarea.form-input {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background-color: #967938;
+  background-color: #475569;
   color: #ffffff;
   font-weight: 700;
   font-size: 11.5px;
@@ -6053,8 +6053,8 @@ textarea.form-input {
 
 .guide-critical-box {
   margin-top: 12px;
-  background-color: #fefce8;
-  border: 1px solid #fef08a;
+  background-color: #f7fafe;
+  border: 1px solid #e3e7ed;
   border-radius: 8px;
   padding: 10px 14px;
 }
@@ -6064,7 +6064,7 @@ textarea.form-input {
   align-items: center;
   gap: 6px;
   font-size: 12.5px;
-  color: #854d0e;
+  color: #334155;
   margin-bottom: 6px;
 }
 
@@ -6082,7 +6082,7 @@ textarea.form-input {
   align-items: flex-start;
   gap: 6px;
   font-size: 12px;
-  color: #713f12;
+  color: #334155;
   line-height: 1.3;
 }
 
@@ -6171,7 +6171,7 @@ textarea.form-input {
 }
 
 .calc-pill-val.text-gold {
-  color: #967938;
+  color: #475569;
 }
 
 .calc-pill-val.text-red {
@@ -6195,7 +6195,7 @@ textarea.form-input {
 .owner-month-label {
   font-size: 12px;
   font-weight: 700;
-  color: #967938;
+  color: #475569;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   display: flex;
@@ -6219,7 +6219,7 @@ textarea.form-input {
 
 .owner-month-dropdown:hover,
 .owner-month-dropdown:focus {
-  border-color: #967938;
+  border-color: #475569;
   background-color: #ffffff;
   box-shadow: 0 0 0 3px rgba(150, 121, 56, 0.15);
 }

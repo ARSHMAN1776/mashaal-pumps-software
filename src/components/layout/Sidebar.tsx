@@ -3,10 +3,8 @@ import { useApp } from '../../context/AppContext'
 import { isLowTank } from '../../data/derive'
 import {
   GasPumpIcon,
-  GaugeIcon,
   DropletIcon,
   BuildingIcon,
-  BookOpenIcon,
   UsersIcon,
   FileTextIcon,
   CreditCardIcon,
@@ -15,171 +13,117 @@ import {
   TruckIcon,
   BarChartIcon,
   SettingsIcon,
-  ShieldIcon,
   LogOutIcon,
   TrendingUpIcon,
+  HomeIcon,
+  BookOpenIcon,
 } from '../common/Icons'
 
-interface NavItemDef {
+interface NavItem {
   id: string
   label: string
   icon: React.ReactNode
-  badge?: string
-  badgeColor?: string
+  badge?: number
 }
 
+interface NavGroup {
+  title?: string
+  items: NavItem[]
+}
+
+/** The menu. Names are plain words for what people do; the ids are what the app uses internally. */
 export const Sidebar: React.FC<{ open?: boolean; onNavigate?: () => void }> = ({ open = false, onNavigate }) => {
   const { activeModule, setActiveModule, activeSiteData, currentUser, logout } = useApp()
 
-  const isParco = activeSiteData.siteInfo.brand === 'TOTAL PARCO'
   const isOwner = currentUser?.role === 'owner'
   const isCashier = currentUser?.role === 'cashier'
-  const lowStockCount = activeSiteData.tanks.filter((t) => isLowTank(t, activeSiteData.settings.lowStockAlertPct)).length
+  const lowTanks = activeSiteData.tanks.filter((t) => isLowTank(t, activeSiteData.settings.lowStockAlertPct)).length
+  const home = isOwner ? 'owner-portal' : 'dashboard'
+  const site = activeSiteData.siteInfo
 
-  const ownerSection: { title: string; items: NavItemDef[] } = {
-    title: 'Executive Command',
-    items: [
-      {
-        id: 'owner-portal',
-        label: 'Owner Portal (Executive)',
-        icon: <ShieldIcon size={18} color="#967938" />,
-        badge: 'Owner',
-        badgeColor: '#967938',
-      },
-      {
-        id: 'owner-financials',
-        label: 'Financial & Annual Performance',
-        icon: <TrendingUpIcon size={18} color="#967938" />,
-        badge: 'Annual',
-        badgeColor: '#15803d',
-      },
-    ],
-  }
-
-  const menuSections: { title: string; items: NavItemDef[] }[] = [
-    ...(isOwner ? [ownerSection] : []),
+  const groups: NavGroup[] = [
+    { items: [{ id: home, label: 'Home', icon: <HomeIcon size={19} /> }] },
     {
-      title: isOwner ? 'Station Deep-Dives' : 'Core Operations',
+      title: 'Daily work',
       items: [
-        { id: 'dashboard', label: 'Dashboard', icon: <GaugeIcon size={18} /> },
-        { id: 'fuel-sales', label: 'Fuel Sales & Nozzles', icon: <GasPumpIcon size={18} /> },
-        {
-          id: 'tank-dip',
-          label: 'Tank Dip & Stock',
-          icon: <DropletIcon size={18} />,
-          badge: lowStockCount > 0 ? 'Dip Alert' : undefined,
-          badgeColor: '#b45309',
-        },
+        { id: 'fuel-sales', label: 'Sell fuel', icon: <GasPumpIcon size={19} /> },
+        { id: 'customers', label: 'Credit customers', icon: <UsersIcon size={19} /> },
+        { id: 'ledger', label: 'Customer accounts', icon: <BookOpenIcon size={19} /> },
+        { id: 'daybook', label: 'Cash book', icon: <CashIcon size={19} /> },
+        { id: 'expenses', label: 'Expenses', icon: <FileTextIcon size={19} /> },
       ],
     },
     {
-      title: 'Accounting & Ledger',
+      title: 'Stock',
       items: [
-        { id: 'daybook', label: 'Daybook (Cash Register)', icon: <CashIcon size={18} /> },
-        ...(!isCashier
-          ? [{ id: 'omc-ledger', label: 'OMC Purchases & Ledger', icon: <BuildingIcon size={18} /> }]
-          : []),
-        { id: 'customers', label: 'Customers & Credit', icon: <UsersIcon size={18} /> },
-        { id: 'ledger', label: 'Debit / Credit Ledger', icon: <BookOpenIcon size={18} /> },
-        ...(!isCashier
-          ? [{ id: 'bank-sheet', label: 'Bank Sheet & Deposits', icon: <CreditCardIcon size={18} /> }]
-          : []),
-        { id: 'expenses', label: 'Daily Expenses', icon: <FileTextIcon size={18} /> },
+        { id: 'tank-dip', label: 'Fuel tanks', icon: <DropletIcon size={19} />, badge: lowTanks },
+        ...(!isCashier ? [{ id: 'omc-ledger', label: 'Fuel deliveries', icon: <BuildingIcon size={19} /> }] : []),
+        { id: 'lubricants', label: 'Oil & lubricants', icon: <PackageIcon size={19} /> },
       ],
     },
-    {
-      title: 'Management & Control',
-      items: [
-        ...(!isCashier ? [{ id: 'staff', label: 'Staff & Payroll', icon: <UsersIcon size={18} /> }] : []),
-        { id: 'lubricants', label: 'Lubricants Inventory', icon: <PackageIcon size={18} /> },
-        ...(!isCashier
-          ? [{ id: 'suppliers', label: 'Suppliers & Vendors', icon: <TruckIcon size={18} /> }]
-          : []),
-        ...(!isCashier
-          ? [{ id: 'reports', label: 'Station Reports', icon: <BarChartIcon size={18} /> }]
-          : []),
-        ...(!isCashier
-          ? [{ id: 'settings', label: 'Station Setup & Rates', icon: <SettingsIcon size={18} /> }]
-          : []),
-      ],
-    },
+    ...(!isCashier
+      ? [
+          {
+            title: 'Money & people',
+            items: [
+              { id: 'bank-sheet', label: 'Bank', icon: <CreditCardIcon size={19} /> },
+              { id: 'suppliers', label: 'Suppliers', icon: <TruckIcon size={19} /> },
+              { id: 'staff', label: 'Staff & salaries', icon: <UsersIcon size={19} /> },
+            ],
+          },
+          {
+            title: isOwner ? 'Owner & reports' : 'Reports & settings',
+            items: [
+              ...(isOwner ? [{ id: 'owner-financials', label: 'Profit & withdrawals', icon: <TrendingUpIcon size={19} /> }] : []),
+              { id: 'reports', label: 'Reports', icon: <BarChartIcon size={19} /> },
+              { id: 'settings', label: 'Settings & prices', icon: <SettingsIcon size={19} /> },
+            ],
+          },
+        ]
+      : []),
   ]
 
+  const isActive = (id: string) => activeModule === id || (id === home && (activeModule === 'dashboard' || activeModule === 'owner-portal' || !activeModule))
+
   return (
-    <aside className={`sidebar-surface ${open ? 'sidebar-open' : ''}`}>
-      {/* Brand Logo Header at Top of Sidebar */}
-      <div className="sidebar-brand-header">
-        {isParco ? (
-          <div className="parco-logo-container">
-            <svg viewBox="0 0 160 48" className="parco-brand-svg" fill="none">
-              <text x="32" y="32" fontFamily="'Plus Jakarta Sans', sans-serif" fontWeight="900" fontSize="26" fill="#ffffff" letterSpacing="-0.5">
-                PARCO
-              </text>
-              <path d="M 8 36 Q 45 42 125 31" stroke="#e52d27" strokeWidth="4.5" strokeLinecap="round" fill="none" />
-              <circle cx="16" cy="18" r="7" fill="#e52d27" />
-              <path d="M 12 18 Q 18 12 24 16" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-            </svg>
-          </div>
-        ) : (
-          <div className="pso-logo-container">
-            <div className="pso-emblem-badge">
-              <span className="pso-badge-circle green"></span>
-              <span className="pso-badge-circle blue"></span>
-            </div>
-            <div className="pso-text-block">
-              <strong className="pso-title-text">PSO</strong>
-              <span className="pso-sub-text">Pakistan State Oil</span>
-            </div>
-          </div>
-        )}
+    <aside className={`shell-side ${open ? 'is-open' : ''}`} aria-label="Main menu">
+      <div className="shell-brand">
+        <div className="shell-brand-mark"><GasPumpIcon size={22} /></div>
+        <div className="shell-brand-text">
+          <strong>Mashaal Petroleum</strong>
+          <small>{site.brand} • {site.code}</small>
+        </div>
       </div>
 
-      <div className="sidebar-scrollable">
-        {menuSections.map((section) => (
-          <div key={section.title} className="sidebar-section">
-            <span className="sidebar-section-title">{section.title}</span>
-            <nav className="sidebar-nav-list" aria-label={section.title}>
-              {section.items.map((item) => {
-                const isActive =
-                  activeModule === item.id ||
-                  (item.id === 'owner-portal' && (activeModule === 'dashboard' || !activeModule) && isOwner)
-                return (
-                  <button
-                    key={item.id}
-                    className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
-                    onClick={() => {
-                      setActiveModule(item.id)
-                      onNavigate?.()
-                    }}
-                  >
-                    <span className="nav-item-icon">{item.icon}</span>
-                    <span className="nav-item-label">{item.label}</span>
-                    {item.badge && (
-                      <span className="nav-item-badge" style={{ backgroundColor: item.badgeColor || '#a82315' }}>
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </nav>
+      <nav className="shell-nav">
+        {groups.map((g, gi) => (
+          <div key={g.title ?? `g${gi}`}>
+            {g.title && <p className="shell-group-title">{g.title}</p>}
+            {g.items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="shell-link"
+                aria-current={isActive(item.id) ? 'page' : undefined}
+                onClick={() => {
+                  setActiveModule(item.id)
+                  onNavigate?.()
+                }}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+                {item.badge ? <span className="shell-badge" title="Tanks running low">{item.badge}</span> : null}
+              </button>
+            ))}
           </div>
         ))}
-      </div>
+      </nav>
 
-      {/* Sidebar Footer Logout Button */}
-      <div className="sidebar-footer-area">
-        <div className="sidebar-version" title={`Built on ${__BUILD_DATE__}`}>Version {__APP_VERSION__}</div>
-        <button
-          type="button"
-          className="sidebar-logout-btn"
-          onClick={() => void logout()}
-          title="Sign Out of Session"
-        >
-          <span className="logout-icon">
-            <LogOutIcon size={16} />
-          </span>
-          <span>Logout</span>
+      <div className="shell-foot">
+        <span className="shell-version" title={`Built on ${__BUILD_DATE__}`}>Version {__APP_VERSION__}</span>
+        <button type="button" className="shell-out" onClick={() => void logout()}>
+          <LogOutIcon size={16} />
+          <span>Sign out</span>
         </button>
       </div>
     </aside>

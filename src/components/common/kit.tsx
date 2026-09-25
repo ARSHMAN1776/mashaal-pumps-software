@@ -1,6 +1,9 @@
 /** Small building blocks shared by every screen (they reuse the existing look: page banner, KPI strip, forms, tables). */
-import type { ButtonHTMLAttributes, FC, ReactNode } from 'react'
+import { Children, isValidElement, useEffect, useRef, useState } from 'react'
+import type { ButtonHTMLAttributes, FC, ReactElement, ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { rs } from '../../lib/money'
+import { MoreIcon } from './Icons'
 
 // ---- page header ------------------------------------------------------------------
 export const PageHeader: FC<{ eyebrow: string; title: string; subtitle?: ReactNode; actions?: ReactNode }> = ({ eyebrow, title, subtitle, actions }) => (
@@ -60,7 +63,97 @@ export const IconButton: FC<ButtonHTMLAttributes<HTMLButtonElement> & { tone?: '
   </button>
 )
 
-export const RowActions: FC<{ children: ReactNode }> = ({ children }) => <div className="ui-row-actions">{children}</div>
+type IconBtnProps = ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'danger' | 'default'; label: string }
+
+/** The "More" menu on a table row. It opens above everything else, so a scrolling table can never cut it off. */
+const RowMenu: FC<{ items: ReactElement<IconBtnProps>[] }> = ({ items }) => {
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+  const btn = useRef<HTMLButtonElement>(null)
+  const close = () => setPos(null)
+
+  useEffect(() => {
+    if (!pos) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (!t.closest('.rowmenu-pop') && !btn.current?.contains(t)) close()
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onDown)
+    window.addEventListener('resize', close)
+    document.addEventListener('scroll', close, true)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onDown)
+      window.removeEventListener('resize', close)
+      document.removeEventListener('scroll', close, true)
+    }
+  }, [pos])
+
+  const open = () => {
+    const r = btn.current?.getBoundingClientRect()
+    if (!r) return
+    setPos(pos ? null : { top: Math.min(r.bottom + 6, window.innerHeight - 20), right: Math.max(8, window.innerWidth - r.right) })
+  }
+  const normal = items.filter((i) => i.props.tone !== 'danger')
+  const danger = items.filter((i) => i.props.tone === 'danger')
+
+  const row = (i: ReactElement<IconBtnProps>, key: number, isDanger: boolean) => (
+    <button
+      key={key}
+      type="button"
+      role="menuitem"
+      className={`rowmenu-item ${isDanger ? 'is-danger' : ''}`}
+      disabled={i.props.disabled}
+      onClick={(e) => {
+        close()
+        i.props.onClick?.(e)
+      }}
+    >
+      {i.props.children}
+      <span>{i.props.label}</span>
+    </button>
+  )
+
+  return (
+    <>
+      <button ref={btn} type="button" className="rowmenu-btn" aria-haspopup="menu" aria-expanded={pos !== null} onClick={open}>
+        <MoreIcon size={16} />
+        <span>More</span>
+      </button>
+      {pos &&
+        createPortal(
+          <div className="rowmenu-pop" role="menu" style={{ position: 'fixed', top: pos.top, right: pos.right }}>
+            {normal.map((i, n) => row(i, n, false))}
+            {normal.length > 0 && danger.length > 0 && <div className="rowmenu-sep" />}
+            {danger.map((i, n) => row(i, 100 + n, true))}
+          </div>,
+          document.body,
+        )}
+    </>
+  )
+}
+
+/**
+ * The buttons at the end of a table row. Ordinary buttons stay visible; every icon button (open, edit, print, delete ...)
+ * moves into one labelled "More" menu, with delete last and in red.
+ */
+export const RowActions: FC<{ children: ReactNode }> = ({ children }) => {
+  const iconButtons: ReactElement<IconBtnProps>[] = []
+  const visible: ReactNode[] = []
+  Children.toArray(children).forEach((c) => {
+    if (isValidElement(c) && c.type === IconButton) iconButtons.push(c as ReactElement<IconBtnProps>)
+    else visible.push(c)
+  })
+  return (
+    <div className="ui-row-actions">
+      {visible}
+      {iconButtons.length > 0 && <RowMenu items={iconButtons} />}
+    </div>
+  )
+}
 
 // ---- tables ------------------------------------------------------------------------------
 export const EmptyRow: FC<{ colSpan: number; children: ReactNode }> = ({ colSpan, children }) => (

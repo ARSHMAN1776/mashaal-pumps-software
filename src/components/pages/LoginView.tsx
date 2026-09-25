@@ -72,7 +72,7 @@ export const LoginView: React.FC = () => {
               <div className="auth-circular-emblem">
                 <div className="emblem-outer-ring">
                   <div className="emblem-inner-glow">
-                    <GasPumpIcon size={22} color="#997328" />
+                    <GasPumpIcon size={22} color="#334155" />
                   </div>
                 </div>
               </div>
@@ -152,7 +152,7 @@ export const LoginView: React.FC = () => {
                 </label>
                 <div className="auth-input-container">
                   <span className="auth-input-icon">
-                    <UserIcon size={16} color="#967938" />
+                    <UserIcon size={16} color="#475569" />
                   </span>
                   <input
                     id="auth-username"
@@ -176,7 +176,7 @@ export const LoginView: React.FC = () => {
                 </label>
                 <div className="auth-input-container">
                   <span className="auth-input-icon">
-                    <LockIcon size={16} color="#967938" />
+                    <LockIcon size={16} color="#475569" />
                   </span>
                   <input
                     id="auth-password"
@@ -196,9 +196,9 @@ export const LoginView: React.FC = () => {
                     tabIndex={-1}
                   >
                     {showPassword ? (
-                      <EyeOffIcon size={16} color="#967938" />
+                      <EyeOffIcon size={16} color="#475569" />
                     ) : (
-                      <EyeIcon size={16} color="#967938" />
+                      <EyeIcon size={16} color="#475569" />
                     )}
                   </button>
                 </div>
@@ -225,7 +225,7 @@ export const LoginView: React.FC = () => {
                 </label>
 
                 <div className="auth-encrypted-badge">
-                  <ShieldSparkIcon size={14} color="#8c7333" />
+                  <ShieldSparkIcon size={14} color="#334155" />
                   <span>Encrypted</span>
                 </div>
               </div>

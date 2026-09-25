@@ -120,9 +120,9 @@ const TxModal: React.FC<{ kind: TxKind; bankId?: string; onClose: () => void }> 
           <Field label="Description"><input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={kind === 'deposit' ? 'e.g. Morning shift cash deposit' : kind === 'withdraw' ? 'e.g. Cash for staff salaries' : 'e.g. Monthly service charges'} required={kind !== 'deposit'} /></Field>
         </Grid2>
         <CalcStrip items={[
-          { label: 'Bank balance before', value: rs(bank?.currentBalance ?? 0) },
+          { label: 'Balance now', value: rs(bank?.currentBalance ?? 0) },
           { label: credit ? 'Credit' : 'Debit', value: `${credit ? '+' : '−'} ${rs(amt)}`, tone: credit ? 'green' : 'red' },
-          { label: 'Bank balance after', value: rs((bank?.currentBalance ?? 0) + (credit ? amt : -amt)), tone: 'gold' },
+          { label: 'Balance after', value: rs((bank?.currentBalance ?? 0) + (credit ? amt : -amt)), tone: 'gold' },
           ...(kind === 'deposit' && funding === 'cash' ? [{ label: 'Safe after', value: rs(cash - amt) }] : kind === 'withdraw' ? [{ label: 'Safe after', value: rs(cash + amt) }] : []),
         ]} />
         <FormError message={error} />
@@ -170,15 +170,15 @@ export const BankSheetView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="STATION BANKING & LIQUIDITY"
-        title="Bank Sheet & Cash Deposits"
-        subtitle="Station bank accounts, deposits from pump collections, withdrawals and bank charges"
+        eyebrow="Bank"
+        title="Bank"
+        subtitle="Your bank accounts: money paid in, money taken out, and bank charges."
         actions={
           <>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print Bank Sheet</span></button>
-            <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setAccountForm({})}><PlusIcon size={16} /><span>Add Bank Account</span></button>
-            <button type="button" className="btn btn-secondary" onClick={() => setTxForm({ kind: 'withdraw' })} disabled={active.length === 0}><span>Withdraw to Cash</span></button>
-            <button type="button" className="btn btn-primary" onClick={() => setTxForm({ kind: 'deposit' })} disabled={active.length === 0}><PlusIcon size={16} /><span>Record Deposit</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setAccountForm({})}><PlusIcon size={16} /><span>Add account</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setTxForm({ kind: 'withdraw' })} disabled={active.length === 0}><span>Take cash out</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setTxForm({ kind: 'deposit' })} disabled={active.length === 0}><PlusIcon size={16} /><span>Deposit money</span></button>
           </>
         }
       />
@@ -186,7 +186,7 @@ export const BankSheetView: React.FC = () => {
       <PendingBankNotice />
 
       {bankAccounts.length === 0 ? (
-        <div className="ui-empty">No bank accounts yet. Click "Add Bank Account".</div>
+        <div className="ui-empty">No bank accounts yet. Press "Add account".</div>
       ) : (
         <div className="tanks-meter-row">
           {bankAccounts.map((bank) => (
@@ -221,8 +221,8 @@ export const BankSheetView: React.FC = () => {
 
       <KpiStrip>
         <Kpi label="Total bank balances" value={rs(totalBalances)} tone="gold" sub={`Across ${bankAccounts.length} account(s)`} />
-        <Kpi label="Credits this month" value={rs(monthDeposits)} tone="green" sub="Deposits & credits received" />
-        <Kpi label="OMC transfers this month" value={rs(monthOmc)} sub="Paid to the oil company" />
+        <Kpi label="Credits this month" value={rs(monthDeposits)} tone="green" sub="Money paid in" />
+        <Kpi label="Paid to the oil company" value={rs(monthOmc)} sub="This month" />
       </KpiStrip>
 
       <FilterBar>
@@ -234,12 +234,12 @@ export const BankSheetView: React.FC = () => {
         </div>
       </FilterBar>
 
-      <SectionCard title="Bank Transactions & Deposit Slips" subtitle="Newest first">
+      <SectionCard title="Bank activity" subtitle="Newest first">
         <div className="table-responsive">
           <table className="clean-table">
-            <thead><tr><th>Date</th><th>Account</th><th>Type</th><th>Slip #</th><th>Particulars</th><th>Credit</th><th>Debit</th><th>Balance after</th><th /></tr></thead>
+            <thead><tr><th>Date</th><th>Account</th><th>Type</th><th>Slip no.</th><th>Details</th><th>Money in</th><th>Money out</th><th>Balance</th><th /></tr></thead>
             <tbody>
-              {txs.length === 0 ? <EmptyRow colSpan={9}>No bank transactions yet.</EmptyRow> : txs.map((t) => {
+              {txs.length === 0 ? <EmptyRow colSpan={9}>No bank activity yet.</EmptyRow> : txs.map((t) => {
                 const isCredit = BANK_CREDIT_TYPES.includes(t.type)
                 return (
                   <tr key={t.id}>

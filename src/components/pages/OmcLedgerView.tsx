@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext'
 import type { FuelType, OmcInvoice, OmcPayment, OmcPaymentMethod } from '../../types'
 import { FUEL_TYPES } from '../../types'
 import { formatDate, todayISO } from '../../lib/dates'
-import { rs, round2 } from '../../lib/money'
+import { rs, rs2, round2 } from '../../lib/money'
 import { BuildingIcon, PlusIcon, PrinterIcon, CheckCircleIcon, EditIcon, TrashIcon } from '../common/Icons'
 import { PrintReceiptModal } from '../common/PrintReceiptModal'
 import { ModuleGuide } from '../common/ModuleGuide'
@@ -73,10 +73,10 @@ const InvoiceModal: React.FC<{ invoice?: OmcInvoice; onClose: () => void }> = ({
           <Field label="Freight (Rs)"><input type="number" min={0} step="any" className="form-input" value={freight} onChange={(e) => setFreight(e.target.value)} required /></Field>
         </Grid4>
         <CalcStrip items={[
-          { label: 'Product cost', value: rs(Number(decVol) * Number(rate) || 0) },
+          { label: 'Fuel cost', value: rs(Number(decVol) * Number(rate) || 0) },
           { label: 'Freight', value: `+ ${rs(Number(freight) || 0)}` },
-          { label: 'Transit shortage', value: invVol === '' || decVol === '' ? '—' : `${shortage} L`, tone: shortage > 0 ? 'red' : undefined },
-          { label: 'Total payable', value: rs(Number.isFinite(total) ? total : 0), tone: 'gold' },
+          { label: 'Lost on the way', value: invVol === '' || decVol === '' ? '—' : `${shortage} L`, tone: shortage > 0 ? 'red' : undefined },
+          { label: 'Total to pay', value: rs(Number.isFinite(total) ? total : 0), tone: 'gold' },
         ]} />
         <FormError message={error} />
         <div className="modal-actions-footer">
@@ -147,7 +147,7 @@ const PaymentModal: React.FC<{ invoiceNo?: string; onClose: () => void }> = ({ i
               <Field label="Payment amount (PKR)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
               <Field label="Date"><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} required /></Field>
             </Grid2>
-            <CalcStrip items={[{ label: 'Invoice due', value: rs(due) }, { label: 'This payment', value: rs(Number(amount) || 0), tone: 'green' }, { label: 'Remaining', value: rs(due - (Number(amount) || 0)), tone: 'gold' }]} />
+            <CalcStrip items={[{ label: 'Invoice balance', value: rs(due) }, { label: 'This payment', value: rs(Number(amount) || 0), tone: 'green' }, { label: 'Still to pay after', value: rs(due - (Number(amount) || 0)), tone: 'gold' }]} />
           </>
         )}
         <FormError message={error} />
@@ -189,44 +189,48 @@ export const OmcLedgerView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="OIL MARKETING COMPANY LEDGER"
-        title={`${siteInfo.brand} Purchases & Ledger`}
-        subtitle="Fuel tanker delivery invoices, decanted volumes, freight charges, and RTGS / cheque / cash payments"
+        eyebrow="Fuel deliveries"
+        title="Fuel deliveries"
+        subtitle={`Fuel that ${siteInfo.brand} delivers to your tanks, and what you have paid them for it.`}
         actions={
           <>
-            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print OMC Statement</span></button>
-            <button type="button" className="btn btn-secondary" onClick={() => setPayFor('')}><BuildingIcon size={16} /><span>Record Payment</span></button>
-            <button type="button" className="btn btn-primary" onClick={() => setInvoiceForm({})}><PlusIcon size={16} /><span>New Tanker Delivery</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setPrintOpen(true)}><PrinterIcon size={16} /><span>Print</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setPayFor('')}><BuildingIcon size={16} /><span>Pay {siteInfo.brand}</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setInvoiceForm({})}><PlusIcon size={16} /><span>Add delivery</span></button>
           </>
         }
       />
 
       <KpiStrip>
-        <Kpi label="Primary OMC supplier" value={siteInfo.brand} sub="Contracted supply depot" />
-        <Kpi label="Total fuel purchased" value={rs(totalInvoiced)} tone="gold" sub={`${omcInvoices.length} tanker invoice(s)`} />
-        <Kpi label="Total payments" value={rs(totalPaid)} tone="green" sub="Transfers / pay orders / cash" />
-        <Kpi label="Net payable balance" value={rs(net)} tone={net > 0 ? 'amber' : 'green'} sub={net > 0 ? 'Pending remittance to OMC' : 'All invoices cleared'} />
+        <Kpi label="Oil company" value={siteInfo.brand} sub="Your fuel supplier" />
+        <Kpi label="Fuel bought in total" value={rs(totalInvoiced)} sub={`${omcInvoices.length} tanker invoice(s)`} />
+        <Kpi label="Paid so far" value={rs(totalPaid)} tone="green" sub="Bank transfers, cheques and cash" />
+        <Kpi label="Still to pay" value={rs(net)} tone={net > 0 ? 'amber' : 'green'} sub={net > 0 ? 'Waiting to be paid' : 'Everything is paid'} />
       </KpiStrip>
 
-      <SectionCard title="Tank Lorry Delivery Invoices" subtitle="Decanted bulk liters from company depot tankers">
+      <SectionCard title="Fuel deliveries" subtitle="Each tanker that filled your tanks, and the invoice for it.">
         <div className="table-responsive">
           <table className="clean-table">
-            <thead><tr><th>Invoice #</th><th>Date</th><th>Lorry & driver</th><th>Fuel / tank</th><th>Decanted</th><th>Rate</th><th>Freight</th><th>Total</th><th>Paid</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>Invoice</th><th>Fuel & tank</th><th>Litres received</th><th className="text-right">Total</th><th className="text-right">Paid</th><th>Status</th><th /></tr></thead>
             <tbody>
-              {omcInvoices.length === 0 ? <EmptyRow colSpan={11}>No tanker invoices recorded yet.</EmptyRow> : omcInvoices.map((i) => {
+              {omcInvoices.length === 0 ? <EmptyRow colSpan={7}>No fuel deliveries have been recorded yet.</EmptyRow> : omcInvoices.map((i) => {
                 const tank = tanks.find((t) => t.id === i.tankId)
                 return (
                   <tr key={i.id}>
-                    <td><strong>{i.invoiceNo}</strong></td>
-                    <td>{formatDate(i.date)}</td>
-                    <td><div>{i.tankLorryNo}</div><div className="text-muted text-xs">Driver: {i.driverName || '—'}</div></td>
-                    <td><span className="fuel-pill">{i.fuelType}</span>{tank && <div className="text-muted text-xs">Tank #{tank.tankNo}</div>}</td>
-                    <td><strong>{i.decantedVolumeLiters.toLocaleString()} L</strong>{i.invoiceVolumeLiters !== i.decantedVolumeLiters && <div className="text-muted text-xs">invoice {i.invoiceVolumeLiters.toLocaleString()} L</div>}</td>
-                    <td>Rs {i.ratePerLiter}</td>
-                    <td>{rs(i.freightAmount)}</td>
-                    <td className="text-gold font-bold">{rs(i.totalAmount)}</td>
-                    <td className="text-green">{rs(i.paidAmount)}</td>
-                    <td><span className={`badge ${i.paymentStatus === 'Paid' ? 'badge-success' : i.paymentStatus === 'Partial' ? 'badge-warning' : 'badge-danger'}`}>{i.paymentStatus}</span></td>
+                    <td>
+                      <strong>{i.invoiceNo}</strong>
+                      <div className="text-muted text-xs">{formatDate(i.date)}</div>
+                      <div className="text-muted text-xs">{i.tankLorryNo}{i.driverName ? ` · ${i.driverName}` : ''}</div>
+                    </td>
+                    <td><span className="fuel-chip" data-fuel={i.fuelType}>{i.fuelType}</span>{tank && <div className="text-muted text-xs" style={{ marginTop: 4 }}>Tank #{tank.tankNo}</div>}</td>
+                    <td>
+                      <strong>{i.decantedVolumeLiters.toLocaleString()} L</strong>
+                      {i.invoiceVolumeLiters !== i.decantedVolumeLiters && <div className="text-muted text-xs">invoice said {i.invoiceVolumeLiters.toLocaleString()} L</div>}
+                      <div className="text-muted text-xs">at {rs2(i.ratePerLiter)} a litre{i.freightAmount > 0 ? ` + ${rs(i.freightAmount)} freight` : ''}</div>
+                    </td>
+                    <td className="text-right"><strong>{rs(i.totalAmount)}</strong></td>
+                    <td className="text-right text-green">{rs(i.paidAmount)}</td>
+                    <td><span className={`badge ${i.paymentStatus === 'Paid' ? 'badge-success' : i.paymentStatus === 'Partial' ? 'badge-warning' : 'badge-danger'}`}>{i.paymentStatus === 'Pending' ? 'Not paid' : i.paymentStatus === 'Partial' ? 'Part paid' : 'Paid'}</span></td>
                     <td>
                       <RowActions>
                         {i.paymentStatus !== 'Paid' && <button type="button" className="btn btn-outline ui-mini-btn" onClick={() => setPayFor(i.invoiceNo)}>Pay</button>}
@@ -242,7 +246,7 @@ export const OmcLedgerView: React.FC = () => {
         </div>
       </SectionCard>
 
-      <SectionCard title="OMC Payment Vouchers & Remittances" subtitle="Settlement vouchers — newest first">
+      <SectionCard title="Payments to the oil company" subtitle="Money you have paid for deliveries, newest first.">
         <div className="table-responsive">
           <table className="clean-table">
             <thead><tr><th>Date</th><th>Invoice</th><th>Mode</th><th>Bank & reference</th><th>Amount</th><th>Recorded by</th><th /></tr></thead>

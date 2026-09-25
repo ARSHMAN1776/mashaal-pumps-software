@@ -96,9 +96,9 @@ const AdvanceModal: React.FC<{ staffId?: string; onClose: () => void }> = ({ sta
         </Grid2>
         <CalcStrip items={[
           { label: 'Monthly salary', value: rs(s?.monthlySalary ?? 0) },
-          { label: 'Already drawn', value: rs(s?.currentAdvances ?? 0), tone: 'red' },
-          { label: 'New advance', value: `+ ${rs(amt)}`, tone: 'gold' },
-          { label: 'Net pay after', value: rs(Math.max(0, (s?.monthlySalary ?? 0) - (s?.currentAdvances ?? 0) - amt)), tone: 'green' },
+          { label: 'Advances taken', value: rs(s?.currentAdvances ?? 0), tone: 'red' },
+          { label: 'This advance', value: `+ ${rs(amt)}`, tone: 'gold' },
+          { label: 'Salary left after', value: rs(Math.max(0, (s?.monthlySalary ?? 0) - (s?.currentAdvances ?? 0) - amt)), tone: 'green' },
         ]} />
         <FormError message={error} />
         <div className="modal-actions-footer">
@@ -209,38 +209,38 @@ export const StaffView: React.FC = () => {
   return (
     <div className="page-content-wrapper">
       <PageHeader
-        eyebrow="WORKFORCE & ATTENDANCE"
-        title="Staff Directory & Payroll"
-        subtitle="Pump attendants, cashiers, supervisors, duty status, salary advances and monthly salary payments"
+        eyebrow="Staff & salaries"
+        title="Staff & salaries"
+        subtitle="Your team, their salaries, and any money you have advanced to them."
         actions={
           <>
-            <button type="button" className="btn btn-outline" style={{ borderColor: '#967938', color: '#967938', fontWeight: 600 }} onClick={() => setStaffForm({})}><PlusIcon size={16} /><span>Add Employee</span></button>
-            <button type="button" className="btn btn-secondary" onClick={() => setAdvanceFor('')} disabled={active.length === 0}><CashIcon size={16} /><span>Issue Advance</span></button>
-            <button type="button" className="btn btn-primary" onClick={() => setSalaryFor('')} disabled={active.length === 0}><CheckCircleIcon size={16} /><span>Pay Salary</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setStaffForm({})}><PlusIcon size={16} /><span>Add employee</span></button>
+            <button type="button" className="btn btn-outline" onClick={() => setAdvanceFor('')} disabled={active.length === 0}><CashIcon size={16} /><span>Give advance</span></button>
+            <button type="button" className="btn btn-primary" onClick={() => setSalaryFor('')} disabled={active.length === 0}><CheckCircleIcon size={16} /><span>Pay salary</span></button>
           </>
         }
       />
 
       <KpiStrip>
-        <Kpi label="Active staff" value={`${active.length} employees`} sub={`${active.filter((s) => s.status === 'On Duty').length} on duty now`} />
-        <Kpi label="Monthly payroll" value={rs(payroll)} sub="Base salaries" />
-        <Kpi label="Unsettled advances" value={rs(advances)} tone="gold" sub="Deducted at salary payment" />
-        <Kpi label="Net payable payroll" value={rs(payroll - advances)} tone="green" sub="After advances" />
+        <Kpi label="Staff working here" value={`${active.length}`} sub={`${active.filter((s) => s.status === 'On Duty').length} on duty now`} />
+        <Kpi label="Salaries each month" value={rs(payroll)} sub="Before any deductions" />
+        <Kpi label="Advances not yet repaid" value={rs(advances)} sub="Taken off when salary is paid" />
+        <Kpi label="You will pay in salaries" value={rs(payroll - advances)} tone="green" sub="After taking off advances" />
       </KpiStrip>
 
       <Tabs
-        tabs={[{ id: 'roster', label: 'Staff roster', count: shown.length }, { id: 'advances', label: 'Advances', count: staffAdvances.length }, { id: 'salaries', label: 'Salary payments', count: salaryPayments.length }]}
+        tabs={[{ id: 'roster', label: 'Team', count: shown.length }, { id: 'advances', label: 'Advances given', count: staffAdvances.length }, { id: 'salaries', label: 'Salaries paid', count: salaryPayments.length }]}
         active={tab}
         onChange={(t) => setTab(t as typeof tab)}
       />
 
       {tab === 'roster' && (
-        <SectionCard title="Station Staff Roster" subtitle="Click the duty badge to change status" actions={<label className="ui-checkbox-row" style={{ margin: 0 }}><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /><span>Show deactivated</span></label>}>
+        <SectionCard title="Your team" subtitle="Click the On duty / Off duty badge to change it." actions={<label className="ui-checkbox-row" style={{ margin: 0 }}><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /><span>Show deactivated</span></label>}>
           <div className="table-responsive">
             <table className="clean-table">
-              <thead><tr><th>Employee</th><th>Role</th><th>Phone</th><th>Duty</th><th>Salary</th><th>Advances</th><th>Net payable</th><th /></tr></thead>
+              <thead><tr><th>Employee</th><th>Role</th><th>Phone</th><th>Duty</th><th>Salary</th><th>Advances</th><th>To pay</th><th /></tr></thead>
               <tbody>
-                {shown.length === 0 ? <EmptyRow colSpan={8}>No staff yet. Click "Add Employee".</EmptyRow> : shown.map((m) => (
+                {shown.length === 0 ? <EmptyRow colSpan={8}>No staff added yet. Press "Add employee".</EmptyRow> : shown.map((m) => (
                   <tr key={m.id} style={m.isActive ? undefined : { opacity: 0.55 }}>
                     <td><strong>{m.name}</strong><div className="text-muted text-xs">Joined {m.joiningDate ? formatDate(m.joiningDate) : '—'}{!m.isActive && ' • deactivated'}</div></td>
                     <td><span className="category-tag">{m.role}</span></td>
@@ -269,10 +269,10 @@ export const StaffView: React.FC = () => {
       )}
 
       {tab === 'advances' && (
-        <SectionCard title="Salary Advances" subtitle="Newest first">
+        <SectionCard title="Advances given" subtitle="Money advanced to staff, newest first.">
           <div className="table-responsive">
             <table className="clean-table">
-              <thead><tr><th>Date</th><th>Employee</th><th>Reason</th><th>Amount</th><th>Status</th><th>Issued by</th><th /></tr></thead>
+              <thead><tr><th>Date</th><th>Employee</th><th>Reason</th><th>Amount</th><th>Status</th><th>Given by</th><th /></tr></thead>
               <tbody>
                 {staffAdvances.length === 0 ? <EmptyRow colSpan={7}>No advances recorded.</EmptyRow> : staffAdvances.map((a) => (
                   <tr key={a.id}>
@@ -289,12 +289,12 @@ export const StaffView: React.FC = () => {
       )}
 
       {tab === 'salaries' && (
-        <SectionCard title="Salary Payments" subtitle="Newest first">
+        <SectionCard title="Salaries paid" subtitle="Newest first.">
           <div className="table-responsive">
             <table className="clean-table">
               <thead><tr><th>Paid on</th><th>Employee</th><th>Month</th><th>Salary</th><th>Absent / other</th><th>Advances</th><th>Net paid</th><th>Paid by</th><th /></tr></thead>
               <tbody>
-                {salaryPayments.length === 0 ? <EmptyRow colSpan={9}>No salaries paid yet.</EmptyRow> : salaryPayments.map((p) => (
+                {salaryPayments.length === 0 ? <EmptyRow colSpan={9}>No salaries have been paid yet.</EmptyRow> : salaryPayments.map((p) => (
                   <tr key={p.id}>
                     <td>{formatDate(p.date)}</td><td><strong>{name(p.staffId)}</strong></td><td>{p.period}</td><td>{rs(p.grossSalary)}</td>
                     <td className="text-red" title={p.deductionNote || undefined}>{p.deduction > 0 ? `- ${rs(p.deduction)}${p.absentDays > 0 ? ` (${p.absentDays} d)` : ''}` : '—'}</td>

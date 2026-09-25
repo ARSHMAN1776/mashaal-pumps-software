@@ -8,6 +8,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary'
 import App from './App'
 import './style.css'
 import './ui.css'
+import './design.css'
 
 createRoot(document.querySelector<HTMLDivElement>('#app')!).render(
   createElement(
