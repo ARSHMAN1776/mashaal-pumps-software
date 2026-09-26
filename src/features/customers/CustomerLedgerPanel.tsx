@@ -11,7 +11,8 @@ import { useConfirm } from '../../components/common/Confirm'
 import { useToast } from '../../components/common/Toast'
 import { EmptyRow, IconButton, Kpi, KpiStrip, RowActions, SectionCard } from '../../components/common/kit'
 import { AdjustmentModal, CustomerFormModal, RecoveryModal, SlipModal } from './CustomerModals'
-import { openWhatsApp, slipMessage, statementMessage } from './whatsapp'
+import { slipMessage, statementMessage } from './whatsapp'
+import { useWhatsApp } from './useWhatsApp'
 
 /** Delete (or archive) a customer with an explanation that matches what will really happen. */
 export function useRemoveCustomer() {
@@ -63,6 +64,7 @@ export const CustomerLedgerPanel: React.FC<{ customerId: string; onRemoved?: () 
   const confirm = useConfirm()
   const toast = useToast()
   const removeCustomer = useRemoveCustomer()
+  const openChat = useWhatsApp()
 
   const customer = activeSiteData.customers.find((c) => c.id === customerId)
   const [from, setFrom] = useState('')
@@ -126,7 +128,7 @@ export const CustomerLedgerPanel: React.FC<{ customerId: string; onRemoved?: () 
   }
 
   const whatsappStatement = () =>
-    openWhatsApp(customer.phone, statementMessage(customer, siteInfo, primaryBank, statement, todayISO()))
+    openChat(customer.phone, statementMessage(customer, siteInfo, primaryBank, statement, todayISO(), { from: from || undefined, to: to || undefined }))
 
   return (
     <div>
@@ -196,7 +198,7 @@ export const CustomerLedgerPanel: React.FC<{ customerId: string; onRemoved?: () 
                         <RowActions>
                           {r.kind === 'slip' && <IconButton label="Print slip" onClick={() => setPrintSlip(slips.find((s) => s.id === r.id) ?? null)}><PrinterIcon size={14} /></IconButton>}
                           {r.kind === 'recovery' && <IconButton label="Print receipt" onClick={() => setPrintReceipt(recoveries.find((x) => x.id === r.id) ?? null)}><PrinterIcon size={14} /></IconButton>}
-                          {r.kind === 'slip' && <IconButton label="Send slip on WhatsApp" onClick={() => { const s = slips.find((x) => x.id === r.id); if (s) openWhatsApp(customer.phone, slipMessage(s, siteInfo)) }}><WhatsAppIcon size={14} color="#15803d" /></IconButton>}
+                          {r.kind === 'slip' && <IconButton label="Send slip on WhatsApp" onClick={() => { const s = slips.find((x) => x.id === r.id); if (s) openChat(customer.phone, slipMessage(s, siteInfo)) }}><WhatsAppIcon size={14} color="#15803d" /></IconButton>}
                           <IconButton label="Edit" onClick={() => editRow(r)}><EditIcon size={14} /></IconButton>
                           <IconButton label="Delete" tone="danger" onClick={() => void deleteRow(r)}><TrashIcon size={14} /></IconButton>
                         </RowActions>

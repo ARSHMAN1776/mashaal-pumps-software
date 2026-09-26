@@ -12,7 +12,8 @@ import { EmptyRow, IconButton, Kpi, KpiStrip, PageHeader, RowActions, SectionCar
 import { ANY_VEHICLE } from '../../context/actions'
 import { CustomerFormModal, RecoveryModal, SlipModal } from '../../features/customers/CustomerModals'
 import { CustomerLedgerPanel, useRemoveCustomer } from '../../features/customers/CustomerLedgerPanel'
-import { openWhatsApp, slipMessage } from '../../features/customers/whatsapp'
+import { slipMessage } from '../../features/customers/whatsapp'
+import { useWhatsApp } from '../../features/customers/useWhatsApp'
 
 export const CustomersView: React.FC = () => {
   const { activeSiteData, currentUser } = useApp()
@@ -25,6 +26,7 @@ export const CustomersView: React.FC = () => {
   const [tab, setTab] = useState<'slips' | 'recoveries'>('slips')
   const [customerForm, setCustomerForm] = useState<{ customer?: Customer } | null>(null)
   const [slipFor, setSlipFor] = useState<string | null>(null)
+  const openChat = useWhatsApp()
   const [recoveryFor, setRecoveryFor] = useState<string | null>(null)
   const [ledgerFor, setLedgerFor] = useState<string | null>(null)
   const [printAging, setPrintAging] = useState(false)
@@ -163,7 +165,7 @@ export const CustomersView: React.FC = () => {
                       <td><strong className="text-gold">{rs(s.totalAmount)}</strong></td>
                       <td className="text-xs text-muted">{s.authorizedBy}</td>
                       <td className="col-actions">
-                        <button type="button" className="btn ui-mini-btn" style={{ backgroundColor: '#ecfdf5', borderColor: '#86efac', color: '#15803d' }} onClick={() => openWhatsApp(c?.phone ?? '', slipMessage(s, siteInfo))}>
+                        <button type="button" className="btn ui-mini-btn" style={{ backgroundColor: '#ecfdf5', borderColor: '#86efac', color: '#15803d' }} onClick={() => openChat(c?.phone ?? '', slipMessage(s, siteInfo))}>
                           <WhatsAppIcon size={13} color="#15803d" /><span>WhatsApp</span>
                         </button>
                       </td>

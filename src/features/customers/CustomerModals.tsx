@@ -11,7 +11,8 @@ import { useToast } from '../../components/common/Toast'
 import { useSubmit } from '../../components/common/useSubmit'
 import { CalcStrip, Field, Grid2, Grid3 } from '../../components/common/kit'
 import { ANY_VEHICLE, acceptsAnyVehicle, parseVehicles } from '../../context/actions'
-import { openWhatsApp, slipMessage } from './whatsapp'
+import { slipMessage } from './whatsapp'
+import { useWhatsApp } from './useWhatsApp'
 
 const rsn = (n: number) => `Rs ${Math.round(n).toLocaleString('en-US')}`
 
@@ -91,6 +92,7 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
   const toast = useToast()
   const { busy, error, run } = useSubmit()
   const isManager = currentUser?.role !== 'cashier'
+  const openChat = useWhatsApp()
   const rates = activeSiteData.settings.rates
   const usable = activeSiteData.customers.filter((c) => c.status === 'Active')
   const initial = activeSiteData.customers.find((c) => c.id === (slip?.customerId ?? customerId)) ?? usable[0]
@@ -141,7 +143,7 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
       (saved) => {
         toast.success(`Issued ${saved.slipNo} — ${rsn(saved.totalAmount)}`)
         onSaved?.(saved)
-        if (sendWhatsApp) openWhatsApp(phone, slipMessage(saved, activeSiteData.siteInfo))
+        if (sendWhatsApp) openChat(phone, slipMessage(saved, activeSiteData.siteInfo))
         onClose()
       },
     )

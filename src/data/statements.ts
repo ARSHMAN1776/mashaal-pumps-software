@@ -16,6 +16,10 @@ export interface StatementRow {
   /** customer owes less */
   credit: number
   balance: number
+  /** fuel slips only: what was taken */
+  liters?: number
+  fuelType?: string
+  rate?: number
 }
 
 export interface Statement {
@@ -49,7 +53,7 @@ export function buildStatement(
       row: {
         key: `s-${s.id}`, id: s.id, kind: 'slip', date: s.date, refNo: s.slipNo,
         description: `Fuel supplied: ${s.liters.toLocaleString()} L ${s.fuelType} @ ${s.rate} (Vehicle ${s.vehicleNo}, Driver ${s.driverName})`,
-        debit: s.totalAmount, credit: 0,
+        debit: s.totalAmount, credit: 0, liters: s.liters, fuelType: s.fuelType, rate: s.rate,
       },
     })),
     ...adjustments.map((a): Entry => ({
