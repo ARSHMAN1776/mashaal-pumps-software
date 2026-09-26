@@ -7,7 +7,7 @@
  */
 import { DAYBOOK_CATEGORIES, EXPENSE_CATEGORIES } from '../../types'
 import type {
-  BankAccount, DaybookCategory, ExpenseCategory, ExpenseRecord, FuelType, OmcInvoice, OmcPayment, OmcPaymentMethod,
+  BankAccount, BankTxType, DaybookCategory, ExpenseCategory, ExpenseRecord, FuelType, OmcInvoice, OmcPayment, OmcPaymentMethod,
   OwnerTransferRecord, Supplier, SupplierTransaction,
 } from '../../types'
 import { fail, ok, type Result } from '../../data/errors'
@@ -379,6 +379,91 @@ export function removeBankTransaction(c: ActionCtx, id: string): Promise<Result<
       ...syncLinkedDaybook(c, 'bank_withdrawal', id, null),
       auditOp(c, 'bank_tx.delete', 'bank_transaction', id, `Deleted bank entry ${tx.type} ${fmt(tx.amount)} (${tx.date})`, { tx }),
     ])
+    return ok(undefined)
+  })
+}
+
+export interface BankTxEditInput {
+  bankId: string
+  amount: number
+  date: string
+  /** deposits only */
+  slipNo?: string
+  description: string
+  /** deposits only: cash = taken from the safe; external = cheque / online credit */
+  funding?: 'cash' | 'external'
+  version?: string
+  acknowledge?: string[]
+}
+
+const BANK_EDIT_CREDITS: BankTxType[] = ['Deposit', 'Credit Received']
+
+/** Fix a deposit, withdrawal or bank charge that was typed wrongly, without deleting it and starting again. */
+export function updateBankTransaction(c: ActionCtx, id: string, i: BankTxEditInput): Promise<Result<void>> {
+  return run(async () => {
+    const denied = needManager(c, 'edit bank entries')
+    if (denied) return denied
+    const tx = c.raw.bankTransactions.find((t) => t.id === id)
+    if (!tx) return fail('Transaction not found.')
+    if (tx.sourceType && tx.sourceType !== 'bank_deposit' && tx.sourceType !== 'bank_withdrawal') {
+      return fail('This bank line was created by another record (a payment, expense, transfer ...). Edit that record instead.')
+    }
+    const isDeposit = BANK_EDIT_CREDITS.includes(tx.type)
+    const isWithdrawal = tx.type === 'Withdrawal'
+    if (!isDeposit && !isWithdrawal && tx.type !== 'Bank Fee') return fail('This kind of bank line cannot be edited here.')
+    const stale = checkVersion(tx, i.version)
+    if (stale) return stale
+    const date = i.date || tx.date
+    const badDate = checkDate(c, date)
+    if (badDate) return badDate
+    const acc = c.data.bankAccounts.find((b) => b.id === i.bankId)
+    if (!acc) return fail('Choose a bank account.')
+    if (!acc.isActive && acc.id !== tx.bankId) return fail('This bank account is deactivated.')
+    const amount = round2(money(i.amount))
+    if (!isPositive(amount)) return fail('The amount must be more than 0.')
+    const slip = clean(i.slipNo)
+    if (isDeposit && !slip) return fail('Enter the bank deposit slip number.')
+    if (!isDeposit && !clean(i.description)) return fail('Enter what this is for.')
+
+    const funding = isDeposit ? (i.funding ?? (tx.type === 'Deposit' ? 'cash' : 'external')) : undefined
+    const type: BankTxType = isDeposit ? (funding === 'cash' ? 'Deposit' : 'Credit Received') : tx.type
+    const effect = (t: BankTxType, a: number) => (BANK_EDIT_CREDITS.includes(t) ? a : -a)
+
+    // the account that ends up holding this entry, and (if it moved) the one that no longer does
+    const sameBank = acc.id === tx.bankId
+    const newBalance = acc.currentBalance - (sameBank ? effect(tx.type, tx.amount) : 0) + effect(type, amount)
+    const bankLow = guard(c, i.acknowledge, 'NEGATIVE_BANK', newBalance < -EPS && newBalance < acc.currentBalance - EPS,
+      `${acc.bankName} would be left with ${fmt(newBalance)}.`)
+    if (bankLow) return bankLow
+    if (!sameBank) {
+      const old = c.data.bankAccounts.find((b) => b.id === tx.bankId)
+      const oldBalance = (old?.currentBalance ?? 0) - effect(tx.type, tx.amount)
+      const oldLow = guard(c, i.acknowledge, 'NEGATIVE_BANK', !!old && oldBalance < -EPS && oldBalance < (old?.currentBalance ?? 0) - EPS,
+        `${old?.bankName ?? 'The old account'} would be left with ${fmt(oldBalance)}.`)
+      if (oldLow) return oldLow
+    }
+    const linked = c.raw.daybook.find((e) => e.sourceId === id && (e.sourceType === 'bank_deposit' || e.sourceType === 'bank_withdrawal'))
+    const safeBefore = safeCash(c) + (linked ? linked.cashOut - linked.cashIn : 0)
+    const safeLow = guard(c, i.acknowledge, 'NEGATIVE_SAFE', isDeposit && funding === 'cash' && amount > safeBefore + EPS,
+      `Only ${fmt(safeBefore)} would be in the safe; ${fmt(amount)} would make the cash balance negative.`)
+    if (safeLow) return safeLow
+
+    const description = clean(i.description) || (isDeposit ? 'Deposit' : isWithdrawal ? 'Cash withdrawal' : 'Bank charges')
+    const ops: Op[] = [op.update('bank_transactions', {
+      ...tx, bankId: acc.id, date, type, amount, depositSlipNo: isDeposit ? slip : '', description,
+    }, i.version)]
+    if (isDeposit) {
+      ops.push(...syncLinkedDaybook(c, 'bank_deposit', id, funding === 'cash'
+        ? { date, particulars: `Cash deposited to ${acc.bankName} (Slip #${slip})`, category: 'Bank Deposit', cashOut: amount, referenceNo: slip }
+        : null))
+    } else if (isWithdrawal) {
+      ops.push(...syncLinkedDaybook(c, 'bank_withdrawal', id, { date, particulars: `Cash withdrawn from ${acc.bankName}`, category: 'Bank Withdrawal', cashIn: amount }))
+    }
+    ops.push(auditOp(c, 'bank_tx.edit', 'bank_transaction', id, `Edited bank entry ${tx.type} ${fmt(tx.amount)} → ${type} ${fmt(amount)} (${date})`, {
+      before: { bankId: tx.bankId, date: tx.date, type: tx.type, amount: tx.amount, slip: tx.depositSlipNo, description: tx.description },
+      after: { bankId: acc.id, date, type, amount, slip, description },
+    }))
+    await c.commit(ops)
     return ok(undefined)
   })
 }

@@ -305,6 +305,7 @@ export interface BankTransaction {
   sourceId?: string
   balanceAfter: number // derived: running balance of that account
   createdAt: string
+  updatedAt?: string
 }
 
 export interface OwnerTransferRecord {

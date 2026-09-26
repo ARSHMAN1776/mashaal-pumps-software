@@ -38,7 +38,7 @@ export function slipMessage(slip: CreditSaleSlip, site: Pick<SiteInfo, 'name' | 
     `⛽ *DISPENSER TRANSACTION DETAILS*`,
     `🔹 *Product:* ${slip.fuelType}`,
     `🔹 *Volume Dispensed:* ${slip.liters.toLocaleString()} Liters`,
-    `🔹 *Official Tariff Rate:* Rs. ${slip.rate.toFixed(2)} / L`,
+    `🔹 *Rate per litre:* Rs. ${slip.rate.toFixed(2)} / L`,
     `💰 *NET AMOUNT DUE:* ${rsn(slip.totalAmount)} PKR`,
     bar,
     `✍️ *Authorized Incharge:* ${slip.authorizedBy}`,

@@ -56,6 +56,7 @@ export function bindActions(getCtx: () => ActionCtx) {
     depositToBank: b(finance.depositToBank),
     withdrawFromBank: b(finance.withdrawFromBank),
     addBankFee: b(finance.addBankFee),
+    updateBankTransaction: b(finance.updateBankTransaction),
     removeBankTransaction: b(finance.removeBankTransaction),
     addOmcInvoice: b(finance.addOmcInvoice),
     updateOmcInvoice: b(finance.updateOmcInvoice),

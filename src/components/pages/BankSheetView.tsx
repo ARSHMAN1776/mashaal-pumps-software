@@ -66,24 +66,38 @@ const AccountModal: React.FC<{ account?: BankAccount; onClose: () => void }> = (
 // ===========================================================================
 type TxKind = 'deposit' | 'withdraw' | 'fee'
 
-const TxModal: React.FC<{ kind: TxKind; bankId?: string; onClose: () => void }> = ({ kind, bankId, onClose }) => {
+const txKindOf = (t: BankTransaction): TxKind => (BANK_CREDIT_TYPES.includes(t.type) ? 'deposit' : t.type === 'Withdrawal' ? 'withdraw' : 'fee')
+
+const TxModal: React.FC<{ kind: TxKind; bankId?: string; entry?: BankTransaction; onClose: () => void }> = ({ kind, bankId, entry, onClose }) => {
   const { activeSiteData, act } = useApp()
   const toast = useToast()
-  const banks = activeSiteData.bankAccounts.filter((b) => b.isActive)
-  const cash = activeSiteData.daybook.length ? activeSiteData.daybook[activeSiteData.daybook.length - 1].balanceAfter : 0
-  const [id, setId] = useState(bankId || banks[0]?.id || '')
-  const [amount, setAmount] = useState('')
-  const [slip, setSlip] = useState('')
-  const [description, setDescription] = useState('')
-  const [date, setDate] = useState(todayISO())
-  const [funding, setFunding] = useState<'cash' | 'external'>('cash')
+  const banks = activeSiteData.bankAccounts.filter((b) => b.isActive || b.id === entry?.bankId)
+  const cashNow = activeSiteData.daybook.length ? activeSiteData.daybook[activeSiteData.daybook.length - 1].balanceAfter : 0
+  // when fixing an entry, the safe and the bank are worked out as if this entry had not been made yet
+  const linked = entry ? activeSiteData.daybook.find((d) => d.sourceId === entry.id && (d.sourceType === 'bank_deposit' || d.sourceType === 'bank_withdrawal')) : undefined
+  const cash = cashNow + (linked ? linked.cashOut - linked.cashIn : 0)
+  const [id, setId] = useState(entry?.bankId || bankId || banks[0]?.id || '')
+  const [amount, setAmount] = useState(entry ? String(entry.amount) : '')
+  const [slip, setSlip] = useState(entry?.depositSlipNo ?? '')
+  const [description, setDescription] = useState(entry?.description ?? '')
+  const [date, setDate] = useState(entry?.date ?? todayISO())
+  const [funding, setFunding] = useState<'cash' | 'external'>(entry && entry.type === 'Credit Received' ? 'external' : 'cash')
   const { busy, error, run } = useSubmit()
   const bank = banks.find((b) => b.id === id)
   const amt = Number(amount) || 0
   const credit = kind === 'deposit'
+  const entryEffect = entry && bank && entry.bankId === bank.id ? (BANK_CREDIT_TYPES.includes(entry.type) ? entry.amount : -entry.amount) : 0
+  const bankBase = (bank?.currentBalance ?? 0) - entryEffect
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (entry) {
+      void run(
+        (ack) => act.updateBankTransaction(entry.id, { bankId: id, amount: Number(amount), date, slipNo: slip, description, funding: kind === 'deposit' ? funding : undefined, version: entry.updatedAt, acknowledge: ack }),
+        () => { toast.success('Bank entry updated.'); onClose() },
+      )
+      return
+    }
     if (kind === 'deposit') {
       void run((ack) => act.depositToBank({ bankId: id, amount: Number(amount), slipNo: slip, description, date, funding, acknowledge: ack }), () => { toast.success(`Deposit of ${rs(Number(amount))} recorded.`); onClose() })
     } else if (kind === 'withdraw') {
@@ -93,10 +107,12 @@ const TxModal: React.FC<{ kind: TxKind; bankId?: string; onClose: () => void }> 
     }
   }
 
-  const title = kind === 'deposit' ? 'Record Deposit to Bank' : kind === 'withdraw' ? 'Record Cash Withdrawal from Bank' : 'Record Bank Charge'
+  const title = entry
+    ? kind === 'deposit' ? 'Edit deposit' : kind === 'withdraw' ? 'Edit cash taken out' : 'Edit bank charge'
+    : kind === 'deposit' ? 'Deposit money' : kind === 'withdraw' ? 'Take cash out of the bank' : 'Add a bank charge'
 
   return (
-    <Modal title={title} subtitle={kind === 'deposit' ? 'Credits the bank account (and takes cash from the safe for cash deposits)' : kind === 'withdraw' ? 'Debits the bank account and adds the cash to the safe' : 'Debits the bank account'} onClose={onClose} busy={busy} width={620}>
+    <Modal title={title} subtitle={entry ? 'Fix a mistake. The balances and the cash book are corrected for you.' : kind === 'deposit' ? 'Puts money into the bank account (and takes cash from the safe for cash deposits)' : kind === 'withdraw' ? 'Takes money out of the bank account and puts the cash in the safe' : 'Takes the charge out of the bank account'} onClose={onClose} busy={busy} width={620}>
       <form className="modal-form-compact" onSubmit={submit}>
         <Grid2>
           <Field label="Bank account">
@@ -120,15 +136,15 @@ const TxModal: React.FC<{ kind: TxKind; bankId?: string; onClose: () => void }> 
           <Field label="Description"><input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={kind === 'deposit' ? 'e.g. Morning shift cash deposit' : kind === 'withdraw' ? 'e.g. Cash for staff salaries' : 'e.g. Monthly service charges'} required={kind !== 'deposit'} /></Field>
         </Grid2>
         <CalcStrip items={[
-          { label: 'Balance now', value: rs(bank?.currentBalance ?? 0) },
-          { label: credit ? 'Credit' : 'Debit', value: `${credit ? '+' : '−'} ${rs(amt)}`, tone: credit ? 'green' : 'red' },
-          { label: 'Balance after', value: rs((bank?.currentBalance ?? 0) + (credit ? amt : -amt)), tone: 'gold' },
+          { label: entry ? 'Balance without this entry' : 'Balance now', value: rs(bankBase) },
+          { label: credit ? 'Money in' : 'Money out', value: `${credit ? '+' : '−'} ${rs(amt)}`, tone: credit ? 'green' : 'red' },
+          { label: 'Balance after', value: rs(bankBase + (credit ? amt : -amt)), tone: 'gold' },
           ...(kind === 'deposit' && funding === 'cash' ? [{ label: 'Safe after', value: rs(cash - amt) }] : kind === 'withdraw' ? [{ label: 'Safe after', value: rs(cash + amt) }] : []),
         ]} />
         <FormError message={error} />
         <div className="modal-actions-footer">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={busy || banks.length === 0}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : 'Save'}</span></button>
+          <button type="submit" className="btn btn-primary" disabled={busy || banks.length === 0}><CheckCircleIcon size={16} /><span>{busy ? 'Saving…' : entry ? 'Save changes' : 'Save'}</span></button>
         </div>
       </form>
     </Modal>
@@ -141,7 +157,7 @@ export const BankSheetView: React.FC = () => {
   const confirm = useConfirm()
   const toast = useToast()
   const [accountForm, setAccountForm] = useState<{ account?: BankAccount } | null>(null)
-  const [txForm, setTxForm] = useState<{ kind: TxKind; bankId?: string } | null>(null)
+  const [txForm, setTxForm] = useState<{ kind: TxKind; bankId?: string; entry?: BankTransaction } | null>(null)
   const [printOpen, setPrintOpen] = useState(false)
   const [bankFilter, setBankFilter] = useState('all')
 
@@ -165,7 +181,9 @@ export const BankSheetView: React.FC = () => {
     const r = await act.removeBankTransaction(t.id)
     if (r.ok) toast.success('Bank entry deleted.'); else toast.error(r.error)
   }
+  // entries typed here can be fixed or deleted; the rest belong to another record (an expense, a supplier payment ...)
   const deletable = (t: BankTransaction) => !t.sourceType || t.sourceType === 'bank_deposit' || t.sourceType === 'bank_withdrawal'
+  const editable = (t: BankTransaction) => deletable(t) && (BANK_CREDIT_TYPES.includes(t.type) || t.type === 'Withdrawal' || t.type === 'Bank Fee')
 
   return (
     <div className="page-content-wrapper">
@@ -251,7 +269,12 @@ export const BankSheetView: React.FC = () => {
                     <td className="text-green font-bold">{isCredit ? rs(t.amount) : '—'}</td>
                     <td className="text-red font-bold">{!isCredit ? rs(t.amount) : '—'}</td>
                     <td>{rs(t.balanceAfter)}</td>
-                    <td>{deletable(t) && <RowActions><IconButton label="Delete entry" tone="danger" onClick={() => void removeTx(t)}><TrashIcon size={14} /></IconButton></RowActions>}</td>
+                    <td>{deletable(t) && (
+                      <RowActions>
+                        {editable(t) && <button type="button" className="btn btn-outline ui-mini-btn" onClick={() => setTxForm({ kind: txKindOf(t), entry: t })}>Edit</button>}
+                        <IconButton label="Delete entry" tone="danger" onClick={() => void removeTx(t)}><TrashIcon size={14} /></IconButton>
+                      </RowActions>
+                    )}</td>
                   </tr>
                 )
               })}
@@ -261,7 +284,7 @@ export const BankSheetView: React.FC = () => {
       </SectionCard>
 
       {accountForm && <AccountModal account={accountForm.account} onClose={() => setAccountForm(null)} />}
-      {txForm && <TxModal kind={txForm.kind} bankId={txForm.bankId} onClose={() => setTxForm(null)} />}
+      {txForm && <TxModal kind={txForm.kind} bankId={txForm.bankId} entry={txForm.entry} onClose={() => setTxForm(null)} />}
 
       <PrintReceiptModal isOpen={printOpen} onClose={() => setPrintOpen(false)} title="Bank Balances & Deposit Summary" stationName={siteInfo.name} stationLocation={siteInfo.location} stationPhone={siteInfo.phone}>
         <table className="slip-table">

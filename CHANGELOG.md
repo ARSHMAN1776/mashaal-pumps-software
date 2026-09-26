@@ -10,6 +10,9 @@ Newest first. The version number is shown at the bottom of the menu and in Stati
 - Plain-English titles, headings and table columns on the main pages, and a simpler Fuel deliveries table.
 - Owner overview and Profit & withdrawals rewritten in plain words.
 - Station picker rewritten. PARCO is red and PSO is green everywhere.
+- Bank: every deposit, cash-out and bank charge typed here now has an **Edit** button, so a mistake is fixed in place instead of deleted and typed again.
+- Credit slips: a **Rate per litre** box. It starts at the Settings price; only an owner or manager can type a different rate (a warning shows the difference and it is recorded). A slip keeps its own rate, so later price changes never change it.
+- Customer account: cards for **Fuel taken** (litres by fuel), **Payments made**, **Owes now** and **Credit left**, for any dates. The customer list shows each customer's last fuel and last payment.
 - No SQL to run for this update.
 
 ## 1.0.0 — 2026-09-25 (first release for real use)

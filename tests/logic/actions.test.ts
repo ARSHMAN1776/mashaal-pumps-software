@@ -189,6 +189,38 @@ describe.each(KINDS)('%s backend', (kind) => {
       must(await st.act.removeSlip(slip.id))
       expect(st.data.customers.find((c) => c.id === 'CUST-02')!.currentBalance).toBe(0)
     })
+    it('the rate on a slip: only an owner or manager can type a different one, and it is recorded', async () => {
+      const cashier = await openStation(S1, 'tariq.cashier')
+      const std = cashier.data.settings.rates['HSD Diesel']
+      const base = { customerId: 'CUST-02', vehicleNo: 'X-1', driverName: 'Ali', fuelType: 'HSD Diesel' as const, liters: 100 }
+      // a cashier may send the same rate as Settings (the form does), but not a different one
+      must(await cashier.act.issueSlip({ ...base, rate: std }))
+      expect(failed(await cashier.act.issueSlip({ ...base, rate: std - 10 })).code).toBe('FORBIDDEN')
+      expect(failed(await cashier.act.issueSlip({ ...base, rate: std - 10 })).error).toMatch(/manager or the owner/)
+      const mgr = await openStation(S1, 'naveed.akhtar', cashier.be)
+      const slip = must(await mgr.act.issueSlip({ ...base, rate: 300 }))
+      expect(slip.rate).toBe(300)
+      expect(slip.totalAmount).toBe(30000)
+      expect(failed(await mgr.act.issueSlip({ ...base, rate: 0 })).error).toMatch(/more than 0/)
+      const log = await mgr.be.loadAudit(S1, 10)
+      expect(log.some((e) => e.action === 'slip.rate')).toBe(true)
+      // the customer owes exactly what the slip says
+      expect(mgr.data.customers.find((c) => c.id === 'CUST-02')!.currentBalance).toBeCloseTo(std * 100 + 30000, 2)
+    })
+    it('a price change in Settings never changes a slip that was already given', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      const slip = must(await st.act.issueSlip({ customerId: 'CUST-02', vehicleNo: 'X-1', driverName: 'Ali', fuelType: 'HSD Diesel', liters: 100, rate: 295 }))
+      const settings = st.data.settings
+      must(await st.act.saveSettings({ ...settings, rates: { ...settings.rates, 'HSD Diesel': 300 } }, settings.updatedAt))
+      await st.reload()
+      const same = st.data.creditSlips.find((x) => x.id === slip.id)!
+      expect(same.rate).toBe(295)
+      expect(same.totalAmount).toBe(29500)
+      expect(st.data.customers.find((c) => c.id === 'CUST-02')!.currentBalance).toBe(29500)
+      // the next slip without a typed rate uses the new Settings price
+      const next = must(await st.act.issueSlip({ customerId: 'CUST-02', vehicleNo: 'X-1', driverName: 'Ali', fuelType: 'HSD Diesel', liters: 10 }))
+      expect(next.rate).toBe(300)
+    })
     it('slip numbers are unique and increasing', async () => {
       const st = await openStation(S1, 'naveed.akhtar')
       const a = must(await st.act.issueSlip({ customerId: 'CUST-02', vehicleNo: 'X', driverName: 'a', fuelType: 'HSD Diesel', liters: 1 }))
@@ -327,6 +359,46 @@ describe.each(KINDS)('%s backend', (kind) => {
       must(await st.act.withdrawFromBank({ bankId: 'BANK-01', amount: 50000, description: 'cash' }))
       expect(safeCash(st.data)).toBe(cash0 + 50000)
       expect(failed(await st.act.withdrawFromBank({ bankId: 'BANK-01', amount: 99_999_999, description: '' })).code).toBe('NEGATIVE_BANK')
+    })
+    it('a wrong bank entry can be fixed in place: balances and the cash book follow', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      const cash0 = safeCash(st.data)
+      must(await st.act.depositToBank({ bankId: 'BANK-01', amount: 200000, slipNo: 'DEP-1', description: 'x', funding: 'cash' }))
+      const tx = st.data.bankTransactions.find((t) => t.depositSlipNo === 'DEP-1')!
+      // typed 200,000 instead of 20,000
+      must(await st.act.updateBankTransaction(tx.id, { bankId: 'BANK-01', amount: 20000, date: tx.date, slipNo: 'DEP-1', description: 'morning deposit', funding: 'cash', version: tx.updatedAt }))
+      expect(safeCash(st.data)).toBe(cash0 - 20000)
+      expect(st.data.bankAccounts[0].currentBalance).toBe(4_300_500)
+      expect(st.data.bankTransactions.filter((t) => t.depositSlipNo === 'DEP-1')).toHaveLength(1)
+      // it really was cash, then it turns out to have been a cheque: the safe gets its money back
+      const again = st.data.bankTransactions.find((t) => t.id === tx.id)!
+      must(await st.act.updateBankTransaction(tx.id, { bankId: 'BANK-01', amount: 20000, date: again.date, slipNo: 'CHQ-1', description: 'cheque', funding: 'external', version: again.updatedAt }))
+      expect(safeCash(st.data)).toBe(cash0)
+      expect(st.data.bankTransactions.find((t) => t.id === tx.id)!.type).toBe('Credit Received')
+      await st.reload()
+      expect(safeCash(st.data)).toBe(cash0)
+      expect(st.data.bankAccounts[0].currentBalance).toBe(4_300_500)
+    })
+    it('fixing a withdrawal moves the cash in the safe; an old screen is refused', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      const cash0 = safeCash(st.data)
+      must(await st.act.withdrawFromBank({ bankId: 'BANK-01', amount: 50000, description: 'cash' }))
+      const tx = st.data.bankTransactions.find((t) => t.type === 'Withdrawal' && t.amount === 50000)!
+      must(await st.act.updateBankTransaction(tx.id, { bankId: 'BANK-01', amount: 30000, date: tx.date, description: 'cash', version: tx.updatedAt }))
+      expect(safeCash(st.data)).toBe(cash0 + 30000)
+      expect(st.data.bankAccounts[0].currentBalance).toBe(4_250_500)
+      // the screen still holds the old version
+      expect(failed(await st.act.updateBankTransaction(tx.id, { bankId: 'BANK-01', amount: 10000, date: tx.date, description: 'cash', version: tx.updatedAt })).code).toBe('CONFLICT')
+      // an edit that would empty the bank asks first
+      const now = st.data.bankTransactions.find((t) => t.id === tx.id)!
+      expect(failed(await st.act.updateBankTransaction(tx.id, { bankId: 'BANK-01', amount: 99_999_999, date: now.date, description: 'cash', version: now.updatedAt })).code).toBe('NEGATIVE_BANK')
+    })
+    it('bank lines made by another record cannot be edited here', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      const linked = st.data.bankTransactions.find((t) => t.sourceType && t.sourceType !== 'bank_deposit' && t.sourceType !== 'bank_withdrawal')
+      if (linked) expect(failed(await st.act.updateBankTransaction(linked.id, { bankId: linked.bankId, amount: 1, date: linked.date, description: 'x' })).error).toMatch(/another record/)
+      const cashier = await openStation(S1, 'tariq.cashier')
+      expect(failed(await cashier.act.updateBankTransaction('nope', { bankId: 'BANK-01', amount: 1, date: todayISO(), description: 'x' })).code).toBe('FORBIDDEN')
     })
     it('a bank account with history is deactivated, not deleted, and only when empty', async () => {
       const st = await openStation(S1, 'naveed.akhtar')

@@ -5,7 +5,7 @@ import { buildStatement, type StatementRow } from '../../data/statements'
 import { creditLeft } from '../../data/derive'
 import { formatDate, todayISO } from '../../lib/dates'
 import { rs } from '../../lib/money'
-import { EditIcon, PlusIcon, PrinterIcon, TrashIcon, WhatsAppIcon } from '../../components/common/Icons'
+import { EditIcon, FileTextIcon, PlusIcon, PrinterIcon, TrashIcon, WhatsAppIcon } from '../../components/common/Icons'
 import { PrintReceiptModal } from '../../components/common/PrintReceiptModal'
 import { useConfirm } from '../../components/common/Confirm'
 import { useToast } from '../../components/common/Toast'
@@ -86,6 +86,15 @@ export const CustomerLedgerPanel: React.FC<{ customerId: string; onRemoved?: () 
   )
   if (!customer || !statement) return <div className="ui-empty">Select a customer.</div>
 
+  const inPeriod = (d: string) => (!from || d >= from) && (!to || d <= to)
+  const periodSlips = slips.filter((s) => inPeriod(s.date))
+  const periodPays = recoveries.filter((r) => inPeriod(r.date))
+  const litersTaken = periodSlips.reduce((a, s) => a + s.liters, 0)
+  const fuelValue = periodSlips.reduce((a, s) => a + s.totalAmount, 0)
+  const litersByFuel = Object.entries(periodSlips.reduce<Record<string, number>>((m, s) => ({ ...m, [s.fuelType]: (m[s.fuelType] ?? 0) + s.liters }), {}))
+  const paidTotal = periodPays.reduce((a, r) => a + r.amount, 0)
+  const lastPay = [...periodPays].sort((a, b) => b.date.localeCompare(a.date))[0]
+  const periodWords = from || to ? 'in the dates you chose' : 'all time'
   const left = creditLeft(customer)
   const utilPct = customer.creditLimit > 0 ? Math.round((customer.currentBalance / customer.creditLimit) * 100) : 0
   const primaryBank = bankAccounts.find((b) => b.isActive)
@@ -133,11 +142,10 @@ export const CustomerLedgerPanel: React.FC<{ customerId: string; onRemoved?: () 
       )}
 
       <KpiStrip>
-        <Kpi label="Client" value={<span style={{ fontSize: 16 }}>{customer.businessName}</span>} sub={`Prop: ${customer.name} • ${customer.phone}`} />
+        <Kpi label="Fuel taken" value={`${Number(litersTaken.toFixed(2)).toLocaleString()} L`} sub={litersByFuel.length ? `${litersByFuel.map(([f, q]) => `${f} ${q.toLocaleString()} L`).join(' · ')} · worth ${rs(fuelValue)} (${periodWords})` : `No fuel taken (${periodWords})`} />
+        <Kpi label="Payments made" value={rs(paidTotal)} tone="green" sub={periodPays.length ? `${periodPays.length} payment${periodPays.length === 1 ? '' : 's'} (${periodWords}) · last on ${formatDate(lastPay.date)}` : `No payments (${periodWords})`} />
+        <Kpi label="Owes now" value={customer.currentBalance < 0 ? `${rs(-customer.currentBalance)} advance` : rs(customer.currentBalance)} tone={customer.currentBalance > 0 ? 'red' : 'plain'} sub={`${customer.businessName} · ${customer.phone}`} />
         <Kpi label="Credit left" value={left < 0 ? `Over by ${rs(-left)}` : rs(left)} sub={`of ${rs(customer.creditLimit)} limit • ${utilPct}% used${customer.status === 'Hold' ? ' • ON HOLD' : ''}`} tone={left <= 0 ? 'red' : 'green'} />
-        <Kpi label="Total debit (fuel & debit notes)" value={rs(statement.totalDebit)} tone="red" sub={from || to ? 'in the selected period' : 'whole ledger'} />
-        <Kpi label="Total credit (payments & credit notes)" value={rs(statement.totalCredit)} tone="green" />
-        <Kpi label="Net balance due" value={customer.currentBalance < 0 ? `${rs(-customer.currentBalance)} advance` : rs(customer.currentBalance)} tone="gold" sub="Payable to the station" />
       </KpiStrip>
 
       <div className="ui-filter-bar">
@@ -148,20 +156,20 @@ export const CustomerLedgerPanel: React.FC<{ customerId: string; onRemoved?: () 
         {!archived && (
           <>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setSlipModal({})} disabled={customer.status !== 'Active'} title={customer.status === 'Hold' ? 'Account is on hold' : undefined}>
-              <PlusIcon size={14} /><span>Debit: issue slip</span>
+              <PlusIcon size={14} /><span>Give fuel on credit</span>
             </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRecoveryModal({})}><PlusIcon size={14} /><span>Credit: record payment</span></button>
-            {isManager && <button type="button" className="btn btn-outline btn-sm" onClick={() => setNoteModal({})}><PlusIcon size={14} /><span>Debit / credit note</span></button>}
-          </>
-        )}
-        {isManager && !archived && (
-          <>
-            <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditCustomer(true)}><EditIcon size={14} /><span>Edit customer</span></button>
-            <button type="button" className="btn btn-outline-danger btn-sm" onClick={async () => { if (await removeCustomer(customer.id)) onRemoved?.() }}><TrashIcon size={14} /><span>Delete customer</span></button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setRecoveryModal({})}><PlusIcon size={14} /><span>Receive payment</span></button>
           </>
         )}
         <button type="button" className="btn btn-outline btn-sm" onClick={() => setPrintStatement(true)}><PrinterIcon size={14} /><span>Print</span></button>
         <button type="button" className="btn btn-sm" style={{ background: '#15803d', borderColor: '#166534', color: '#fff' }} onClick={whatsappStatement}><WhatsAppIcon size={14} color="#fff" /><span>WhatsApp</span></button>
+        {isManager && !archived && (
+          <RowActions>
+            <IconButton label="Add a debit or credit note" onClick={() => setNoteModal({})}><FileTextIcon size={14} /></IconButton>
+            <IconButton label="Edit customer" onClick={() => setEditCustomer(true)}><EditIcon size={14} /></IconButton>
+            <IconButton label="Delete customer" tone="danger" onClick={async () => { if (await removeCustomer(customer.id)) onRemoved?.() }}><TrashIcon size={14} /></IconButton>
+          </RowActions>
+        )}
       </div>
 
       <SectionCard title={`Account statement — ${customer.businessName}`} subtitle="Complete itemized audit trail. Debit = fuel taken on credit; Credit = money received.">

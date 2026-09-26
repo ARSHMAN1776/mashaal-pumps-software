@@ -22,7 +22,7 @@ import { newId } from '../../lib/ids'
 import { round2 } from '../../lib/money'
 import { todayISO } from '../../lib/dates'
 import {
-  EPS, auditOp, checkDate, checkVersion, clean, fmt, guard, isNonNegative, isPositive, money, needManager, run,
+  EPS, auditOp, checkDate, checkVersion, clean, fmt, guard, isManager, isNonNegative, isPositive, money, needManager, run,
   syncLinkedBankTx, syncLinkedDaybook, type ActionCtx,
 } from './core'
 
@@ -181,6 +181,8 @@ export interface SlipInput {
   fuelType: FuelType
   liters: number
   date?: string
+  /** The rate agreed for this slip. Leave it out to use the price in Settings; only an owner or manager may give a different one. */
+  rate?: number
   /** VEHICLE_NOT_REGISTERED, LIMIT_EXCEEDED — accepted knowingly by a manager */
   acknowledge?: string[]
 }
@@ -201,7 +203,16 @@ export function issueSlip(c: ActionCtx, i: SlipInput): Promise<Result<CreditSale
     const liters = money(i.liters)
     if (!isPositive(liters)) return fail('Liters must be more than 0.')
     // the price in force on the slip's date (a late slip for a day before a price change keeps the old rate)
-    const rate = rateOnDate(c.data.tariffHistory, c.data.settings.rates, i.fuelType, date)
+    const standardRate = rateOnDate(c.data.tariffHistory, c.data.settings.rates, i.fuelType, date)
+    let rate = standardRate
+    if (i.rate !== undefined) {
+      const typed = round2(money(i.rate))
+      if (!isPositive(typed)) return fail('The rate per liter must be more than 0.')
+      if (Math.abs(typed - standardRate) > 0.004) {
+        if (!isManager(c)) return fail('Only a manager or the owner can change the rate on a slip. Ask them to issue this slip.', 'FORBIDDEN')
+        rate = typed
+      }
+    }
     if (!isPositive(rate)) return fail(`Set the ${i.fuelType} rate in Settings first.`)
     const total = round2(liters * rate)
 
@@ -220,6 +231,11 @@ export function issueSlip(c: ActionCtx, i: SlipInput): Promise<Result<CreditSale
       driverName: clean(i.driverName), fuelType: i.fuelType, liters, rate, totalAmount: total, authorizedBy: c.user.name, createdAt: '',
     }
     const ops: Op[] = [op.insert('credit_slips', slip)]
+    if (rate !== standardRate) {
+      ops.push(auditOp(c, 'slip.rate', 'credit_slip', slip.id, `Slip ${slipNo} given at Rs ${rate} a litre; the price in Settings was Rs ${standardRate}`, {
+        slip: slipNo, customer: customer.businessName, fuel: i.fuelType, liters, rate, settingsRate: standardRate,
+      }))
+    }
     if (notRegistered) {
       const raw = c.raw.customers.find((x) => x.id === customer.id)!
       ops.push(op.update('customers', { ...raw, vehicleNumbers: [...raw.vehicleNumbers, plate] }))

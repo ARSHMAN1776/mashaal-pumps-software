@@ -44,6 +44,14 @@ export const CustomersView: React.FC = () => {
   const todaySlips = creditSlips.filter((s) => s.date === today)
   const todayRecoveries = recoveries.filter((r) => r.date === today)
   const custName = (id: string) => customers.find((c) => c.id === id)
+  // the latest fuel and the latest payment of every customer, for the small line under each name
+  const lastActivity = useMemo(() => {
+    const fuel: Record<string, { date: string; liters: number }> = {}
+    const paid: Record<string, { date: string; amount: number }> = {}
+    for (const s of creditSlips) if (!fuel[s.customerId] || s.date > fuel[s.customerId].date) fuel[s.customerId] = { date: s.date, liters: s.liters }
+    for (const r of recoveries) if (!paid[r.customerId] || r.date > paid[r.customerId].date) paid[r.customerId] = { date: r.date, amount: r.amount }
+    return { fuel, paid }
+  }, [creditSlips, recoveries])
 
   return (
     <div className="page-content-wrapper">
@@ -85,11 +93,11 @@ export const CustomersView: React.FC = () => {
         <div className="table-responsive">
           <table className="clean-table">
             <thead>
-              <tr><th>Customer</th><th>Vehicles</th><th>Credit limit</th><th>Owes now</th><th>Credit left</th><th>Status</th><th className="col-actions" /></tr>
+              <tr><th>Customer</th><th>Vehicles</th><th>Credit limit</th><th>Owes now</th><th>Credit left</th><th className="col-actions" /></tr>
             </thead>
             <tbody>
               {shown.length === 0 ? (
-                <EmptyRow colSpan={7}>{customers.length === 0 ? 'No credit customers yet.' : 'No customer matches your search.'}{isManager && customers.length === 0 ? ' Press "Add customer" to add the first one.' : ''}</EmptyRow>
+                <EmptyRow colSpan={6}>{customers.length === 0 ? 'No credit customers yet.' : 'No customer matches your search.'}{isManager && customers.length === 0 ? ' Press "Add customer" to add the first one.' : ''}</EmptyRow>
               ) : shown.map((c) => {
                 const pct = c.creditLimit > 0 ? Math.round((c.currentBalance / c.creditLimit) * 100) : 0
                 const over = c.currentBalance >= c.creditLimit && c.creditLimit > 0
@@ -98,8 +106,10 @@ export const CustomersView: React.FC = () => {
                 return (
                   <tr key={c.id} style={archived ? { opacity: 0.6 } : undefined}>
                     <td>
-                      <button type="button" className="ui-link-btn" onClick={() => setLedgerFor(c.id)} title="Open this customer's account"><strong style={{ fontSize: 14 }}>{c.businessName}</strong></button>
+                      <button type="button" className="ui-link-btn" onClick={() => setLedgerFor(c.id)} title="Open this customer's account"><strong style={{ fontSize: 14 }}>{c.businessName}</strong></button>{c.status !== 'Active' && <span className={`badge ${c.status === 'Hold' ? 'badge-warning' : 'badge-neutral'}`} style={{ marginLeft: 8, fontSize: 10.5, padding: '2px 6px' }}>{c.status === 'Hold' ? 'On hold' : 'Removed'}</span>}
                       <div className="text-muted text-xs">{c.name !== c.businessName ? `${c.name} · ` : ''}{c.phone}</div>
+                      <div className="text-muted text-xs">{lastActivity.fuel[c.id] ? `Last fuel: ${formatDate(lastActivity.fuel[c.id].date)}, ${lastActivity.fuel[c.id].liters.toLocaleString()} L` : 'No fuel taken yet'}</div>
+                      <div className="text-muted text-xs">{lastActivity.paid[c.id] ? `Last payment: ${formatDate(lastActivity.paid[c.id].date)}, ${rs(lastActivity.paid[c.id].amount)}` : 'No payment yet'}</div>
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', maxWidth: 170 }}>
@@ -117,7 +127,6 @@ export const CustomersView: React.FC = () => {
                         <span className="util-text">{pct}%</span>
                       </div>
                     </td>
-                    <td><span className={`badge ${c.status === 'Active' ? 'badge-success' : c.status === 'Hold' ? 'badge-warning' : 'badge-neutral'}`} style={{ fontSize: 10.5, padding: '2px 6px' }}>{c.status}</span></td>
                     <td className="col-actions">
                       <RowActions>
                         <button type="button" className="btn btn-outline ui-mini-btn" disabled={c.status !== 'Active'} onClick={() => setSlipFor(c.id)}>Give fuel</button>

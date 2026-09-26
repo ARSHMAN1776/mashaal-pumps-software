@@ -102,10 +102,16 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
   const [fuel, setFuel] = useState<FuelType>(slip?.fuelType ?? 'HSD Diesel')
   const [liters, setLiters] = useState(slip ? String(slip.liters) : '')
   const [rateText, setRateText] = useState(slip ? String(slip.rate) : '')
+  const [rateTouched, setRateTouched] = useState(false) // a new slip uses the Settings price until an owner or manager types a different one
   const [date, setDate] = useState(slip?.date ?? todayISO())
   const [phone, setPhone] = useState(initial?.phone ?? '')
 
-  const rate = slip && rateText !== '' ? Number(rateText) : rateOnDate(activeSiteData.tariffHistory, rates, fuel, date)
+  const standardRate = rateOnDate(activeSiteData.tariffHistory, rates, fuel, date)
+  const typedRate = slip ? Number(rateText) : rateTouched && rateText !== '' ? Number(rateText) : standardRate
+  const rate = Number.isFinite(typedRate) ? typedRate : 0
+  const rateGap = !slip && Number.isFinite(rate) && Math.abs(rate - standardRate) > 0.004 ? rate - standardRate : 0
+  const chooseFuel = (f: FuelType) => { setFuel(f); setRateTouched(false); setRateText('') }
+  const chooseDate = (d: string) => { setDate(d); setRateTouched(false); setRateText('') }
   const l = Number(liters)
   const total = Number.isFinite(l) && l > 0 ? round2(l * (Number.isFinite(rate) ? rate : 0)) : 0
   const before = customer ? customer.currentBalance - (slip ? slip.totalAmount : 0) : 0
@@ -131,7 +137,7 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
       return
     }
     void run(
-      (ack) => act.issueSlip({ customerId: custId, vehicleNo: vehicle, driverName: driver, fuelType: fuel, liters: l, date, acknowledge: ack }),
+      (ack) => act.issueSlip({ customerId: custId, vehicleNo: vehicle, driverName: driver, fuelType: fuel, liters: l, date, rate: isManager && rateTouched && rateText !== '' ? Number(rateText) : undefined, acknowledge: ack }),
       (saved) => {
         toast.success(`Issued ${saved.slipNo} — ${rsn(saved.totalAmount)}`)
         onSaved?.(saved)
@@ -162,22 +168,31 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
         <Grid3>
           <Field label="Driver name"><input className="form-input" value={driver} onChange={(e) => setDriver(e.target.value)} placeholder="Driver who took fuel" required /></Field>
           <Field label="Fuel product">
-            <select className="form-input" value={fuel} onChange={(e) => setFuel(e.target.value as FuelType)}>
-              {FUEL_TYPES.map((f) => <option key={f} value={f}>{f} (Rs {rates[f]})</option>)}
+            <select className="form-input" value={fuel} onChange={(e) => chooseFuel(e.target.value as FuelType)}>
+              {FUEL_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
           </Field>
           <Field label="Liters dispensed" strong><input type="number" min={0.001} step="any" className="form-input" value={liters} onChange={(e) => setLiters(e.target.value)} required autoFocus={!slip} /></Field>
         </Grid3>
-        <Grid2>
-          <Field label="Date" hint={!isManager ? 'Cashiers record today only' : undefined}><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} disabled={!isManager} required /></Field>
+        <Grid3>
+          <Field label="Date" hint={!isManager ? 'Cashiers record today only' : undefined}><input type="date" className="form-input" value={date} max={todayISO()} onChange={(e) => chooseDate(e.target.value)} disabled={!isManager} required /></Field>
           {slip ? (
-            <Field label="Rate per liter (PKR)"><input type="number" step="any" min={0} className="form-input" value={rateText} onChange={(e) => setRateText(e.target.value)} required /></Field>
+            <Field label="Rate per litre (PKR)"><input type="number" step="any" min={0} className="form-input" value={rateText} onChange={(e) => setRateText(e.target.value)} required /></Field>
+          ) : isManager ? (
+            <Field label="Rate per litre (PKR)" hint={`Today's price: Rs ${standardRate}. Type a different rate if that is what you agreed.`}>
+              <input type="number" step="any" min={0} className="form-input" value={rateTouched ? rateText : String(standardRate)} onChange={(e) => { setRateTouched(true); setRateText(e.target.value) }} required />
+            </Field>
           ) : (
-            <Field label={<span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><WhatsAppIcon size={14} color="#15803d" />Transporter WhatsApp number</span>}>
+            <Field label="Rate per litre (PKR)" hint="Set in Settings. A manager can change it.">
+              <div className="read-only-box"><strong>Rs {standardRate}</strong></div>
+            </Field>
+          )}
+          {!slip && (
+            <Field label={<span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><WhatsAppIcon size={14} color="#15803d" />WhatsApp number</span>}>
               <input className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0300-8671234" />
             </Field>
           )}
-        </Grid2>
+        </Grid3>
 
         <CalcStrip items={[
           { label: 'This slip', value: rsn(total), tone: 'red' },
@@ -185,6 +200,7 @@ export const SlipModal: React.FC<{ customerId?: string; slip?: CreditSaleSlip; o
           { label: 'Owes after', value: rsn(after), tone: over ? 'red' : 'gold' },
           { label: 'Credit left after', value: customer ? (left < 0 ? `Over by ${rsn(-left)}` : rsn(left)) : '—', tone: customer && left < 0 ? 'red' : 'green' },
         ]} />
+        {rateGap !== 0 && <div className="ui-notice ui-notice-warning">This rate is Rs {Math.abs(Math.round(rateGap * 100) / 100)} {rateGap < 0 ? 'lower' : 'higher'} than today's price (Rs {standardRate}). The slip will be saved at Rs {rate} and this is recorded.</div>}
         {over && <div className="ui-notice ui-notice-warning">This slip takes the customer above the approved credit limit.{isManager ? ' You will be asked to authorize it.' : ' A manager must authorize it.'}</div>}
 
         <FormError message={error} />
