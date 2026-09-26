@@ -188,7 +188,7 @@ create table if not exists public.{p}_bank_transactions (
   bank_id         text not null references public.{p}_bank_accounts(id) on delete restrict,
   date            date not null,
   type            text not null check (type in (
-                    'Deposit', 'Credit Received',
+                    'Deposit', 'Credit Received', 'Online Transfer',
                     'Withdrawal', 'OMC Online Transfer', 'Bank Fee', 'Owner Transfer',
                     'Vendor Payment', 'Expense Payment')),
   amount          numeric not null check (amount > 0),
@@ -471,6 +471,21 @@ alter table public.{p}_staff_salary_payments add column if not exists absent_day
 alter table public.{p}_staff_salary_payments add column if not exists deduction_note text;
 alter table public.{p}_supplier_transactions add column if not exists source_type    text;
 alter table public.{p}_supplier_transactions add column if not exists source_id      text;
+-- a bank line can now be an "Online Transfer": the allowed list of bank line types is widened (no row is changed)
+do $$
+declare c record;
+begin
+  for c in
+    select conname from pg_constraint
+    where conrelid = 'public.{p}_bank_transactions'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%Credit Received%'
+  loop
+    execute format('alter table public.{p}_bank_transactions drop constraint %I', c.conname);
+  end loop;
+  alter table public.{p}_bank_transactions add constraint {p}_bank_transactions_type_check check (type in (
+    'Deposit', 'Credit Received', 'Online Transfer',
+    'Withdrawal', 'OMC Online Transfer', 'Bank Fee', 'Owner Transfer',
+    'Vendor Payment', 'Expense Payment'));
+end $$;
 -- UPGRADES-END
 
 -- ---- indexes ------------------------------------------------------------

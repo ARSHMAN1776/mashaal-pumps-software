@@ -289,9 +289,9 @@ export interface BankAccount {
 }
 
 export type BankTxType =
-  | 'Deposit' | 'Credit Received'
+  | 'Deposit' | 'Credit Received' | 'Online Transfer'
   | 'Withdrawal' | 'OMC Online Transfer' | 'Bank Fee' | 'Owner Transfer' | 'Vendor Payment' | 'Expense Payment'
-export const BANK_CREDIT_TYPES: BankTxType[] = ['Deposit', 'Credit Received']
+export const BANK_CREDIT_TYPES: BankTxType[] = ['Deposit', 'Credit Received', 'Online Transfer']
 
 export interface BankTransaction {
   id: string

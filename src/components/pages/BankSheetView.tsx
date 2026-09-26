@@ -81,7 +81,7 @@ const TxModal: React.FC<{ kind: TxKind; bankId?: string; entry?: BankTransaction
   const [slip, setSlip] = useState(entry?.depositSlipNo ?? '')
   const [description, setDescription] = useState(entry?.description ?? '')
   const [date, setDate] = useState(entry?.date ?? todayISO())
-  const [funding, setFunding] = useState<'cash' | 'external'>(entry && entry.type === 'Credit Received' ? 'external' : 'cash')
+  const [funding, setFunding] = useState<'cash' | 'cheque' | 'online'>(entry?.type === 'Online Transfer' ? 'online' : entry?.type === 'Credit Received' ? 'cheque' : 'cash')
   const { busy, error, run } = useSubmit()
   const bank = banks.find((b) => b.id === id)
   const amt = Number(amount) || 0
@@ -123,17 +123,20 @@ const TxModal: React.FC<{ kind: TxKind; bankId?: string; entry?: BankTransaction
         {kind === 'deposit' && (
           <Grid2>
             <Field label="Funding">
-              <select className="form-input" value={funding} onChange={(e) => setFunding(e.target.value as 'cash' | 'external')}>
+              <select className="form-input" value={funding} onChange={(e) => setFunding(e.target.value as 'cash' | 'cheque' | 'online')}>
                 <option value="cash">Cash taken from the safe</option>
-                <option value="external">Cheque / online credit (safe not affected)</option>
+                <option value="cheque">Cheque (safe not affected)</option>
+                <option value="online">Online transfer (safe not affected)</option>
               </select>
             </Field>
-            <Field label="Bank-stamped slip #"><input className="form-input" value={slip} onChange={(e) => setSlip(e.target.value)} required /></Field>
+            <Field label={funding === 'online' ? 'Transaction / reference no.' : funding === 'cheque' ? 'Cheque no. / slip #' : 'Bank-stamped slip #'}>
+              <input className="form-input" value={slip} onChange={(e) => setSlip(e.target.value)} placeholder={funding === 'online' ? 'e.g. RAAST or the transaction ID' : undefined} required />
+            </Field>
           </Grid2>
         )}
         <Grid2>
           <Field label="Amount (PKR)" strong><input type="number" min={0.01} step="any" className="form-input" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></Field>
-          <Field label="Description"><input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={kind === 'deposit' ? 'e.g. Morning shift cash deposit' : kind === 'withdraw' ? 'e.g. Cash for staff salaries' : 'e.g. Monthly service charges'} required={kind !== 'deposit'} /></Field>
+          <Field label="Description"><input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={kind === 'deposit' ? (funding === 'online' ? 'e.g. Payment from a customer' : 'e.g. Morning shift cash deposit') : kind === 'withdraw' ? 'e.g. Cash for staff salaries' : 'e.g. Monthly service charges'} required={kind !== 'deposit'} /></Field>
         </Grid2>
         <CalcStrip items={[
           { label: entry ? 'Balance without this entry' : 'Balance now', value: rs(bankBase) },

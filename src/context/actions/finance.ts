@@ -285,10 +285,18 @@ export interface BankDepositInput {
   slipNo: string
   description: string
   date?: string
-  /** cash = taken from the safe; external = cheque / online credit that never touched the safe */
-  funding: 'cash' | 'external'
+  /** cash = taken from the safe; cheque / online = money that never touched the safe ('external' is the old name for cheque) */
+  funding: BankFunding
   acknowledge?: string[]
 }
+
+export type BankFunding = 'cash' | 'cheque' | 'online' | 'external'
+
+/** The kind of bank line a deposit becomes, and the description used when none is typed. */
+const depositKind = (funding: BankFunding): { type: BankTxType; label: string } =>
+  funding === 'cash' ? { type: 'Deposit', label: 'Deposit' }
+    : funding === 'online' ? { type: 'Online Transfer', label: 'Online transfer' }
+      : { type: 'Credit Received', label: 'Cheque deposit' }
 
 export function depositToBank(c: ActionCtx, i: BankDepositInput): Promise<Result<void>> {
   return run(async () => {
@@ -303,12 +311,14 @@ export function depositToBank(c: ActionCtx, i: BankDepositInput): Promise<Result
     const amount = round2(money(i.amount))
     if (!isPositive(amount)) return fail('The amount must be more than 0.')
     if (!clean(i.slipNo)) return fail('Enter the bank deposit slip number.')
+    if (!['cash', 'cheque', 'online', 'external'].includes(i.funding)) return fail('Choose how the money was paid in.')
     const low = guard(c, i.acknowledge, 'NEGATIVE_SAFE', i.funding === 'cash' && amount > safeCash(c) + EPS,
       `Only ${fmt(safeCash(c))} is recorded in the safe; depositing ${fmt(amount)} would make the cash balance negative.`)
     if (low) return low
+    const kind = depositKind(i.funding)
     const tx = bankTxInsertOp({
-      bankId: acc.id, date, type: i.funding === 'cash' ? 'Deposit' : 'Credit Received', amount, depositSlipNo: clean(i.slipNo),
-      description: clean(i.description) || 'Deposit',
+      bankId: acc.id, date, type: kind.type, amount, depositSlipNo: clean(i.slipNo),
+      description: clean(i.description) || kind.label,
     })
     const txId = String(tx.row!.id)
     const ops: Op[] = [tx]
@@ -390,13 +400,14 @@ export interface BankTxEditInput {
   /** deposits only */
   slipNo?: string
   description: string
-  /** deposits only: cash = taken from the safe; external = cheque / online credit */
-  funding?: 'cash' | 'external'
+  /** deposits only: cash = taken from the safe; cheque / online = money that never touched the safe */
+  funding?: BankFunding
   version?: string
   acknowledge?: string[]
 }
 
-const BANK_EDIT_CREDITS: BankTxType[] = ['Deposit', 'Credit Received']
+const BANK_EDIT_CREDITS: BankTxType[] = ['Deposit', 'Credit Received', 'Online Transfer']
+const fundingOf = (t: BankTxType): BankFunding => (t === 'Deposit' ? 'cash' : t === 'Online Transfer' ? 'online' : 'cheque')
 
 /** Fix a deposit, withdrawal or bank charge that was typed wrongly, without deleting it and starting again. */
 export function updateBankTransaction(c: ActionCtx, id: string, i: BankTxEditInput): Promise<Result<void>> {
@@ -425,8 +436,9 @@ export function updateBankTransaction(c: ActionCtx, id: string, i: BankTxEditInp
     if (isDeposit && !slip) return fail('Enter the bank deposit slip number.')
     if (!isDeposit && !clean(i.description)) return fail('Enter what this is for.')
 
-    const funding = isDeposit ? (i.funding ?? (tx.type === 'Deposit' ? 'cash' : 'external')) : undefined
-    const type: BankTxType = isDeposit ? (funding === 'cash' ? 'Deposit' : 'Credit Received') : tx.type
+    if (i.funding !== undefined && !['cash', 'cheque', 'online', 'external'].includes(i.funding)) return fail('Choose how the money was paid in.')
+    const funding = isDeposit ? (i.funding ?? fundingOf(tx.type)) : undefined
+    const type: BankTxType = isDeposit ? depositKind(funding!).type : tx.type
     const effect = (t: BankTxType, a: number) => (BANK_EDIT_CREDITS.includes(t) ? a : -a)
 
     // the account that ends up holding this entry, and (if it moved) the one that no longer does
@@ -448,7 +460,7 @@ export function updateBankTransaction(c: ActionCtx, id: string, i: BankTxEditInp
       `Only ${fmt(safeBefore)} would be in the safe; ${fmt(amount)} would make the cash balance negative.`)
     if (safeLow) return safeLow
 
-    const description = clean(i.description) || (isDeposit ? 'Deposit' : isWithdrawal ? 'Cash withdrawal' : 'Bank charges')
+    const description = clean(i.description) || (isDeposit ? depositKind(funding!).label : isWithdrawal ? 'Cash withdrawal' : 'Bank charges')
     const ops: Op[] = [op.update('bank_transactions', {
       ...tx, bankId: acc.id, date, type, amount, depositSlipNo: isDeposit ? slip : '', description,
     }, i.version)]

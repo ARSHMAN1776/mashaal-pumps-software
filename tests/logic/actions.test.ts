@@ -400,6 +400,45 @@ describe.each(KINDS)('%s backend', (kind) => {
       const cashier = await openStation(S1, 'tariq.cashier')
       expect(failed(await cashier.act.updateBankTransaction('nope', { bankId: 'BANK-01', amount: 1, date: todayISO(), description: 'x' })).code).toBe('FORBIDDEN')
     })
+    it('an online transfer deposit is its own kind of bank line and never touches the safe; edits can switch between cash, cheque and online', async () => {
+      const st = await openStation(S1, 'naveed.akhtar')
+      const cash0 = safeCash(st.data)
+      const bank0 = st.data.bankAccounts[0].currentBalance
+      const find = () => st.data.bankTransactions.find((t) => t.depositSlipNo === 'RAAST-1')!
+      must(await st.act.depositToBank({ bankId: 'BANK-01', amount: 50000, slipNo: 'RAAST-1', description: '', funding: 'online' }))
+      expect(find().type).toBe('Online Transfer')
+      expect(find().description).toBe('Online transfer')
+      expect(safeCash(st.data)).toBe(cash0)
+      expect(st.data.bankAccounts[0].currentBalance).toBe(bank0 + 50000)
+      await st.reload()
+      expect(find().type).toBe('Online Transfer') // it survives a save and reload
+      expect(st.data.bankAccounts[0].currentBalance).toBe(bank0 + 50000)
+
+      const edit = async (funding: 'cash' | 'cheque' | 'online') => must(await st.act.updateBankTransaction(find().id, { bankId: 'BANK-01', amount: 50000, date: find().date, slipNo: 'RAAST-1', description: 'BRICKS CUSTOMER', funding, version: find().updatedAt }))
+      await edit('cash')      // it was really cash: the safe pays for it
+      expect(find().type).toBe('Deposit')
+      expect(safeCash(st.data)).toBe(cash0 - 50000)
+      await edit('cheque')    // no, a cheque: the safe gets it back
+      expect(find().type).toBe('Credit Received')
+      expect(safeCash(st.data)).toBe(cash0)
+      await edit('online')
+      expect(find().type).toBe('Online Transfer')
+      expect(safeCash(st.data)).toBe(cash0)
+      expect(st.data.bankAccounts[0].currentBalance).toBe(bank0 + 50000) // the bank never moved during the edits
+      await st.reload()
+      expect(find().type).toBe('Online Transfer')
+      expect(find().description).toBe('BRICKS CUSTOMER')
+      expect(st.data.bankTransactions.filter((t) => t.depositSlipNo === 'RAAST-1')).toHaveLength(1)
+      expect(st.data.daybook.some((d) => d.sourceId === find().id)).toBe(false) // no cash-book line for a non-cash deposit
+
+      // the old name for a cheque still works, and an unknown way of paying is refused
+      must(await st.act.depositToBank({ bankId: 'BANK-01', amount: 100, slipNo: 'CHQ-2', description: '', funding: 'external' }))
+      expect(st.data.bankTransactions.find((t) => t.depositSlipNo === 'CHQ-2')!.type).toBe('Credit Received')
+      expect(failed(await st.act.depositToBank({ bankId: 'BANK-01', amount: 100, slipNo: 'X', description: '', funding: 'bitcoin' as never })).error).toMatch(/how the money was paid/)
+      // deleting an online transfer entry takes it out of the balance again
+      must(await st.act.removeBankTransaction(find().id))
+      expect(st.data.bankAccounts[0].currentBalance).toBe(bank0 + 100)
+    })
     it('a bank account with history is deactivated, not deleted, and only when empty', async () => {
       const st = await openStation(S1, 'naveed.akhtar')
       expect(failed(await st.act.removeBankAccount('BANK-01')).code).toBe('BALANCE_DUE')

@@ -13,7 +13,8 @@ Newest first. The version number is shown at the bottom of the menu and in Stati
 - Bank: every deposit, cash-out and bank charge typed here now has an **Edit** button, so a mistake is fixed in place instead of deleted and typed again.
 - Credit slips: a **Rate per litre** box. It starts at the Settings price; only an owner or manager can type a different rate (a warning shows the difference and it is recorded). A slip keeps its own rate, so later price changes never change it.
 - Customer account: cards for **Fuel taken** (litres by fuel), **Payments made**, **Owes now** and **Credit left**, for any dates. The customer list shows each customer's last fuel and last payment.
-- No SQL to run for this update.
+- Bank deposits: **Cash**, **Cheque** or **Online transfer**. An online transfer is its own kind of bank line, so the list shows it clearly, and it does not touch the safe.
+- **Needs one SQL step:** run `supabase/update.sql` in Supabase (SQL Editor) BEFORE the new version goes live. It only widens the list of allowed bank line types; no record is changed or removed, and it is safe to run twice.
 
 ## 1.0.0 — 2026-09-25 (first release for real use)
 
