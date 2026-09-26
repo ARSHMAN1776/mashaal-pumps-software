@@ -4062,33 +4062,7 @@ textarea.form-input {
   color: #1a1813;
 }
 
-/* Print Media Rules */
-@media print {
-  body * {
-    visibility: hidden;
-  }
-
-  .print-area,
-  .print-area * {
-    visibility: visible;
-  }
-
-  .print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 20px;
-  }
-
-  .modal-actions,
-  .navbar-surface,
-  .sidebar-surface,
-  .btn {
-    display: none !important;
-  }
-}
+/* (print rules now live at the end of design.css) */
 
 /* ==========================================================================
    RESPONSIVE DESIGN
@@ -4183,33 +4157,7 @@ textarea.form-input {
   color: #1a1813;
 }
 
-/* Print Media Rules */
-@media print {
-  body * {
-    visibility: hidden;
-  }
-
-  .print-area,
-  .print-area * {
-    visibility: visible;
-  }
-
-  .print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 20px;
-  }
-
-  .modal-actions,
-  .navbar-surface,
-  .sidebar-surface,
-  .btn {
-    display: none !important;
-  }
-}
+/* (print rules now live at the end of design.css) */
 
 /* ==========================================================================
    RESPONSIVE DESIGN & SMALL SCREEN ADAPTATION
@@ -5801,76 +5749,7 @@ textarea.form-input {
 /* ==========================================================================
    PRINT MEDIA STYLES (@media print)
    ========================================================================== */
-@media print {
-  body {
-    background: #ffffff !important;
-    color: #000000 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  .no-print,
-  .receipt-screen-actions,
-  .modal-backdrop,
-  .sidebar-surface,
-  .navbar-surface {
-    display: none !important;
-  }
-
-  .modal-container.receipt-modal-container {
-    position: static !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    border: none !important;
-    box-shadow: none !important;
-    background: transparent !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    overflow: visible !important;
-  }
-
-  /* Default A4 Print */
-  .receipt-paper {
-    box-shadow: none !important;
-    border: 1px solid #94a3b8 !important;
-    margin: 0 auto !important;
-    max-width: 100% !important;
-    width: 100% !important;
-    border-radius: 0 !important;
-  }
-
-  .receipt-brand-banner {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  .slip-table th,
-  .slip-row.highlight,
-  .receipt-doc-stripe {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  /* 80mm Thermal Receipt Print Overrides */
-  body.print-thermal-active {
-    width: 80mm !important;
-  }
-
-  body.print-thermal-active .receipt-paper.receipt-thermal-80mm {
-    width: 80mm !important;
-    max-width: 80mm !important;
-    border: none !important;
-    padding: 2mm 3mm !important;
-    margin: 0 !important;
-  }
-
-  @page {
-    size: auto;
-    margin: 4mm;
-  }
-}
+/* (print rules now live at the end of design.css) */
 
 /* ==========================================================================
    MODULE OPERATIONAL GUIDES ( رہنمائی - ALL STATIONS )

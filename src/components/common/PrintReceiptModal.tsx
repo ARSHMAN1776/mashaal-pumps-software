@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useApp } from '../../context/AppContext'
 import { PrinterIcon, XIcon } from './Icons'
 
@@ -64,14 +65,23 @@ export const PrintReceiptModal: React.FC<PrintReceiptModalProps> = ({
       document.body.classList.remove('print-thermal-active')
     }
 
-    window.print()
-
-    setTimeout(() => {
+    // A4 report: A4 paper with a small margin. 80 mm slip: the printer's own roll size is used (Chrome cannot set a roll length), with a tiny margin
+    const pageStyle = document.createElement('style')
+    pageStyle.textContent = printMode === 'thermal' ? '@page { size: auto; margin: 2mm; }' : '@page { size: A4; margin: 10mm; }'
+    document.head.appendChild(pageStyle)
+    const done = () => {
       document.body.classList.remove('print-thermal-active')
-    }, 1000)
+      pageStyle.remove()
+      window.removeEventListener('afterprint', done)
+    }
+    window.addEventListener('afterprint', done)
+    window.print()
   }
 
-  return (
+  // The paper is drawn straight under <body>, outside the app layout. When printing, everything else is hidden,
+  // so the menu, the fixed-height screen and the dialog can never cut, hide or blacken the printout.
+  return createPortal(
+    <div className={`print-portal ${isParco ? 'theme-parco' : 'theme-pso'}`}>
     <div className="modal-backdrop receipt-modal-overlay" onClick={onClose}>
       <div
         className={`modal-container receipt-modal-container ${isParco ? 'theme-receipt-parco' : 'theme-receipt-pso'} ${printMode === 'thermal' ? 'modal-mode-thermal' : 'modal-mode-a4'}`}
@@ -264,5 +274,7 @@ export const PrintReceiptModal: React.FC<PrintReceiptModalProps> = ({
         </div>
       </div>
     </div>
+    </div>,
+    document.body,
   )
 }

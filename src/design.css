@@ -848,7 +848,7 @@ textarea.form-input {
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  z-index: 200;
+  z-index: 2000; /* above dialogs (1000) and the phone menu (1600), below pop-up notices (3000) */
   min-width: 210px;
   padding: 6px;
   background: #fff;
@@ -1842,3 +1842,115 @@ textarea.form-input {
 :is(.theme-parco, .theme-pso) .shell-out { border-color: rgba(255, 255, 255, 0.5); color: #fff; }
 :is(.theme-parco, .theme-pso) .shell-out:hover { background: rgba(255, 255, 255, 0.16); }
 :is(.theme-parco, .theme-pso) .shell-nav { scrollbar-color: rgba(255, 255, 255, 0.4) transparent; }
+
+/* =========================================================================
+   PRINTING (reports, bills, receipts, statements, and "Save as PDF")
+   The paper is drawn under <body> inside .print-portal (see PrintReceiptModal). When printing, everything else
+   is removed from the page, and the dialog around the paper is flattened, so the paper flows over as many pages
+   as it needs.
+   ========================================================================= */
+@page {
+  size: A4;
+  margin: 10mm;
+}
+@media print {
+  html,
+  body {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* the app, its menu, dialogs, toasts and pop-ups: none of it is printed */
+  body > *:not(.print-portal) {
+    display: none !important;
+  }
+  .print-portal {
+    display: block !important;
+    position: static !important;
+    background: #fff !important;
+  }
+  .print-portal .modal-backdrop {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    background: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .print-portal .modal-container.receipt-modal-container {
+    position: static !important;
+    transform: none !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: none !important;
+  }
+  .print-portal .no-print,
+  .print-portal .receipt-screen-actions {
+    display: none !important;
+  }
+  .print-portal .receipt-paper {
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  .print-portal * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* long tables continue on the next page with their headings repeated, and a row is never cut in half */
+  .print-portal table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .print-portal thead {
+    display: table-header-group;
+  }
+  .print-portal tfoot {
+    display: table-row-group;
+  }
+  .print-portal tr,
+  .print-portal .slip-row,
+  .print-portal .signature-stamp-box {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-portal .receipt-auth-section,
+  .print-portal .receipt-footer-branding {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* 80 mm receipt roll */
+  body.print-thermal-active .print-portal .receipt-paper.receipt-thermal-80mm {
+    width: 76mm !important;
+    max-width: 76mm !important;
+    margin: 0 auto !important;
+    padding: 1mm 2mm !important;
+  }
+}
